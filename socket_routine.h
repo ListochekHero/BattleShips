@@ -19,11 +19,16 @@ class SocketHandler {
   SocketHandler(int port);
   ~SocketHandler();
   int get_fd() const;
+  void set_fd(int sock_fd);
+  int accept_connection();
 
  private:
   int sock_fd;
-
   void make_non_blocking();
+};
+
+class SocketIOHandler : public SocketHandler{
+
 };
 class EpollHandler {
  public:
@@ -31,7 +36,7 @@ class EpollHandler {
   ~EpollHandler();
   void add_socket(int sock_fd);
   std::vector<int> wait_for_events(int max_events);
-  int epoll_fd;
+  int epollfd;
 };
 
 }  // namespace BattleShipsMain

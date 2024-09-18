@@ -1,4 +1,4 @@
-#include "socket_handling.h"
+#include "socket_routine.h"
 
 namespace BattleShipsMain {
 
@@ -29,7 +29,15 @@ SocketHandler::~SocketHandler() { close(sock_fd); }
 
 int SocketHandler::get_fd() const { return sock_fd; }
 
-int sock_fd;
+void SocketHandler::set_fd(int sock_fd) { this->sock_fd = sock_fd; }
+
+int SocketHandler::accept_connection() {
+  int client_fd = accept(sock_fd, nullptr, nullptr);
+  if (client_fd < 0) {
+    throw std::runtime_error("Error while accepting new connection");
+  }
+  return client_fd;
+}
 
 void SocketHandler::make_non_blocking() {
   int flags = fcntl(sock_fd, F_GETFL, 0);
@@ -39,24 +47,24 @@ void SocketHandler::make_non_blocking() {
 }
 
 EpollHandler::EpollHandler() {
-  epoll_fd = epoll_create1(0);
-  if (epoll_fd == -1) throw std::runtime_error("Error creating epoll");
+  epollfd = epoll_create1(0);
+  if (epollfd == -1) throw std::runtime_error("Error creating epoll");
 }
 
-EpollHandler::~EpollHandler() { close(epoll_fd); }
+EpollHandler::~EpollHandler() { close(epollfd); }
 
 void EpollHandler::add_socket(int sock_fd) {
   struct epoll_event event;
   event.data.fd = sock_fd;
   event.events = EPOLLIN;
-  if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, sock_fd, &event) == -1) {
+  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, sock_fd, &event) == -1) {
     throw std::runtime_error("Error adding socket to epoll");
   }
 }
 
 std::vector<int> EpollHandler::wait_for_events(int max_events) {
   std::vector<struct epoll_event> events(max_events);
-  int n = epoll_wait(epoll_fd, events.data(), max_events, -1);
+  int n = epoll_wait(epollfd, events.data(), max_events, -1);
 
   std::vector<int> ready_fds;
   for (int i = 0; i < n; ++i) {
@@ -64,7 +72,5 @@ std::vector<int> EpollHandler::wait_for_events(int max_events) {
   }
   return ready_fds;
 }
-
-int epoll_fd;
 
 }  // namespace BattleShipsMain
