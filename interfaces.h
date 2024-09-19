@@ -2,15 +2,23 @@
 #define INTERFACES_H
 
 namespace BattleShipsMain {
-class ObserverGeneral {
-  virtual void update() = 0;
-};
-class ObservableSubject {
+class Observer {
  public:
-  virtual void attach(ObserverGeneral *observer) = 0;
-  virtual void detach(ObserverGeneral *observer) = 0;
-  virtual void notify() = 0;
-}
+  virtual void update(int sock_fd) = 0;
+};
+class ObservableSu8ject {
+ public:
+  virtual void attach(int sock_fd, Observer *observer) = 0;
+  virtual void detach(Observer *observer) = 0;
+  virtual void notify(int sock_fd) = 0;
+};
+
+class Application {
+ public:
+  virtual void run() = 0;
+
+ private:
+};
 }  // namespace BattleShipsMain
 
 #endif
