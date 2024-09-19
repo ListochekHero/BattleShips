@@ -2,18 +2,17 @@
 
 namespace BattleShipsMain {
 
-Server::Server(int port) : server_socket(port), epoll_handler() {
-  epoll_handler.add_socket(server_socket.get_fd());
+Server::Server(int port)
+    : server_socket(new SocketHandler(port)),
+      epoll_handler(new EpollHandler()) {
+  epoll_handler.get()->add_socket(server_socket.get()->get_fd());
+  server_socket.get()->set_connection_callback(
+      std::bind(&Server::handle_connection, this, std::placeholders::_1));
 }
 void Server::run() {
   while (true) {
     handle_zombie_pocesses();
-    auto ready_fds = epoll_handler.wait_for_events(MAX_EVENTS);
-    for (int sock_fd : ready_fds) {
-      if (sock_fd == server_socket.get_fd()) {
-        this->handle_connection(server_socket.accept_connection());
-      }
-    }
+    epoll_handler.get()->wait_for_events(MAX_EVENTS);
   }
 }
 
@@ -33,7 +32,7 @@ void Server::handle_connection(int client_fd) {
     dup2(pipe_fd[0], STDIN_FILENO);
     close(pipe_fd[0]);
 
-    close(server_socket.get_fd());
+    close(server_socket.get()->get_fd());
 
     execl("./", "lobby", std::to_string(client_fd).c_str(), nullptr);
 
@@ -44,17 +43,13 @@ void Server::handle_connection(int client_fd) {
   }
 }
 
-void Server::handle_zombie_pocesses(){
-    int status;
-    pid_t pid;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0)
-    {
-        if (WIFEXITED(status))
-        {
-            //todo logging
-        }
-        
+void Server::handle_zombie_pocesses() {
+  int status;
+  pid_t pid;
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (WIFEXITED(status)) {
+      // TODO logging
     }
-    
+  }
 }
 }  // namespace BattleShipsMain

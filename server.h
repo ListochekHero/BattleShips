@@ -3,18 +3,20 @@
 
 #include <sys/wait.h>
 
-#include "socket_handling.h"
+#include <memory>
+
+#include "socket_routine.h"
 
 #define MAX_EVENTS 10
 
 namespace BattleShipsMain {
-class Server {
+class Server : public Application {
   Server(int port);
   void run();
 
  private:
-  SocketHandler server_socket;
-  EpollHandler epoll_handler;
+  std::unique_ptr<SocketHandler> server_socket;
+  std::unique_ptr<EpollHandler> epoll_handler;
 
   void handle_connection(int clientfd);
   void handle_zombie_pocesses();
