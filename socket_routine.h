@@ -22,39 +22,42 @@ namespace BattleShipsMain {
 class SocketHandler : public Observer {
  public:
   using ConnectionCallback = std::function<void(int)>;
+  SocketHandler() = default;
   SocketHandler(int port);
-  ~SocketHandler();
+  virtual ~SocketHandler();
   int get_fd() const;
   void set_fd(int sock_fd);
   void accept_connection();
   void update(int sock_fd) override;
   void set_connection_callback(ConnectionCallback callback);
+  ConnectionCallback get_connection_callback();
+
  private:
-  int sock_fd;
+  int sock_fd = 0;
   ConnectionCallback connection_callback;
   void make_non_blocking();
 };
 
-class SocketIOHandler : private SocketHandler, Observer {
-  public:
+class SocketIOHandler : public SocketHandler {
+ public:
+  SocketIOHandler(int sock_fd);
+  ~SocketIOHandler();
+  void update(int sock_fd) override;
   void read_from_socket();
-  private:
-    std::string permanent_buffer;
+  std::string get_client_data();
+
+ private:
+  std::string client_data;
 };
-class EpollHandler : public ObservableSu8ject {
+class EpollHandler {
  public:
   EpollHandler();
   ~EpollHandler();
   void add_socket(int sock_fd);
-  void wait_for_events(int max_events);
-  void attach(int sock_fd, Observer *observer) override;
-  void detach(Observer *observer) override;
+  std::vector<int> wait_for_events(int max_events);
 
  private:
-  int epollfd;
-  std::map<int, Observer *> observers;
-
-  void notify(int sock_fd) override;
+  int epollfd = 0;
 };
 
 }  // namespace BattleShipsMain

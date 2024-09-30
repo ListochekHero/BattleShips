@@ -49,12 +49,16 @@ void SocketHandler::update(int sock_fd) {
 void SocketHandler::set_connection_callback(ConnectionCallback callback) {
   connection_callback = callback;
 }
+SocketHandler::ConnectionCallback SocketHandler::get_connection_callback() {
+  return connection_callback;
+}
 void SocketHandler::make_non_blocking() {
   int flags = fcntl(sock_fd, F_GETFL, 0);
   if (flags == -1 || fcntl(sock_fd, F_SETFL, flags | O_NONBLOCK) == -1) {
     throw std::runtime_error("Error making socket non-blocking");
   }
 }
+SocketIOHandler::SocketIOHandler(int sock_fd) { set_fd(sock_fd); }
 
 void SocketIOHandler::read_from_socket() {
   char buffer[BUFF_SIZE];
@@ -62,7 +66,20 @@ void SocketIOHandler::read_from_socket() {
   if (n < 0) {
     // TODO
   }
-  safe_buffer.assign(buffer);
+  client_data.assign(buffer);
+  auto callback = get_connection_callback();
+  if (callback) {
+    callback(this->get_fd());
+  }
+}
+void SocketIOHandler::update(int sock_fd) {
+  if (this->get_fd() == sock_fd) {
+    read_from_socket();
+  }
+}
+
+std::string SocketIOHandler::get_client_data(){
+  return this->client_data;
 }
 
 EpollHandler::EpollHandler() {
@@ -81,26 +98,27 @@ void EpollHandler::add_socket(int sock_fd) {
   }
 }
 
-void EpollHandler::attach(int sock_fd, Observer *observer) {
-  observers[sock_fd] = observer;
-};
-void EpollHandler::detach(Observer *observer) {
-  observers.erase(std::remove(observers.begin(), observers.end(), observer),
-                  observers.end());
-};
+// void EpollHandler::attach(int sock_fd, Observer *observer) {
+//   observers[sock_fd] = observer;
+// };
+// void EpollHandler::detach(Observer *observer) {
+//   observers.erase(std::remove(observers.begin(), observers.end(), observer),
+//                   observers.end());
+// };
 
-void EpollHandler::wait_for_events(int max_events) {
+std::vector<int> EpollHandler::wait_for_events(int max_events) {
   std::vector<struct epoll_event> events(max_events);
   int n = epoll_wait(epollfd, events.data(), max_events, -1);
-
+  if (n == -1) throw std::runtime_error("Error in epoll_wait");
+  std::vector<int> ready_fds;
   for (int i = 0; i < n; ++i) {
-    int sock_fd = events[i].data.fd;
-    if (observers.find(sock_fd) != observers.end()) notify(sock_fd);
+    ready_fds.push_back(events[i].data.fd);
   }
+  return ready_fds;
 }
-void EpollHandler::notify(int sock_fd) {
-  if (observers[sock_fd]) {
-    observers[sock_fd]->update(sock_fd);
-  }
-}
+// void EpollHandler::notify(int sock_fd) {
+//   if (observers[sock_fd]) {
+//     observers[sock_fd]->update(sock_fd);
+//   }
+// }
 }  // namespace BattleShipsMain
