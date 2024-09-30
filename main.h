@@ -12,9 +12,11 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "server.h"
+#include <memory>
+
+#include "application.h"
+#include "logger.h"
 
 #define PORT 8080
-#define MAX_EVENTS 10
 
 #endif
