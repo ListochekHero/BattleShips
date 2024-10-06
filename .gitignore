@@ -32,3 +32,16 @@
 *.app
 
 .vscode
+
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/Makefile
+/*.dir/
+/CMakeScripts/
+/CTestTestfile.cmake
+/Testing/
+/_build/
+build/
+/build*/
+/install_manifest.txt
