@@ -41,7 +41,7 @@ class SocketHandler : public Observer {
 class SocketIOHandler : public SocketHandler {
  public:
   SocketIOHandler(int sock_fd);
-  ~SocketIOHandler();
+  ~SocketIOHandler() = default;
   void update(int sock_fd) override;
   void read_from_socket();
   std::string get_client_data();

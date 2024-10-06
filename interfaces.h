@@ -1,10 +1,13 @@
 #ifndef INTERFACES_H
 #define INTERFACES_H
 
+#include <memory>
+
 namespace BattleShipsMain {
 class Observer {
  public:
   virtual void update(int sock_fd) = 0;
+  virtual ~Observer() = default;
 };
 class ObservableSu8ject {
  public:

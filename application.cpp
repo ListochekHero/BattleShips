@@ -4,7 +4,6 @@ namespace BattleShipsMain {
 
 Server::Server(int port) : epoll_handler(std::make_unique<EpollHandler>()) {
   auto server_socket = std::make_unique<SocketHandler>(8000);
-  observers[server_socket->get_fd()] = std::move(server_socket);
   epoll_handler->add_socket(server_socket->get_fd());
   server_socket->set_connection_callback(std::bind(
       &Server::handle_new_client_connection, this, std::placeholders::_1));
@@ -48,15 +47,17 @@ Observer *Server::find_handler_by_socket(int sock_fd) {
 void Server::handle_new_client_connection(int client_fd) {
   auto temp_handler = std::make_unique<SocketIOHandler>(client_fd);
   epoll_handler->add_socket(client_fd);
-  attach(std::move(temp_handler));
   temp_handler->set_connection_callback(std::bind(
       &Server::handle_client_request_for_lobby, this, std::placeholders::_1));
+  attach(std::move(temp_handler));
 }
 void Server::handle_client_request_for_lobby(int client_fd) {
+  LOG("handle_client_request_for_lobby");
   auto client_handler = std::move(
       dynamic_cast<SocketIOHandler *>(observers.find(client_fd)->second.get()));
 
   std::string client_request = client_handler->get_client_data();
+  LOG(client_request);
   if (!client_request.compare("create")) {
     int pipe_fd[2];
     if (pipe(pipe_fd) == -1) {
@@ -75,7 +76,7 @@ void Server::handle_client_request_for_lobby(int client_fd) {
 
       close_all_sockets_but_one(client_fd);
 
-      execl("./", "lobby", std::to_string(client_handler->get_fd()), nullptr);
+      execl("/home/listochekhero/projects/battleships/build/lobby", "lobby", std::to_string(client_handler->get_fd()).c_str(), nullptr);
 
       throw std::runtime_error("Failed to exec lobby");
     } else {

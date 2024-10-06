@@ -6,6 +6,10 @@ SocketHandler::SocketHandler(int port) {
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (sock_fd == -1) throw std::runtime_error("Error creating socket");
 
+  int opt = 1;
+  if(setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0){
+    throw std::runtime_error("Error setting socket options");
+  }
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;

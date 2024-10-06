@@ -1,5 +1,5 @@
-#ifndef SERVER_H
-#define SERVER_H
+#ifndef APPLICATION_H
+#define APPLICATION_H
 
 #include <sys/wait.h>
 
@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "data_storage.h"
+#include "logger.h"
 #include "socket_routine.h"
 
 #define MAX_EVENTS 10
