@@ -8,4 +8,7 @@
 #include <cstdlib>
 #include <iostream>
 
+#include "application.h"
+#include "logger.h"
+
 #endif
