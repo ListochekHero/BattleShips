@@ -17,7 +17,7 @@
 
 #define BACKLOG 10
 #define BUFF_SIZE 1024
-namespace BattleShipsMain {
+namespace bsm {
 
 class SocketHandler : public Observer {
  public:
@@ -60,6 +60,6 @@ class EpollHandler {
   int epollfd = 0;
 };
 
-}  // namespace BattleShipsMain
+}  // namespace bsm
 
 #endif

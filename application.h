@@ -12,10 +12,11 @@
 
 #define MAX_EVENTS 10
 
-namespace BattleShipsMain {
+namespace bsm {
 class Application {
  public:
   virtual void run() = 0;
+  virtual ~Application() = default;
 
  private:
 };
@@ -23,7 +24,7 @@ class Server : public Application, ObservableSu8ject {
  public:
   Server(int port);
   void run();
-  Observer *find_handler_by_socket(int sock_fd);
+  Observer* find_handler_by_socket(int sock_fd);
   void attach(std::unique_ptr<Observer> observer) override;
   void detach(std::unique_ptr<Observer> observer) override;
 
@@ -43,5 +44,5 @@ class Client : public Application {
  public:
  private:
 };
-}  // namespace BattleShipsMain
+}  // namespace bsm
 #endif

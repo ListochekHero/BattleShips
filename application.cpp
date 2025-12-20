@@ -1,9 +1,9 @@
 #include "application.h"
 
-namespace BattleShipsMain {
+namespace bsm {
 
 Server::Server(int port) : epoll_handler(std::make_unique<EpollHandler>()) {
-  auto server_socket = std::make_unique<SocketHandler>(8000);
+  auto server_socket = std::make_unique<SocketHandler>(port);
   epoll_handler->add_socket(server_socket->get_fd());
   server_socket->set_connection_callback(std::bind(
       &Server::handle_new_client_connection, this, std::placeholders::_1));

@@ -1,6 +1,6 @@
 #include "socket_routine.h"
 
-namespace BattleShipsMain {
+namespace bsm {
 
 SocketHandler::SocketHandler(int port) {
   sock_fd = socket(AF_INET, SOCK_STREAM, 0);

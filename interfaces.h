@@ -3,7 +3,7 @@
 
 #include <memory>
 
-namespace BattleShipsMain {
+namespace bsm {
 class Observer {
  public:
   virtual void update(int sock_fd) = 0;
@@ -14,7 +14,8 @@ class ObservableSu8ject {
   virtual void attach(std::unique_ptr<Observer> observer) = 0;
   virtual void detach(std::unique_ptr<Observer> observer) = 0;
   virtual void notify(int sock_fd) = 0;
+  virtual ~ObservableSu8ject() = default;
 };
-}  // namespace BattleShipsMain
+}  // namespace bsm
 
 #endif
