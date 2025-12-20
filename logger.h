@@ -4,35 +4,33 @@
 #include <unistd.h>
 
 #include <ctime>
+#include <expected>
+#include <format>
 #include <fstream>
 #include <mutex>
 #include <sstream>
 #include <string>
 
-namespace BattleShipsMain {
+namespace bsm {
 class Logger {
  public:
-  static Logger& getInstance(const std::string& program_name);
-  static Logger& getInstance();
-  void log(const std::string& message);
+  static Logger& instance();
+  std::expected<void, std::string> log(const std::string& message);
+  std::expected<void, std::string> init(const std::string& program_name);
 
  private:
   std::ofstream log_file;
   std::mutex log_mutex;
   std::string program_name;
 
-  inline static bool instance_created = false;
-
-  Logger(const std::string& program_name);
   Logger() = default;
   ~Logger();
+  bool is_logfile_valid();
   std::string get_current_time();
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 };
-
-#define LOG(message_to_log) \
-  BattleShipsMain::Logger::getInstance().log(message_to_log)
-}  // namespace BattleShipsMain
+void LOG(const std::string& message_to_log);
+}  // namespace bsm
 
 #endif

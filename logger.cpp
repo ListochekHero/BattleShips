@@ -1,37 +1,38 @@
 #include "logger.h"
 
-namespace BattleShipsMain {
-Logger& Logger::getInstance(const std::string& program_name) {
-  static Logger instance(program_name);
+bsm::Logger& bsm::Logger::instance() {
+  static Logger instance;
   return instance;
 }
-Logger& Logger::getInstance() {
-  if(!instance_created){
-    throw std::runtime_error("Logger must be initialized with a program name first!");
-  }
-  return getInstance("unused");
-}
-void Logger::log(const std::string& message) {
+
+std::expected<void, std::string> bsm::Logger::init(const std::string& program_name) {
   std::lock_guard<std::mutex> guard(log_mutex);
+  this->program_name = program_name;
+  log_file.open(std::format("{}.log", program_name), std::ios::app);
+  if (!is_logfile_valid()) {
+    return std::unexpected("Log file failed to open");
+  }
+  return {};
+}
+std::expected<void, std::string> bsm::Logger::log(const std::string& message) {
+  std::lock_guard<std::mutex> guard(log_mutex);
+  if (!is_logfile_valid()) {
+    return std::unexpected("Log file failed to open");
+  }
   log_file << "[" << get_current_time() << "] " << "[" << program_name << "] "
            << "[PID: " << getpid() << "] " << message << std::endl;
+  return {};
 }
 
-Logger::Logger(const std::string& program_name) : program_name(program_name) {
-  log_file.open("log.txt", std::ios::app);
-  if (!log_file.is_open()) {
-    throw std::runtime_error("Could not open log file");
-  }
-  instance_created = true;
-}
-
-Logger::~Logger() {
+bsm::Logger::~Logger() {
   if (log_file.is_open()) {
     log_file.close();
   }
 }
 
-std::string Logger::get_current_time() {
+bool bsm::Logger::is_logfile_valid() { return this->log_file.is_open(); }
+
+std::string bsm::Logger::get_current_time() {
   std::time_t now = std::time(nullptr);
   std::tm* local_time = std::localtime(&now);
   std::stringstream time_stream;
@@ -40,4 +41,7 @@ std::string Logger::get_current_time() {
               << local_time->tm_min << ":" << local_time->tm_sec;
   return time_stream.str();
 }
-}  // namespace BattleShipsMain
+
+void bsm::LOG(const std::string& message_to_log) {
+  bsm::Logger::instance().log(message_to_log);
+}
