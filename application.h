@@ -5,7 +5,10 @@
 
 #include <list>
 #include <memory>
-
+#include <ranges>
+#include <unordered_map>
+#include <atomic>
+#include "config.h"
 #include "data_storage.h"
 #include "logger.h"
 #include "socket_routine.h"
@@ -20,25 +23,25 @@ class Application {
 
  private:
 };
-class Server : public Application, ObservableSu8ject {
+class Server : public Application {
  public:
-  Server(int port);
+  Server() = default;
+  std::expected<void, std::string> init();
   void run();
-  Observer* find_handler_by_socket(int sock_fd);
-  void attach(std::unique_ptr<Observer> observer) override;
-  void detach(std::unique_ptr<Observer> observer) override;
 
  private:
-  std::unique_ptr<EpollHandler> epoll_handler;
-  std::unique_ptr<std::list<Lobbies>> lobbies;
+  EpollHandler epoll_handler;
+  std::vector<SocketHandler> sockets;
+  std::unordered_map<uint64_t, SocketHandler> lobbies;
+  // std::unique_ptr<std::list<Lobbies>> lobbies;
 
-  std::map<const int, std::unique_ptr<Observer>> observers;
-
-  void notify(int sock_fd) override;
-  void handle_new_client_connection(int clientfd);
+  // std::map<const int, std::unique_ptr<Observer>> observers;
+  std::expected<void, std::string> handle_client_cmd(
+      const SocketHandler& client, std::string_view command);
   void handle_client_request_for_lobby(int client_fd);
   void handle_zombie_pocesses();
   void close_all_sockets_but_one(int sock_fd);
+  std::expected<void, std::string> create_lobby(const SocketHandler& client);
 };
 class Client : public Application {
  public:
