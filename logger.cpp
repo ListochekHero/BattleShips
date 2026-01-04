@@ -1,11 +1,13 @@
 #include "logger.h"
+namespace bsm {
 
-bsm::Logger& bsm::Logger::instance() {
+Logger& Logger::instance() {
   static Logger instance;
   return instance;
 }
 
-std::expected<void, std::string> bsm::Logger::init(const std::string& program_name) {
+std::expected<void, std::string> Logger::init(
+    const std::string& program_name) {
   std::lock_guard<std::mutex> guard(log_mutex);
   this->program_name = program_name;
   log_file.open(std::format("{}.log", program_name), std::ios::app);
@@ -14,7 +16,7 @@ std::expected<void, std::string> bsm::Logger::init(const std::string& program_na
   }
   return {};
 }
-std::expected<void, std::string> bsm::Logger::log(const std::string& message) {
+std::expected<void, std::string> Logger::log(const std::string& message) {
   std::lock_guard<std::mutex> guard(log_mutex);
   if (!is_logfile_valid()) {
     return std::unexpected("Log file failed to open");
@@ -24,15 +26,15 @@ std::expected<void, std::string> bsm::Logger::log(const std::string& message) {
   return {};
 }
 
-bsm::Logger::~Logger() {
+Logger::~Logger() {
   if (log_file.is_open()) {
     log_file.close();
   }
 }
 
-bool bsm::Logger::is_logfile_valid() { return this->log_file.is_open(); }
+bool Logger::is_logfile_valid() { return this->log_file.is_open(); }
 
-std::string bsm::Logger::get_current_time() {
+std::string Logger::get_current_time() {
   std::time_t now = std::time(nullptr);
   std::tm* local_time = std::localtime(&now);
   std::stringstream time_stream;
@@ -42,6 +44,8 @@ std::string bsm::Logger::get_current_time() {
   return time_stream.str();
 }
 
-void bsm::LOG(const std::string& message_to_log) {
-  bsm::Logger::instance().log(message_to_log);
+void LOG(const std::string& message_to_log) {
+  Logger::instance().log(message_to_log);
 }
+
+}  // namespace bsm
