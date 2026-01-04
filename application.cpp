@@ -60,7 +60,7 @@ std::expected<void, std::string> Server::handle_client_cmd(
 std::expected<void, std::string> Server::create_lobby(
     const SocketHandler& client) {
   int sv[2];
-  if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == -1)
+  if (socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sv) == -1)
     return std::unexpected("Failed to create pipe");
   inline static std::atomic_uint64_t next_uID{0};
   pid_t pid = fork();
@@ -75,52 +75,12 @@ std::expected<void, std::string> Server::create_lobby(
   } else {
     close(sv[0]);
     auto it = lobbies.emplace(next_uID++, sv[1]);
+    it.first->second.write_to_user(std::to_string(it.first->first));
+    it.first->second.write_to_user(std::to_string(client.get_socket()));
     return {};
   }
 }
 
-void Server::handle_new_client_connection(int client_fd) {
-  auto temp_handler = std::make_unique<SocketIOHandler>(client_fd);
-  epoll_handler->add_socket(client_fd);
-  temp_handler->set_connection_callback(std::bind(
-      &Server::handle_client_request_for_lobby, this, std::placeholders::_1));
-  attach(std::move(temp_handler));
-}
-void Server::handle_client_request_for_lobby(int client_fd) {
-  LOG("handle_client_request_for_lobby");
-  auto client_handler = std::move(
-      dynamic_cast<SocketIOHandler*>(observers.find(client_fd)->second.get()));
-
-  std::string client_request = client_handler->get_client_data();
-  LOG(client_request);
-  if (!client_request.compare("create")) {
-    int pipe_fd[2];
-    if (pipe(pipe_fd) == -1) {
-      throw std::runtime_error("Failed to create pipe");
-    }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-      throw std::runtime_error("Failed to fork");
-    }
-
-    if (pid == 0) {  // Child server process
-      close(pipe_fd[1]);
-      dup2(pipe_fd[0], STDIN_FILENO);
-      close(pipe_fd[0]);
-
-      close_all_sockets_but_one(client_fd);
-
-      execl("/home/listochekhero/projects/battleships/build/lobby", "lobby",
-            std::to_string(client_handler->get_fd()).c_str(), nullptr);
-
-      throw std::runtime_error("Failed to exec lobby");
-    } else {
-      close(pipe_fd[0]);
-      close(client_fd);
-    }
-  }
-}
 void Server::handle_zombie_pocesses() {
   int status;
   pid_t pid;
@@ -130,15 +90,5 @@ void Server::handle_zombie_pocesses() {
     }
   }
 }
-void Server::close_all_sockets_but_one(int sock_fd) {
-  for (auto it = observers.begin(); it != observers.end();) {
-    int current_fd = it->first;
-    if (current_fd != sock_fd) {
-      auto obserer = dynamic_cast<SocketHandler*>(it->second.get());
-      it = observers.erase(it);
-    } else {
-      ++it;
-    }
-  }
-}
+
 }  // namespace bsm
