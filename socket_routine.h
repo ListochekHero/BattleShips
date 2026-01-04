@@ -8,53 +8,48 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <expected>
 #include <functional>
 #include <iostream>
 #include <map>
+#include <utility>
 #include <vector>
 
-#include "interfaces.h"
+// #include "interfaces.h"
 
 #define BACKLOG 10
 #define BUFF_SIZE 1024
 namespace bsm {
 
-class SocketHandler : public Observer {
+class SocketHandler {
  public:
-  using ConnectionCallback = std::function<void(int)>;
   SocketHandler() = default;
-  SocketHandler(int port);
+  SocketHandler(int socket_fd);
   virtual ~SocketHandler();
-  int get_fd() const;
-  void set_fd(int sock_fd);
-  void accept_connection();
-  void update(int sock_fd) override;
-  void set_connection_callback(ConnectionCallback callback);
-  ConnectionCallback get_connection_callback();
+  SocketHandler(const SocketHandler&) = delete;
+  SocketHandler(SocketHandler&&);
+  SocketHandler& operator=(SocketHandler&&);
+  std::expected<void, std::string> setup_listenter(int port);
+  int get_socket() const;
+  std::expected<std::vector<SocketHandler>, std::string> accept_connections();
+  std::expected<std::string, std::string> read_user_input();
+  bool is_listening() const;
 
  private:
-  int sock_fd = 0;
-  ConnectionCallback connection_callback;
-  void make_non_blocking();
+  bool listening_socket{false};
+  int socket_fd{-1};
+  void swap(SocketHandler& left_sh, SocketHandler& r_sh);
+  void close_socket();
 };
 
-class SocketIOHandler : public SocketHandler {
- public:
-  SocketIOHandler(int sock_fd);
-  ~SocketIOHandler() = default;
-  void update(int sock_fd) override;
-  void read_from_socket();
-  std::string get_client_data();
-
- private:
-  std::string client_data;
-};
 class EpollHandler {
  public:
-  EpollHandler();
+  EpollHandler() = default;
   ~EpollHandler();
-  void add_socket(int sock_fd);
-  std::vector<int> wait_for_events(int max_events);
+  std::expected<void, std::string> init();
+  std::expected<void, std::string> add_socket(SocketHandler& socket_handler);
+  std::expected<std::vector<SocketHandler*>, std::string> wait_for_events(
+      int max_events);
 
  private:
   int epollfd = 0;
