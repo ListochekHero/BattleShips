@@ -6,6 +6,7 @@ int main(int argc, char* argv[]) {
   int sockfd;
   struct sockaddr_in server_addr;
   char buffer[BUFF_SIZE];
+  bsm::LOG("Creating socket");
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("Socket creation error");
     exit(EXIT_FAILURE);
@@ -14,6 +15,7 @@ int main(int argc, char* argv[]) {
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(SERVER_PORT);
   server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  bsm::LOG("Connecting socket");
 
   if (connect(sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) <
       0) {
