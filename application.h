@@ -3,11 +3,11 @@
 
 #include <sys/wait.h>
 
+#include <atomic>
 #include <list>
 #include <memory>
 #include <ranges>
 #include <unordered_map>
-#include <atomic>
 #include "config.h"
 #include "data_storage.h"
 #include "logger.h"
@@ -27,25 +27,40 @@ class Server : public Application {
  public:
   Server() = default;
   std::expected<void, std::string> init();
-  void run();
+  virtual void run();
 
  private:
   EpollHandler epoll_handler;
-  std::vector<SocketHandler> sockets;
-  std::unordered_map<uint64_t, SocketHandler> lobbies;
+  std::vector<std::unique_ptr<SocketHandler>> sockets;
+  std::unordered_map<int64_t, SocketHandler> lobbies;
   // std::unique_ptr<std::list<Lobbies>> lobbies;
 
   // std::map<const int, std::unique_ptr<Observer>> observers;
   std::expected<void, std::string> handle_client_cmd(
       const SocketHandler& client, std::string_view command);
-  void handle_client_request_for_lobby(int client_fd);
-  void handle_zombie_pocesses();
-  void close_all_sockets_but_one(int sock_fd);
   std::expected<void, std::string> create_lobby(const SocketHandler& client);
+  std::expected<void, std::string> erase_socket_handler(
+      const SocketHandler& client);
+  void handle_zombie_pocesses();
 };
 class Client : public Application {
  public:
  private:
+};
+class Lobby : public Application {
+ public:
+  std::expected<void, std::string> init(SocketHandler&);
+  virtual void run() override;
+
+ private:
+  EpollHandler epoll_handler;
+  std::vector<std::unique_ptr<SocketHandler>> sockets;
+  std::expected<void, std::string> handle_client_cmd(
+      const SocketHandler& client, std::string_view command);
+  std::expected<void, std::string> accept_socket(const SocketHandler&);
+  std::expected<void, std::string> send_connection_code(const SocketHandler&);
+  std::expected<void, std::string> erase_socket_handler(
+      const SocketHandler& client);
 };
 }  // namespace bsm
 #endif
