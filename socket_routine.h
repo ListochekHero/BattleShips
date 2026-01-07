@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <algorithm>
+#include <cstring>
 #include <expected>
 #include <functional>
 #include <iostream>
@@ -15,7 +16,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
-#include <cstring>
+
 #include "logger.h"
 
 // #include "interfaces.h"
@@ -24,7 +25,7 @@
 #define BUFF_SIZE 1024
 namespace bsm {
 
-enum class socket_type_e { CLIENT, SERVER, IPC, SPECTATOR };
+enum class socket_type_e { UNKNOWN, SERVER, IPC, CLIENT, SPECTATOR };
 
 class SocketHandler {
  public:
@@ -34,6 +35,7 @@ class SocketHandler {
   SocketHandler(const SocketHandler&) = delete;
   SocketHandler(SocketHandler&&);
   SocketHandler& operator=(SocketHandler&&);
+  SocketHandler& operator=(const SocketHandler&) = delete;
   std::expected<void, std::string> setup_listenter(int port);
   const int get_socket() const;
   std::expected<std::vector<std::unique_ptr<SocketHandler>>, std::string>
@@ -41,11 +43,13 @@ class SocketHandler {
   std::expected<std::string, std::string> read_user_input() const;
   std::expected<void, std::string> write_to_user(
       std::string_view string_to_send) const;
-  socket_type_e socket_type() const;
+  socket_type_e get_socket_type() const;
+  void set_socket_type(socket_type_e socket_type) ;
 
-  socket_type_e socket_type_v{-1};
+
  private:
   int socket_fd{-1};
+  socket_type_e socket_type_v{-1};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
   void close_socket();
@@ -61,7 +65,7 @@ class EpollHandler {
   std::expected<void, std::string> remove_socket(
       const SocketHandler* const socket_handler);
   std::expected<std::vector<SocketHandler*>, std::string> wait_for_events(
-      int max_events) const;
+      size_t max_events) const;
 
  private:
   int epollfd = 0;

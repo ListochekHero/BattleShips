@@ -11,7 +11,7 @@ Config& Config::instance(){
 void Config::init() {
   std::ifstream config_file("bs.conf", std::ios::in);
   if (config_file.is_open()) {
-    std::cout << "no-error" << std::endl;
+    // std::cout << "no-error" << std::endl;
 
     std::string option_line;
     while (std::getline(config_file, option_line)) {

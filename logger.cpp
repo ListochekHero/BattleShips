@@ -16,7 +16,7 @@ std::expected<void, std::string> Logger::init(
   }
   return {};
 }
-std::expected<void, std::string> Logger::log(const std::string& message) {
+std::expected<void, std::string> Logger::log(const std::string_view message) {
   std::lock_guard<std::mutex> guard(log_mutex);
   if (!is_logfile_valid()) {
     return std::unexpected("Log file failed to open");
@@ -44,7 +44,7 @@ std::string Logger::get_current_time() {
   return time_stream.str();
 }
 
-void LOG(const std::string& message_to_log) {
+void LOG(const std::string_view message_to_log) {
   Logger::instance().log(message_to_log);
 }
 

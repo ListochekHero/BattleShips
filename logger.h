@@ -15,7 +15,7 @@ namespace bsm {
 class Logger {
  public:
   static Logger& instance();
-  std::expected<void, std::string> log(const std::string& message);
+  std::expected<void, std::string> log(const std::string_view message);
   std::expected<void, std::string> init(const std::string& program_name);
 
  private:
@@ -30,7 +30,7 @@ class Logger {
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 };
-void LOG(const std::string& message_to_log);
+void LOG(const std::string_view message_to_log);
 }  // namespace bsm
 
 #endif

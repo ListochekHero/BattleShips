@@ -3,7 +3,6 @@
 namespace bsm {
 
 std::expected<void, std::string> Server::init() {
-  LOG("Server::init()");
   this->epoll_handler.init();
   this->sockets.emplace_back(std::make_unique<SocketHandler>());
   this->sockets[0].get()->setup_listenter(Config::instance().get_line("port"));
@@ -12,39 +11,42 @@ std::expected<void, std::string> Server::init() {
 }
 
 void Server::run() {
-  LOG("Server::run()");
   while (true) {
     handle_zombie_pocesses();
-    auto result{epoll_handler.wait_for_events(MAX_EVENTS)};
-    if (result) {
-      for (SocketHandler* handler : *result) {
-        if (handler->socket_type() == socket_type_e::SERVER) {
-          auto new_clients{handler->accept_connections()};
-          if (new_clients) {
-            for (auto& client : *new_clients) {
-              epoll_handler.add_socket(client.get());  // add error log
+    epoll_handler.wait_for_events(MAX_EVENTS)
+        .and_then([this](auto events) -> std::expected<void, std::string> {
+          for (SocketHandler* handler : events) {
+            if (handler->get_socket_type() == socket_type_e::SERVER) {
+              handler->accept_connections()
+                  .and_then([this](auto new_clients)
+                                -> std::expected<void, std::string> {
+                    for (std::unique_ptr<SocketHandler>& client : new_clients) {
+                      epoll_handler.add_socket(client.get());
+                    }
+                    sockets.append_range(new_clients | std::views::as_rvalue);
+                    return {};
+                  })
+                  .or_else([](const std::string& e)
+                               -> std::expected<void, std::string> {
+                    LOG(e);
+                    return {};
+                  });
+            } else {
+              auto result{handler->read_user_input()};
+              if (result) handle_client_cmd(*handler, *result);
             }
-            sockets.append_range(*new_clients | std::views::as_rvalue);
-          } else {
-            LOG(new_clients.error());
           }
-        } else {
-          auto result{handler->read_user_input()};
-          if (result) {
-            handle_client_cmd(*handler, *result);  // add error log
-          } else {
-          }  // add SocketHandler deletion on "Connection closed"
-        }
-      }
-    } else {
-      LOG(result.error());
-    }
+          return {};
+        })
+        .or_else([](const std::string& e) -> std::expected<void, std::string> {
+          LOG(e);
+          return {};
+        });
   }
 }
 
 std::expected<void, std::string> Server::handle_client_cmd(
     const SocketHandler& client, std::string_view command) {
-  LOG("Server::handle_client_cmd()");
   using Handler =
       std::function<std::expected<void, std::string>(const SocketHandler&)>;
   LOG(command.data());
@@ -64,8 +66,7 @@ std::expected<void, std::string> Server::handle_client_cmd(
 
 std::expected<void, std::string> Server::create_lobby(
     const SocketHandler& client) {
-  LOG("Server::create_lobby()");
-  epoll_handler.remove_socket(std::addressof(client));
+  epoll_handler.remove_socket(&client);
   int sv[2];
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1)
     return std::unexpected("Failed to create socketpair");
@@ -81,13 +82,13 @@ std::expected<void, std::string> Server::create_lobby(
   } else {
     close(sv[0]);
     std::time_t now = std::time(nullptr);
-    LOG(std::format("\"{}\" - time", now));
+    LOG(std::format("Connection code: \"{}\" - time", now));
     auto it = lobbies.emplace(now, sv[1]);
     it.first->second.write_to_user("socket");
     it.first->second.write_to_user(std::to_string(client.get_socket()));
     erase_socket_handler(client);
     it.first->second.write_to_user("conn_code");
-    it.first->second.write_to_user(std::to_string(it.first->first);
+    it.first->second.write_to_user(std::to_string(it.first->first));
     return {};
   }
 }
@@ -111,17 +112,15 @@ void Server::handle_zombie_pocesses() {
 }
 
 std::expected<void, std::string> Lobby::init(SocketHandler& parrent_socket) {
-  LOG("Lobby::init()");
   this->epoll_handler.init();
   this->sockets.emplace_back(
       std::make_unique<SocketHandler>(std::move(parrent_socket)));
+  this->sockets[0].get()->set_socket_type(socket_type_e::IPC);
   this->epoll_handler.add_socket(sockets[0].get());
-  this->sockets[0].get()->socket_type_v = socket_type_e::IPC;
   return {};
 }
 
 void Lobby::run() {
-  LOG("Lobby::run()");
   while (true) {
     auto result{epoll_handler.wait_for_events(MAX_EVENTS)};
     if (result) {
@@ -147,7 +146,6 @@ void Lobby::run() {
 }
 std::expected<void, std::string> Lobby::handle_client_cmd(
     const SocketHandler& client, std::string_view command) {
-  LOG("Lobby::handle_client_cmd()");
   using Handler =
       std::function<std::expected<void, std::string>(const SocketHandler&)>;
   LOG(command.data());
@@ -174,7 +172,6 @@ std::expected<void, std::string> Lobby::handle_client_cmd(
 
 std::expected<void, std::string> Lobby::accept_socket(
     const SocketHandler& parrent) {
-  LOG("Lobby::accept_socket()");
   auto client_socket = parrent.read_user_input();
   if (client_socket) {
     int flags = fcntl(std::stoi(*client_socket), F_GETFL, 0);
@@ -188,11 +185,10 @@ std::expected<void, std::string> Lobby::accept_socket(
 }
 std::expected<void, std::string> Lobby::send_connection_code(
     const SocketHandler& parrent) {
-  LOG("Lobby::send_connection_code()");
   auto conn_code = parrent.read_user_input();
   if (conn_code) {
     auto it = std::ranges::find_if(sockets, [](const auto& c) {
-      return c.get()->socket_type() == socket_type_e::CLIENT;
+      return c.get()->get_socket_type() == socket_type_e::CLIENT;
     });
     if (it != sockets.end()) {
       it->get()->write_to_user(*conn_code);
