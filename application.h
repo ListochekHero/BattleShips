@@ -46,6 +46,11 @@ class Server : public Application {
   std::expected<void, std::string> write_to_child(int64_t child_id,
                                                   std::string_view command,
                                                   std::string_view message);
+  std::expected<void, std::string> accept_socket(
+      const SocketHandler& parrent);
+  std::expected<void, std::string> send_connection_code(
+      const SocketHandler& parrent);
+
   void erase_socket_handler(SocketHandler& client);
   void handle_zombie_pocesses();
 
@@ -55,18 +60,18 @@ class Client : public Application {
  public:
  private:
 };
-class Lobby : public Application {
- public:
-  std::expected<void, std::string> init(SocketHandler&);
-  virtual void run() override;
+// class Lobby : public Application {
+//  public:
+//   std::expected<void, std::string> init(SocketHandler&);
+// //   virtual void run() override;
 
- private:
-  std::expected<void, std::string> handle_client_cmd(
-      const SocketHandler& client, std::string_view command);
-  std::expected<void, std::string> accept_socket(const SocketHandler&);
-  std::expected<void, std::string> send_connection_code(const SocketHandler&);
-  std::expected<void, std::string> erase_socket_handler(
-      const SocketHandler& client);
-};
+//  private:
+// //   std::expected<void, std::string> handle_client_cmd(
+//       const SocketHandler& client, std::string_view command);
+// //   std::expected<void, std::string> accept_socket(const SocketHandler&);
+// //   std::expected<void, std::string> send_connection_code(const SocketHandler&);
+//   std::expected<void, std::string> erase_socket_handler(
+//       const SocketHandler& client);
+// };
 }  // namespace bsm
 #endif

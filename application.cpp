@@ -26,7 +26,7 @@ void Server::run() {
           process_events(events);
           return {};
         })
-        .transform_error(log_and_forward);
+        .transform_error(with_log("Cant get events"));
   }
 }
 
@@ -56,19 +56,26 @@ void Server::process_server_socket(SocketHandler* handler) {
         }
         return {};
       })
-      .transform_error(log_and_forward);
+      .transform_error(with_log("Cant accept new connections"));
 }
 void Server::process_client_socket(SocketHandler* handler) {
-  handler->read_user_input()
-      .and_then([this, handler](auto&& command) -> Ev {
-        handle_client_cmd(*handler, command)
-            .or_else([handler](const auto& error) -> Ev {
-              handler->write_to_user(error).transform_error(log_and_forward);
-              return {};
-            });
-        return {};
-      })
-      .transform_error(log_and_forward);
+  bool read_from_socket{true};
+  while (read_from_socket) {
+    handler->read_user_input()
+        .and_then([this, handler](auto&& command) -> Ev {
+          handle_client_cmd(*handler, command)
+              .or_else([handler](const auto& error) -> Ev {
+                handler->write_to_user(error).transform_error(log_and_forward);
+                return {};
+              });
+          return {};
+        })
+        .transform_error([&read_from_socket](const auto& error) {
+          log_and_forward(error);
+          read_from_socket = false;
+          return error;
+        });
+  }
 }
 
 std::expected<void, std::string> Server::handle_client_cmd(
@@ -86,7 +93,11 @@ std::expected<void, std::string> Server::handle_client_cmd(
          });
        }},
       {"close", [this](SocketHandler& c) -> void { erase_socket_handler(c); }},
-      {"test", [](const SocketHandler&) -> void { LOG("test"); }}};
+      {"test", [](const SocketHandler&) -> void { LOG("test"); }},
+      {"socket", [this](const SocketHandler& c) { return accept_socket(c); }},
+      {"conn_code",
+       [this](const SocketHandler& c) { return send_connection_code(c); }},
+  };
   if (auto it = command_map.find(command); it != command_map.end()) {
     it->second(client);
     return {};
@@ -106,7 +117,7 @@ std::expected<void, std::string> Server::create_lobby(SocketHandler& client) {
   if (pid == 0) {  // Child server process
     close(sv[1]);
     std::string socket_string{std::to_string(sv[0])};
-    execl("/home/listochekhero/projects/battleships/build/lobby", "./lobby",
+    execl("/home/listochekhero/projects/battleships/build/server", "./lobby",
           socket_string.c_str(), NULL);
     perror("execl failed");
     _exit(127);
@@ -137,7 +148,7 @@ std::expected<void, std::string> Server::write_to_child(
   return handler.write_to_user(command)
       .transform_error([](const auto& error) {
         log_and_forward(error);
-        return std::format("Cant send message to child process: {}", error);
+        return std::format("Cant send command to child process: {}", error);
       })
       .and_then([&handler, &message]() -> Ev {
         return handler.write_to_user(message).transform_error(
@@ -166,66 +177,7 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-std::expected<void, std::string> Lobby::init(SocketHandler& parrent_socket) {
-  this->epoll_handler.init();
-  this->sockets.emplace_back(
-      std::make_unique<SocketHandler>(std::move(parrent_socket)));
-  this->sockets[0].get()->set_socket_type(socket_type_e::IPC);
-  this->epoll_handler.add_socket(sockets[0].get());
-  return {};
-}
-
-void Lobby::run() {
-  while (true) {
-    auto result{epoll_handler.wait_for_events(MAX_EVENTS)};
-    if (result) {
-      for (SocketHandler* handler : *result) {
-        while (true) {
-          auto result{handler->read_user_input()};
-          if (result) {
-            auto r = handle_client_cmd(*handler, *result);  // add error log
-            if (r) {
-            } else {
-              break;
-            }
-
-          } else {
-            break;
-          }  // add SocketHandler deletion on "Connection closed"
-        }
-      }
-    } else {
-      LOG(result.error());
-    }
-  }
-}
-std::expected<void, std::string> Lobby::handle_client_cmd(
-    const SocketHandler& client, std::string_view command) {
-  using Handler =
-      std::function<std::expected<void, std::string>(const SocketHandler&)>;
-  LOG(command.data());
-  static const std::unordered_map<std::string_view, Handler> command_map = {
-      {"test",
-       [&client,
-        &command](const SocketHandler&) -> std::expected<void, std::string> {
-         client.write_to_user(command);
-         LOG("test");
-         return {};
-       }},
-      {"socket", [this](const SocketHandler& c) { return accept_socket(c); }},
-      {"conn_code",
-       [this](const SocketHandler& c) { return send_connection_code(c); }},
-      {"close",
-       [this](const SocketHandler& c) { return erase_socket_handler(c); }}};
-  if (auto it = command_map.find(command); it != command_map.end()) {
-    return it->second(client);
-  } else {
-    client.write_to_user(command);
-    return {};
-  }
-}
-
-std::expected<void, std::string> Lobby::accept_socket(
+std::expected<void, std::string> Server::accept_socket(
     const SocketHandler& parrent) {
   auto client_socket = parrent.read_user_input();
   if (client_socket) {
@@ -238,7 +190,7 @@ std::expected<void, std::string> Lobby::accept_socket(
   }
   return {};
 }
-std::expected<void, std::string> Lobby::send_connection_code(
+std::expected<void, std::string> Server::send_connection_code(
     const SocketHandler& parrent) {
   auto conn_code = parrent.read_user_input();
   if (conn_code) {
@@ -249,14 +201,6 @@ std::expected<void, std::string> Lobby::send_connection_code(
       it->get()->write_to_user(*conn_code);
     }
   }
-  return {};
-}
-
-std::expected<void, std::string> Lobby::erase_socket_handler(
-    const SocketHandler& client) {
-  std::erase_if(sockets, [&client](const auto& s) {
-    return s.get()->get_socket() == client.get_socket();
-  });
   return {};
 }
 }  // namespace bsm
