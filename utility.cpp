@@ -1,5 +1,10 @@
 #include "utility.h"
+namespace bsm {
 
-bool bsm::is_file_exist(const std::string& filename) {
+bool is_file_exist(const std::string& filename) {
   return std::filesystem::exists(filename);
 }
+std::string c_error_string() {
+  return std::system_category().message(errno);
+}
+}  // namespace bsm
