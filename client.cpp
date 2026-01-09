@@ -6,6 +6,9 @@ int main(int argc, char* argv[]) {
   int sockfd;
   struct sockaddr_in server_addr;
   char buffer[BUFF_SIZE];
+  char* program_name = strrchr(argv[0], '/');
+   program_name++;
+  bsm::Logger::instance().init(program_name);
   bsm::LOG("Creating socket");
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("Socket creation error");

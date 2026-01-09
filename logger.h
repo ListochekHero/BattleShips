@@ -7,11 +7,22 @@
 #include <expected>
 #include <format>
 #include <fstream>
+#include <iostream>
 #include <mutex>
 #include <sstream>
 #include <string>
 
+#include "utility.h"
+
 namespace bsm {
+
+void LOG(const std::string_view message_to_log);
+
+inline auto log_and_forward = [](const std::string& error) -> std::string {
+  LOG(error);
+  return error;
+};
+
 class Logger {
  public:
   static Logger& instance();
@@ -30,7 +41,6 @@ class Logger {
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 };
-void LOG(const std::string_view message_to_log);
 }  // namespace bsm
 
 #endif
