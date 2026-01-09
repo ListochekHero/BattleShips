@@ -51,10 +51,6 @@ std::expected<void, std::string> SocketHandler::setup_listenter(int port) {
 
 const int SocketHandler::get_socket() const { return socket_fd; }
 
-void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
-  // зробити свап (?)
-}
-
 socket_type_e SocketHandler::get_socket_type() const {
   return this->socket_type_v;
 }
@@ -64,17 +60,12 @@ void SocketHandler::set_socket_type(socket_type_e socket_type) {
   return;
 }
 
-void SocketHandler::close_socket() {
-  if (socket_fd != -1) {
-    close(socket_fd);
-  }
-}
-
 std::expected<std::vector<std::unique_ptr<SocketHandler>>, std::string>
 SocketHandler::accept_connections() const {
   std::vector<std::unique_ptr<SocketHandler>> new_clients;
   while (true) {
-    int client_fd = accept4(socket_fd, nullptr, nullptr, SOCK_NONBLOCK);
+    int client_fd =
+        accept4(socket_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (client_fd < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
@@ -109,19 +100,41 @@ std::expected<void, std::string> SocketHandler::write_to_user(
       -1) {
     int err = errno;
     char buff[256];
-    LOG(strerror_r(errno, buff, sizeof(buff)));
+    strerror_r(errno, buff, sizeof(buff));
     return std::unexpected(
         std::format("Failed to send a message, error: {}", buff));
   }
   return {};
 }
+std::expected<void, std::string> SocketHandler::remove_cloexec() {
+  int flags = fcntl(this->socket_fd, F_GETFD);
+  if (flags == -1) {
+    return std::unexpected("Cant get socket flags");
+  }
+  flags &= ~FD_CLOEXEC;
+  if (fcntl(this->socket_fd, F_SETFD, flags) == -1) {
+    return std::unexpected("Cant set socket flags");
+  }
+  return {};
+}
+
+void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
+  // зробити свап (?)
+}
+
+void SocketHandler::close_socket() {
+  if (socket_fd != -1) {
+    close(socket_fd);
+  }
+}
+
+EpollHandler::~EpollHandler() { close(epollfd); }
+
 std::expected<void, std::string> EpollHandler::init() {
   epollfd = epoll_create1(EPOLL_CLOEXEC);
   if (epollfd == -1) return std::unexpected("Error creating epoll");
   return {};
 }
-
-EpollHandler::~EpollHandler() { close(epollfd); }
 
 std::expected<void, std::string> EpollHandler::add_socket(
     SocketHandler* const socket_handler) {
@@ -138,7 +151,7 @@ std::expected<void, std::string> EpollHandler::remove_socket(
     const SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
       -1)
-    return std::unexpected("Error adding socket to epoll");
+    return std::unexpected("Error removing socket from epoll");
   return {};
 }
 

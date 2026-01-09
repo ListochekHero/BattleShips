@@ -3,7 +3,7 @@
 int main(int argc, char* argv[]) {
   char* program_name = strrchr(argv[0], '/');
    program_name++;
-  bsm::Logger::instance().init(std::string(program_name));
+  bsm::Logger::instance().init(program_name);
   bsm::Config config;
 #ifdef DEBUG_LOGS
   bsm::LOG("DEBUG Enabled!");
