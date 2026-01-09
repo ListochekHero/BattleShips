@@ -18,10 +18,18 @@ namespace bsm {
 
 void LOG(const std::string_view message_to_log);
 
-inline auto log_and_forward = [](const std::string& error) -> std::string {
+inline auto log_and_forward = [](const auto& error) -> std::string {
   LOG(error);
   return error;
 };
+
+inline auto with_log(std::string_view context) {
+  return [context](const std::string& error) -> std::string {
+    std::string detailed_error{std::format("[{}]: [{}]", context, error)};
+    log_and_forward(detailed_error);
+    return detailed_error;
+  };
+}
 
 class Logger {
  public:
