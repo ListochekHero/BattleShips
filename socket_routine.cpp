@@ -70,7 +70,8 @@ SocketHandler::accept_connections() const {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
       } else {
-        return std::unexpected("Error while accepting new connection");
+        return std::unexpected(std::format(
+            "error while accepting new connection: {}", c_error_string()));
       }
     }
     new_clients.emplace_back(std::make_unique<SocketHandler>(client_fd));
@@ -88,8 +89,10 @@ std::expected<std::string, std::string> SocketHandler::read_user_input() const {
     return buffer;
   } else if (n == 0) {
     return std::string("close");
+  } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+    return std::unexpected("Nothing to read, returning ");
   } else {
-    return std::unexpected("Read error: " + std::to_string(errno));
+    return std::unexpected(std::format("Read error: {}", c_error_string()));
   }
 }
 
@@ -98,11 +101,8 @@ std::expected<void, std::string> SocketHandler::write_to_user(
   LOG(std::format("Message for user: {}", string_to_send.data()));
   if (send(this->socket_fd, string_to_send.data(), string_to_send.size(), 0) ==
       -1) {
-    int err = errno;
-    char buff[256];
-    strerror_r(errno, buff, sizeof(buff));
     return std::unexpected(
-        std::format("Failed to send a message, error: {}", buff));
+        std::format("Failed to send a message, error: {}", c_error_string()));
   }
   return {};
 }
@@ -143,7 +143,8 @@ std::expected<void, std::string> EpollHandler::add_socket(
   event.events = EPOLLIN | EPOLLET;
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler->get_socket(), &event) ==
       -1)
-    return std::unexpected("Error adding socket to epoll");
+    return std::unexpected(
+        std::format("error adding socket to epoll: {}", c_error_string()));
   return {};
 }
 
@@ -151,7 +152,8 @@ std::expected<void, std::string> EpollHandler::remove_socket(
     const SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
       -1)
-    return std::unexpected("Error removing socket from epoll");
+    return std::unexpected(
+        std::format("error removing socket from epoll: {}", c_error_string()));
   return {};
 }
 
@@ -160,7 +162,9 @@ EpollHandler::wait_for_events(size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
   // struct epoll_event events[10];
   int n = epoll_wait(this->epollfd, events.data(), 10, -1);
-  if (n == -1) return std::unexpected("Error in epoll_wait()");
+  if (n == -1)
+    return std::unexpected(
+        std::format("error in epoll_wait(): {}", c_error_string()));
   std::vector<SocketHandler*> ready_fds;
   for (int i = 0; i < n; ++i) {
     ready_fds.push_back(static_cast<SocketHandler*>((events[i].data.ptr)));

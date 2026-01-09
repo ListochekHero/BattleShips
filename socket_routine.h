@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "logger.h"
+#include "utility.h"
 
 // #include "interfaces.h"
 
