@@ -20,8 +20,8 @@ SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   }
   return *this;
 }
-std::expected<void, std::string> SocketHandler::setup_listenter(int port) {
-  if (!socket_fd) return std::unexpected("Socket is already exist");
+Ev SocketHandler::setup_listenter(int port) {
+  if (!socket_fd) return std::unexpected(make_error(er_e::ALREADY_EXIST, "Socket is already exist"));
 
   socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
   if (socket_fd == -1) return std::unexpected("Error creating socket");
@@ -80,32 +80,67 @@ SocketHandler::accept_connections() const {
 }
 
 std::expected<std::string, std::string> SocketHandler::read_user_input() const {
-  std::string buffer;
-  buffer.resize(4096);  // add this magic number to config file
-  ssize_t n = recv(this->socket_fd, buffer.data(), buffer.size(), 0);
+  size_t size{4096};
+  std::string buffer(size, '0');
+  struct iovec iov{.iov_base = static_cast<void*>(buffer.data()),
+                   .iov_len = buffer.length()};
+  struct msghdr msg{0};
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  char buf[CMSG_SPACE(sizeof(int))];
+  msg.msg_control = buf;
+  msg.msg_controllen = sizeof(buf);
+
+  ssize_t n = recvmsg(this->socket_fd, &msg, 0);
   if (n > 0) {
     buffer.resize(n);
+    struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
+    if (cmsg != NULL && cmsg->cmsg_level == SOL_SOCKET &&
+        cmsg->cmsg_type == SCM_RIGHTS) {
+      int received_socket;
+      std::memcpy(&received_socket, CMSG_DATA(cmsg), sizeof(int));
+      LOG(std::format("Socket recieved: {}", received_socket));
+      return std::to_string(received_socket);
+    }
     LOG(std::format("Message recieved: {}", buffer));
     return buffer;
   } else if (n == 0) {
     return std::string("close");
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-    return std::unexpected("Nothing to read, returning ");
+    return std::unexpected("Nothing to read, returning...");
   } else {
     return std::unexpected(std::format("Read error: {}", c_error_string()));
   }
 }
 
 std::expected<void, std::string> SocketHandler::write_to_user(
-    std::string_view string_to_send) const {
+    const std::string& string_to_send, message_type_e msg_type) const {
   LOG(std::format("Message for user: {}", string_to_send.data()));
-  if (send(this->socket_fd, string_to_send.data(), string_to_send.size(), 0) ==
-      -1) {
+  struct msghdr msg{0};
+  struct iovec iov{
+      .iov_base = static_cast<void*>(const_cast<char*>(string_to_send.data())),
+      .iov_len = string_to_send.length()};
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  if (msg_type == message_type_e::SOCKET) {
+    char buf[CMSG_SPACE(sizeof(int))];
+    msg.msg_control = buf;
+    msg.msg_controllen = sizeof(buf);
+    struct cmsghdr* cmsg;
+    cmsg = CMSG_FIRSTHDR(&msg);
+    cmsg->cmsg_level = SOL_SOCKET;
+    cmsg->cmsg_type = SCM_RIGHTS;
+    cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+    int socket_to_send = std::stoi(string_to_send);
+    std::memcpy(CMSG_DATA(cmsg), &socket_to_send, sizeof(socket_to_send));
+  }
+  if (sendmsg(this->socket_fd, &msg, MSG_NOSIGNAL) == -1) {
     return std::unexpected(
         std::format("Failed to send a message, error: {}", c_error_string()));
   }
   return {};
 }
+
 std::expected<void, std::string> SocketHandler::remove_cloexec() {
   int flags = fcntl(this->socket_fd, F_GETFD);
   if (flags == -1) {

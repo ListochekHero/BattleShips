@@ -26,7 +26,8 @@
 #define BUFF_SIZE 1024
 namespace bsm {
 
-enum class socket_type_e { UNKNOWN, SERVER, IPC, CLIENT, SPECTATOR };
+enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
+enum class message_type_e { DEFAULT, SOCKET };
 
 class SocketHandler {
  public:
@@ -37,7 +38,7 @@ class SocketHandler {
   SocketHandler(SocketHandler&&);
   SocketHandler& operator=(const SocketHandler&) = delete;
   SocketHandler& operator=(SocketHandler&&);
-  std::expected<void, std::string> setup_listenter(int port);
+  Ev setup_listenter(int port);
   const int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
@@ -45,7 +46,7 @@ class SocketHandler {
   accept_connections() const;
   std::expected<std::string, std::string> read_user_input() const;
   std::expected<void, std::string> write_to_user(
-      std::string_view string_to_send) const;
+      const std::string& string_to_send, message_type_e msg_type = message_type_e::DEFAULT) const;
   std::expected<void, std::string> remove_cloexec();
 
  private:
