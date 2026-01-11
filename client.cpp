@@ -7,7 +7,7 @@ int main(int argc, char* argv[]) {
   struct sockaddr_in server_addr;
   char buffer[BUFF_SIZE];
   char* program_name = strrchr(argv[0], '/');
-   program_name++;
+  program_name++;
   bsm::Logger::instance().init(program_name);
   bsm::LOG("Creating socket");
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -36,16 +36,25 @@ int main(int argc, char* argv[]) {
     send(sockfd, message.c_str(), message.size(), 0);
 
     memset(buffer, 0, BUFF_SIZE);
-    int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
-    if (bytes_received < 0) {
-      perror("Error receiving data from server");
-      break;
-    } else if (bytes_received == 0) {
-      printf("Server closed the connection");
-      break;
-    }
 
-    printf("Server: %s\n", buffer);
+    struct timeval timeout;
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout,
+               sizeof(timeout));
+    while (true) {
+      int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
+      if (bytes_received < 0) {
+        perror("Error receiving data from server");
+        break;
+      } else if (bytes_received == 0) {
+        printf("Server closed the connection");
+        break;
+      }
+
+      printf("Server: %s\n", buffer);
+      memset(buffer, 0, BUFF_SIZE);
+    }
   }
   close(sockfd);
   exit(EXIT_SUCCESS);
