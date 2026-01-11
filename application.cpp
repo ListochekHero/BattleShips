@@ -3,17 +3,17 @@
 namespace bsm {
 
 std::expected<void, std::string> Server::init() {
-  this->epoll_handler.init();
   this->sockets.emplace_back(std::make_unique<SocketHandler>());
   this->sockets[0].get()->setup_listenter(Config::instance().get_line("port"));
+  this->epoll_handler.init();
   this->epoll_handler.add_socket(sockets[0].get());
   return {};
 }
 std::expected<void, std::string> Server::init(SocketHandler& parrent_socket) {
-  this->epoll_handler.init();
   this->sockets.emplace_back(
       std::make_unique<SocketHandler>(std::move(parrent_socket)));
   this->sockets[0].get()->set_socket_type(socket_type_e::IPC);
+  this->epoll_handler.init();
   this->epoll_handler.add_socket(sockets[0].get());
   return {};
 }
@@ -64,7 +64,7 @@ void Server::process_client_socket(SocketHandler* handler) {
     handler->read_user_input()
         .and_then([this, handler](auto&& command) -> Ev {
           handle_client_cmd(*handler, command)
-              .or_else([handler](const auto& error) -> Ev {
+              .or_else([handler](auto&& error) -> Ev {
                 handler->write_to_user(error).transform_error(log_and_forward);
                 return {};
               });
@@ -79,7 +79,7 @@ void Server::process_client_socket(SocketHandler* handler) {
 }
 
 std::expected<void, std::string> Server::handle_client_cmd(
-    SocketHandler& client, std::string_view command) {
+    SocketHandler& client, const std::string& command) {
   using Handler = std::function<void(SocketHandler&)>;
   LOG(std::format("Command to handle: {}", command.data()));
   static const std::unordered_map<std::string_view, Handler> command_map = {
@@ -102,7 +102,7 @@ std::expected<void, std::string> Server::handle_client_cmd(
     it->second(client);
     return {};
   } else
-    return std::unexpected("Unknown command");
+    return general_command(client, command);
 }
 
 std::expected<void, std::string> Server::create_lobby(SocketHandler& client) {
@@ -124,16 +124,22 @@ std::expected<void, std::string> Server::create_lobby(SocketHandler& client) {
   } else {
     close(sv[0]);
     std::time_t now = std::time(nullptr);
-    LOG(std::format("Connection code: \"{}\" - time", now));
-    lobbies.emplace(now, sv[1]);
-    if (!(write_to_child(now, "socket", std::to_string(client.get_socket()))
+    std::string conn_code{std::to_string(now)};
+    std::string short_code{conn_code.substr(conn_code.length() - 5, 5)};
+    int64_t child_id{std::stol(short_code)};
+    LOG(std::format("Connection code: \"{}\" - time", short_code));
+    lobbies.emplace(child_id, sv[1]);
+    auto child{
+        found_lobby(child_id).transform_error(with_log("Cant find lobby"))};
+
+    if (!(write_to_child(*child, "socket", std::to_string(client.get_socket()))
               .and_then([this, &client]() -> Ev {
                 erase_socket_handler(client);
                 return {};
               })
               .transform_error(log_and_forward)))
       return std::unexpected("Cant pass socket to child process");
-    if (!(write_to_child(now, "conn_code", std::to_string(now))
+    if (!(write_to_child(*child, "conn_code", short_code)
               .transform_error(log_and_forward)))
       return std::unexpected("Cant send connection code to child process");
     return {};
@@ -141,17 +147,23 @@ std::expected<void, std::string> Server::create_lobby(SocketHandler& client) {
 }
 
 std::expected<void, std::string> Server::write_to_child(
-    int64_t child_id, std::string_view command, std::string_view message) {
-  auto it{lobbies.find(child_id)};
-  if (it == lobbies.end()) return std::unexpected("Lobby not found");
-  SocketHandler& handler{it->second};
-  return handler.write_to_user(command)
+    SocketHandler* child_ipc, const std::string& command,
+    const std::string& message) {
+  return child_ipc->write_to_user(command)
       .transform_error([](const auto& error) {
         log_and_forward(error);
         return std::format("Cant send command to child process: {}", error);
       })
-      .and_then([&handler, &message]() -> Ev {
-        return handler.write_to_user(message).transform_error(
+      .and_then([&child_ipc, &message, &command]() -> Ev {
+        if (command == "socket") {
+          return child_ipc->write_to_user(message, message_type_e::SOCKET)
+              .transform_error([](const auto& error) {
+                log_and_forward(error);
+                return std::format("Cant send message to child process: {}",
+                                   error);
+              });
+        }
+        return child_ipc->write_to_user(message).transform_error(
             [](const auto& error) {
               log_and_forward(error);
               return std::format("Cant send message to child process: {}",
@@ -187,6 +199,7 @@ std::expected<void, std::string> Server::accept_socket(
     sockets.emplace_back(
         std::make_unique<SocketHandler>(std::stoi(*client_socket)));
     epoll_handler.add_socket(sockets.back().get());
+    sockets.back().get()->write_to_user("Connected to lobby");
   }
   return {};
 }
@@ -203,4 +216,34 @@ std::expected<void, std::string> Server::send_connection_code(
   }
   return {};
 }
+
+std::expected<void, std::string> Server::general_command(
+    SocketHandler& client, const std::string& command) {
+  // in case we didnt found a specific command lets see what else we can do
+  if (int64_t child_id{std::strtol(command.c_str(), nullptr, 10)}) {
+    // maybe this is a connection code, lets try find lobby for it
+    found_lobby(child_id).transform(
+        [this, &client, child_id](auto child_ipc) -> Ev {
+          client.remove_cloexec();
+          if (!(write_to_child(child_ipc, "socket",
+                               std::to_string(client.get_socket()))
+                    .and_then([this, &client]() -> Ev {
+                      erase_socket_handler(client);
+                      return {};
+                    })
+                    .transform_error(log_and_forward)))
+            return std::unexpected("Cant pass socket to child process");
+          return {};
+        });
+  }
+  return std::unexpected("Unknown command");
+}
+
+std::expected<SocketHandler*, std::string> Server::found_lobby(
+    int64_t child_id) {
+  auto it{lobbies.find(child_id)};
+  if (it != lobbies.end()) return &(it->second);
+  return std::unexpected("No such lobby");
+}
+
 }  // namespace bsm
