@@ -23,11 +23,30 @@
 // #include "interfaces.h"
 
 #define BACKLOG 10
-#define BUFF_SIZE 1024
+#define BUFF_SIZE 1024  //  add this magic number to config
 namespace bsm {
 
 enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
-enum class message_type_e { DEFAULT, SOCKET };
+enum class message_type_e : uint8_t { DEFAULT, SOCKET };
+enum class status_code_e { DATA, WOULDBLOCK, CLOSED };
+
+struct MsgHeader {
+  message_type_e msg_type;
+  uint32_t payload_count;
+};
+
+struct OutgoingMessage {
+  message_type_e msg_type;
+  std::vector<std::string_view> payloads;
+  std::optional<int> socket;
+};
+
+struct ReadResult {
+  status_code_e status;
+  message_type_e msg_type;
+  std::string payload {std::string(1024, '\0')};
+  std::optional<int> socket;
+};
 
 class SocketHandler {
  public:
@@ -42,12 +61,11 @@ class SocketHandler {
   const int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
-  std::expected<std::vector<std::unique_ptr<SocketHandler>>, std::string>
+  std::expected<std::vector<std::unique_ptr<SocketHandler>>, Error>
   accept_connections() const;
-  std::expected<std::string, std::string> read_user_input() const;
-  std::expected<void, std::string> write_to_user(
-      const std::string& string_to_send, message_type_e msg_type = message_type_e::DEFAULT) const;
-  std::expected<void, std::string> remove_cloexec();
+  std::expected<ReadResult, Error> read_user_input() const;
+  Ev write_to_user(const OutgoingMessage& msg) const;
+  Ev remove_cloexec();
 
  private:
   int socket_fd{-1};
@@ -61,12 +79,10 @@ class EpollHandler {
  public:
   EpollHandler() = default;
   ~EpollHandler();
-  std::expected<void, std::string> init();
-  std::expected<void, std::string> add_socket(
-      SocketHandler* const socket_handler);
-  std::expected<void, std::string> remove_socket(
-      const SocketHandler* const socket_handler);
-  std::expected<std::vector<SocketHandler*>, std::string> wait_for_events(
+  Ev init();
+  Ev add_socket(SocketHandler* const socket_handler);
+  Ev remove_socket(const SocketHandler* const socket_handler);
+  std::expected<std::vector<SocketHandler*>, Error> wait_for_events(
       size_t max_events) const;
 
  private:
