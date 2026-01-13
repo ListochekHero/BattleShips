@@ -32,58 +32,42 @@ class Application {
 
 class Server : public Application {
  public:
-  //friend struct Command;
+  friend struct Command;
   Server() = default;
-  std::expected<void, std::string> init();  // init() for Server
-  std::expected<void, std::string> init(
-      SocketHandler& parrent_socket);  // init() for Lobby
+  Ev init();                                // init() for Server
+  Ev init(SocketHandler&& parrent_socket);  // init() for Lobby
   virtual void run();
 
- public:
+ private:
+  Ev init_epoll();
   void process_events(std::vector<SocketHandler*>& events);
   void process_server_socket(SocketHandler* handler);
   void process_client_socket(SocketHandler* handler);
-  std::expected<void, std::string> handle_client_cmd(
-      SocketHandler& client, const std::string& command);
-  std::expected<void, std::string> create_lobby(SocketHandler& client);
-  std::expected<void, std::string> write_to_child(SocketHandler* child_ipc,
-                                                  const std::string& command,
-                                                  const std::string& message);
-  std::expected<void, std::string> accept_socket(const SocketHandler& parrent);
-  std::expected<void, std::string> send_connection_code(
-      const SocketHandler& parrent);
-  std::expected<void, std::string> general_command(SocketHandler& client,
-                                                   const std::string& command);
+  void handle_client_cmd(SocketHandler& client, const std::string& command);
+  Ev create_lobby(SocketHandler& client);
+  Ev write_to_child(SocketHandler* child_ipc, const std::string& command,
+                    const std::string& message);
+  Ev accept_socket(SocketHandler& parrent);
+  Ev send_connection_code(SocketHandler& parrent);
+  Ev general_command(SocketHandler& client, const std::string& command);
   std::expected<SocketHandler*, std::string> found_lobby(int64_t child_id);
 
-  void erase_socket_handler(SocketHandler& client);
+  Ev erase_socket_handler(SocketHandler& client);
   void handle_zombie_pocesses();
 
   std::unordered_map<int64_t, SocketHandler> lobbies;
+
+  using Handler = Ev (Server::*)(SocketHandler&);
+  struct Command {
+    std::string_view command;
+    Handler handler;
+  };
+  static const std::array<Command, 4> commands;
 };
 class Client : public Application {
  public:
  private:
 };
-
-using Handler = std::expected<void, std::string> (Server::*)(SocketHandler&);
-
-struct Command {
-  std::string command;
-  Handler handler;
-};
-
-static Command commands[] = {{"\\create", &Server::create_lobby},
-                             {"close", &Server::erase_socket_handler},
-                             {
-                                 "\\socket", &Server::accept_socket
-                             },
-                             {
-                                 "\\conn_code",
-                             },
-                             {
-                                 "test",
-                             }};
 
 }  // namespace bsm
 #endif

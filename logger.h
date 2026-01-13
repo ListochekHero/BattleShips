@@ -24,10 +24,10 @@ inline auto log_and_forward = [](const auto& error) -> Error {
 };
 
 inline auto with_log(std::string_view context) {
-  return [context](const std::string& error) -> std::string {
-    std::string detailed_error{std::format("[{}]: [{}]", context, error)};
-    log_and_forward(detailed_error);
-    return detailed_error;
+  return [context](const auto& error) -> Error {
+    error.message = {std::format("[{}]: [{}]", context, error.message)};
+    log_and_forward(error);
+    return error;
   };
 }
 
