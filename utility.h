@@ -50,6 +50,7 @@ bool is_file_exist(const std::string& filename);
 
 std::string c_error_string();
 
+int64_t generate_conn_code();
 }  // namespace bsm
 
 #endif
