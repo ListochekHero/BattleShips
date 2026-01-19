@@ -44,15 +44,14 @@ class Server : public Application {
   void process_server_socket(SocketHandler* handler);
   void process_client_socket(SocketHandler* handler);
   void handle_client_cmd(SocketHandler& client, const ReadResult& command);
-  std::expected<SocketHandler, Error> Server::spawn_lobby_process();
+  std::expected<SocketHandler, Error> spawn_lobby_process();
   Ev create_lobby(SocketHandler& client, const ReadResult& message);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id, SocketHandler& client);
-  Ev write_to_child(SocketHandler* child_ipc, const std::string& command,
-                    const std::string& message);
   Ev accept_socket(SocketHandler& parrent, const ReadResult& message);
   Ev send_connection_code(SocketHandler& parrent, const ReadResult& message);
+  Ev join_lobby(SocketHandler& client, const ReadResult& command);
   Ev general_command(SocketHandler& client, const ReadResult& command);
-  std::expected<SocketHandler&, Error> found_lobby(int64_t child_id);
+  std::expected<SocketHandler*, Error> found_lobby(int64_t child_id);
 
   Ev erase_socket_handler(SocketHandler& client, const ReadResult& message);
   void handle_zombie_pocesses();
@@ -66,7 +65,7 @@ class Server : public Application {
       std::optional<message_type_e> msg_type;
     } match;
   };
-  static const std::array<Command, 4> commands;
+  static const std::array<Command, 5> commands;
   bool match_cmd(const Command& cmd, const ReadResult& msg);
 };
 class Client : public Application {
