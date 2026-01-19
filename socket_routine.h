@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "logger.h"
-#include "utility.h"
 
 // #include "interfaces.h"
 
@@ -27,12 +26,12 @@
 namespace bsm {
 
 enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
-enum class message_type_e : uint8_t { DEFAULT, SOCKET };
+enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
 enum class status_code_e { DATA, WOULDBLOCK, CLOSED };
 
 struct MsgHeader {
   message_type_e msg_type;
-  uint32_t payload_count;
+  uint64_t payload_count;
 };
 
 struct OutgoingMessage {
@@ -44,7 +43,7 @@ struct OutgoingMessage {
 struct ReadResult {
   status_code_e status;
   message_type_e msg_type;
-  std::string payload {std::string(1024, '\0')};
+  std::string payload{std::string(1024, '\0')};
   std::optional<int> socket;
 };
 
