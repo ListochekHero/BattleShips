@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     perror("Connection to the server failed");
     exit(EXIT_FAILURE);
   }
-
+  bsm::SocketHandler socket_server {sockfd};
   printf("Connected to the server on port %d\n", SERVER_PORT);
 
   while (1) {
@@ -33,7 +33,9 @@ int main(int argc, char* argv[]) {
     std::string message;
     std::getline(std::cin, message);
 
-    send(sockfd, message.c_str(), message.size(), 0);
+    socket_server.write_to_user({bsm::message_type_e::DEFAULT, {message}});
+
+    //send(sockfd, message.c_str(), message.size(), 0);
 
     memset(buffer, 0, BUFF_SIZE);
 
@@ -43,11 +45,18 @@ int main(int argc, char* argv[]) {
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout,
                sizeof(timeout));
     while (true) {
-      int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
-      if (bytes_received < 0) {
+    auto result = socket_server.read_user_input();
+      if (result)
+      {
+      printf("Server: %s\n", (*result).payload.c_str());
+
+      }
+
+      //int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
+      if ((*result).status == bsm::status_code_e::WOULDBLOCK) {
         perror("Error receiving data from server");
         break;
-      } else if (bytes_received == 0) {
+      } else if ((*result).status == bsm::status_code_e::CLOSED) {
         printf("Server closed the connection");
         break;
       }
