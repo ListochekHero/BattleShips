@@ -40,13 +40,15 @@ class Server : public Application {
 
  private:
   Ev init_epoll();
+  Ev Server::init_epoll_wrapper();
   void process_events(std::vector<SocketHandler*>& events);
   void process_server_socket(SocketHandler* handler);
   void process_client_socket(SocketHandler* handler);
   void handle_client_cmd(SocketHandler& client, const ReadResult& command);
   std::expected<SocketHandler, Error> spawn_lobby_process();
   Ev create_lobby(SocketHandler& client, const ReadResult& message);
-  Ev init_child(const SocketHandler& child_socket, int64_t child_id, SocketHandler& client);
+  Ev init_child(const SocketHandler& child_socket, int64_t child_id,
+                SocketHandler& client);
   Ev accept_socket(SocketHandler& parrent, const ReadResult& message);
   Ev send_connection_code(SocketHandler& parrent, const ReadResult& message);
   Ev join_lobby(SocketHandler& client, const ReadResult& command);

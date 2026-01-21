@@ -4,16 +4,21 @@ namespace bsm {
 
 Ev Server::init() {
   this->sockets.emplace_back(std::make_unique<SocketHandler>());
-  this->sockets[0].get()->setup_listenter(Config::instance().get_line("port"));
-  init_epoll();
-  return {};
+  return this->sockets[0]
+      .get()
+      ->setup_listener(Config::instance().get_line("port"))
+      .or_else([](auto&& error) -> Ev {
+        LOG(error.message);
+        return std::unexpected(Error{er_e::SYSTEM, "Cant setup listener"});
+      })
+      .and_then([this]() -> Ev { return init_epoll_wrapper(); });
 }
+
 Ev Server::init(SocketHandler&& parrent_socket) {
   this->sockets.emplace_back(
       std::make_unique<SocketHandler>(std::move(parrent_socket)));
   this->sockets[0].get()->set_socket_type(socket_type_e::IPC);
-  init_epoll();
-  return {};
+  return init_epoll_wrapper();
 }
 
 void Server::run() {
@@ -29,9 +34,27 @@ void Server::run() {
 }
 
 Ev Server::init_epoll() {
-  this->epoll_handler.init();
-  this->epoll_handler.add_socket(sockets[0].get());
+  return this->epoll_handler.init()
+      .or_else([](auto&& error) -> Ev {
+        LOG(error.message);
+        return std::unexpected(Error{er_e::SYSTEM, "Cant init epoll_handler"});
+      })
+      .and_then([this]() -> Ev {
+        return this->epoll_handler.add_socket(sockets[0].get())
+            .or_else([](auto&& error) -> Ev {
+              LOG(error.message);
+              return std::unexpected(
+                  Error{er_e::SYSTEM, "Cant add socket to epoll"});
+            });
+      });
   return {};
+}
+
+Ev Server::init_epoll_wrapper() {
+  return init_epoll().or_else([](auto&& error) -> Ev {
+    LOG(error.message);
+    return std::unexpected(Error{er_e::SYSTEM, "Cant init epoll"});
+  });
 }
 
 void Server::process_events(std::vector<SocketHandler*>& events) {
@@ -53,9 +76,11 @@ void Server::process_server_socket(SocketHandler* handler) {
                 sockets.emplace_back(std::move(client));
                 return {};
               })
-              .transform_error([&client](const auto& error) {
+              .or_else([&client](auto&& error) {
+                LOG(error.message);
                 client.reset(nullptr);
-                return log_and_forward(error);
+                return std::unexpected(
+                    Error{er_e::SYSTEM, "Cant add new client to epoll"});
               });
         }
         return {};
@@ -63,29 +88,27 @@ void Server::process_server_socket(SocketHandler* handler) {
       .transform_error(with_log("Cant accept new connections"));
 }
 void Server::process_client_socket(SocketHandler* handler) {
-  bool read_from_socket{true};
-  while (read_from_socket) {
-    handler->read_user_input()
-        .and_then([this, handler, &read_from_socket](auto&& command) -> Ev {
-          if (command.status == status_code_e::WOULDBLOCK ||
-              command.status == status_code_e::CLOSED) {
-            read_from_socket = false;
-          } else {
-            handle_client_cmd(*handler, command);
-          }
-          return {};
-        })
-        .transform_error([&read_from_socket](const auto& error) {
-          log_and_forward(error);
-          read_from_socket = false;
-          return error;
-        });
+  while (true) {
+    auto read_result = handler->read_user_input();
+    if (!read_result) {
+      LOG(read_result.error().message);
+      break;
+    }
+    ReadResult message{read_result.value()};
+    switch (message.status) {
+      case status_code_e::WOULDBLOCK:
+      case status_code_e::CLOSED:
+        break;
+      case status_code_e::DATA:
+        handle_client_cmd(*handler, message);
+        break;
+    }
   }
 }
 
 void Server::handle_client_cmd(SocketHandler& client,
                                const ReadResult& message) {
-  LOG(std::format("Command to handle: {}", message.payload.data()));
+  LOG(std::format("Command to handle: {}", message.payload));
   bool gen_comm = true;
   for (const auto& cmd : commands) {
     if (match_cmd(cmd, message)) {
@@ -207,13 +230,13 @@ Ev Server::accept_socket(SocketHandler& parrent, const ReadResult& message) {
 
 Ev Server::send_connection_code(SocketHandler& parrent,
                                 const ReadResult& message) {
-
   auto conn_code = ConnectionCode::parse(message.payload);
   auto it = std::ranges::find_if(sockets, [](const auto& c) {
     return c.get()->get_socket_type() == socket_type_e::CLIENT;
   });
   if (it != sockets.end()) {
-    it->get()->write_to_user({message_type_e::DEFAULT, {conn_code->string_code}});
+    it->get()->write_to_user(
+        {message_type_e::DEFAULT, {conn_code->string_code}});
   }
   return {};
 }
