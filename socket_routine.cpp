@@ -21,7 +21,7 @@ SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   }
   return *this;
 }
-Ev SocketHandler::setup_listenter(int port) {
+Ev SocketHandler::setup_listener(int port) {
   if (!socket_fd)
     return std::unexpected(
         make_error_c(er_e::ALREADY_EXIST, "Socket is already exist"));
@@ -197,17 +197,16 @@ Ev EpollHandler::remove_socket(const SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
       -1)
     return std::unexpected(
-        make_error(er_e::SYSTEM, "Error removing socket from epoll"));
+        make_error_c(er_e::SYSTEM, "Error removing socket from epoll"));
   return {};
 }
 
 std::expected<std::vector<SocketHandler*>, Error> EpollHandler::wait_for_events(
     size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
-  // struct epoll_event events[10];
   int n = epoll_wait(this->epollfd, events.data(), 10, -1);
   if (n == -1)
-    return std::unexpected(make_error(er_e::SYSTEM, "Error in epoll_wait()"));
+    return std::unexpected(make_error_c(er_e::SYSTEM, "Error in epoll_wait()"));
   std::vector<SocketHandler*> ready_fds;
   for (int i = 0; i < n; ++i) {
     ready_fds.push_back(static_cast<SocketHandler*>((events[i].data.ptr)));

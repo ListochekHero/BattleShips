@@ -56,7 +56,7 @@ class SocketHandler {
   SocketHandler(SocketHandler&&);
   SocketHandler& operator=(const SocketHandler&) = delete;
   SocketHandler& operator=(SocketHandler&&);
-  Ev setup_listenter(int port);
+  Ev setup_listener(int port);
   const int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
