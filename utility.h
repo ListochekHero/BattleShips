@@ -6,7 +6,6 @@
 #include <system_error>
 
 namespace bsm {
-
 enum class error_code_e {
   INVALID_ARGS,
   NOT_FOUND,
@@ -19,38 +18,21 @@ struct Error {
   error_code_e code;
   std::string message;
 };
-using er_e = error_code_e;
 
 inline Error make_error(error_code_e code, std::string message) {
   return {code, std::move(message)};
 }
-
-std::string_view user_message(error_code_e code) {
-  switch (code) {
-    case er_e::INVALID_ARGS:
-      return "INVALID_ARGS";
-    case er_e::NOT_FOUND:
-      return "NOT_FOUND";
-    case er_e::PERMISSION_DENIED:
-      return "PERMISSION_DENIED";
-    case er_e::ALREADY_EXIST:
-      return "ALREADY_EXIST";
-    case er_e::INTERNAL:
-      return "INTERNAL";
-    case er_e::SYSTEM:
-      return "SYSTEM";
-    default:
-      return "-no such code-";
-  }
+inline Error make_error_c(error_code_e code, std::string message) {
+  return {code, std::move(std::format("{}: {}", message, c_error_string()))};
 }
 
-using Ev = std::expected<void, Error>;
-
+std::string_view user_message(error_code_e code);
 bool is_file_exist(const std::string& filename);
-
 std::string c_error_string();
-
 int64_t generate_conn_code();
+
+using er_e = error_code_e;
+using Ev = std::expected<void, Error>;
 }  // namespace bsm
 
 #endif
