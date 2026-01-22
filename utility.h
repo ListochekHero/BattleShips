@@ -6,7 +6,7 @@
 #include <system_error>
 
 namespace bsm {
-enum class error_code_e {
+enum class internal_error_e {
   INVALID_ARGS,
   NOT_FOUND,
   PERMISSION_DENIED,
@@ -14,24 +14,30 @@ enum class error_code_e {
   INTERNAL,
   SYSTEM
 };
+enum class user_error_e { GENERIC, CANT_CREATE_LOBBY, CANT_JOIN_LOBBY };
+
 struct Error {
-  error_code_e code;
+  internal_error_e error_code;
   std::string message;
+  user_error_e user_code{0};
 };
 
-inline Error make_error(error_code_e code, std::string message) {
-  return {code, std::move(message)};
+inline Error make_error(internal_error_e code, std::string message) {
+  return {.error_code = code, .message = std::move(message)};
 }
-inline Error make_error_c(error_code_e code, std::string message) {
-  return {code, std::move(std::format("{}: {}", message, c_error_string()))};
+inline Error make_error_c(internal_error_e code, std::string message) {
+  return {
+      .error_code = code,
+      .message = std::move(std::format("{}: {}", message, c_error_string()))};
 }
 
-std::string_view user_message(error_code_e code);
+std::string_view user_message(user_error_e user);
 bool is_file_exist(const std::string& filename);
 std::string c_error_string();
 int64_t generate_conn_code();
 
-using er_e = error_code_e;
+using er_e = internal_error_e;
+using us_e = user_error_e;
 using Ev = std::expected<void, Error>;
 }  // namespace bsm
 

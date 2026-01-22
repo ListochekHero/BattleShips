@@ -2,22 +2,22 @@
 
 namespace bsm {
 
-std::string_view user_message(error_code_e code) {
-  switch (code) {
-    case er_e::INVALID_ARGS:
-      return "INVALID_ARGS";
-    case er_e::NOT_FOUND:
-      return "NOT_FOUND";
-    case er_e::PERMISSION_DENIED:
-      return "PERMISSION_DENIED";
-    case er_e::ALREADY_EXIST:
-      return "ALREADY_EXIST";
-    case er_e::INTERNAL:
-      return "INTERNAL";
-    case er_e::SYSTEM:
-      return "SYSTEM";
+std::string_view user_message(user_error_e user) {
+  switch (user) {
+    case user_error_e::GENERIC:
+      return "Error occurred, please try again latter.";
+    case user_error_e::CANT_CREATE_LOBBY:
+      return "Cant create lobby, please try again latter.";
+    case user_error_e::CANT_JOIN_LOBBY:
+      return "Cant join lobby, please check connection code or try again.";
+    // case er_e::ALREADY_EXIST:
+    //   return "ALREADY_EXIST";
+    // case er_e::INTERNAL:
+    //   return "INTERNAL";
+    // case er_e::SYSTEM:
+    //   return "SYSTEM";
     default:
-      return "-no such code-";
+      return "Something unexpeceted happened";
   }
 }
 bool is_file_exist(const std::string& filename) {
