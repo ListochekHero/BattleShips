@@ -15,5 +15,9 @@ struct ConnectionCode {
   static std::expected<ConnectionCode, Error> parse(const std::string& message);
 };
 
+struct LobbyProcess{
+  pid_t pid;
+  SocketHandler ipc_socket;
+};
 }  // namespace bsm
 #endif

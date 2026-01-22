@@ -29,7 +29,11 @@ void Server::run() {
           process_events(events);
           return {};
         })
-        .transform_error(with_log("Cant get events"));
+        .or_else([](auto&& error) -> Ev {
+          LOG(error.message);
+          LOG("Cant get events");
+          return {};
+        });
   }
 }
 
@@ -85,7 +89,11 @@ void Server::process_server_socket(SocketHandler* handler) {
         }
         return {};
       })
-      .transform_error(with_log("Cant accept new connections"));
+      .or_else([](auto&& error) -> Ev {
+        LOG(error.message);
+        LOG("Cant accept new connections");
+        return {};
+      });
 }
 void Server::process_client_socket(SocketHandler* handler) {
   while (true) {
@@ -109,34 +117,36 @@ void Server::process_client_socket(SocketHandler* handler) {
 void Server::handle_client_cmd(SocketHandler& client,
                                const ReadResult& message) {
   LOG(std::format("Command to handle: {}", message.payload));
-  bool gen_comm = true;
   for (const auto& cmd : commands) {
     if (match_cmd(cmd, message)) {
-      (this->*cmd.handler)(client, message)
-          .and_then([&gen_comm]() -> Ev {
-            gen_comm = false;
-            return {};
-          })
-          .or_else([&client](const auto& error) -> Ev {
-            client
-                .write_to_user(
-                    {message_type_e::DEFAULT, {user_message(error.code)}})
-                .transform_error(
-                    with_log("handle_client_cmd - cant send answer to user"));
-            return std::unexpected(log_and_forward(error));
-          });
+      auto command_result = (this->*cmd.handler)(client, message);
+      if (!command_result) {
+        client
+            .write_to_user({message_type_e::DEFAULT,
+                            {user_message(command_result.error().user_code)}})
+            .or_else([](auto&& error) -> Ev {
+              LOG(error.message);
+              LOG("handle_client_cmd - cant send answer to user");
+              return {};
+            });
+      }
+      return;
     }
   }
-  if (gen_comm) {
-    general_command(client, message)
-        .or_else([&client](const auto& error) -> Ev {
-          return client.write_to_user(
-              {message_type_e::DEFAULT, {user_message(error.code)}});
+  general_command(client, message).or_else([&client](const auto& error) -> Ev {
+    return client
+        .write_to_user(
+            {message_type_e::DEFAULT, {user_message(error.user_code)}})
+        .or_else([](auto&& error) -> Ev {
+          LOG(error.message);
+          LOG("handle_client_cmd - cant send answer to user");
+          return {};
         });
-  }
+  });
+  return;
 }
 
-std::expected<SocketHandler, Error> Server::spawn_lobby_process() {
+std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
   int sv[2];
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1)
     return std::unexpected(make_error(
@@ -156,29 +166,32 @@ std::expected<SocketHandler, Error> Server::spawn_lobby_process() {
   }
   close(sv[0]);
   SocketHandler child_handler{sv[1]};
-  return child_handler;
+  return LobbyProcess{pid, std::move(child_handler)};
 }
 
 Ev Server::create_lobby(SocketHandler& client, const ReadResult& message) {
-  epoll_handler.remove_socket(&client).transform_error(log_and_forward);
   auto lobby_result = spawn_lobby_process();
   if (!lobby_result) {
-    log_and_forward(lobby_result.error());
-    return std::unexpected(make_error(er_e::SYSTEM, "Cant create lobby"));
+    LOG(lobby_result.error().message);
+    return std::unexpected(Error{er_e::SYSTEM, "Unable to spawn child process",
+                                 us_e::CANT_CREATE_LOBBY});
   }
   int64_t child_id{generate_conn_code()};
   auto it = lobbies.emplace(child_id, std::move(*lobby_result));
   if (!it.second)
-    return std::unexpected(make_error(er_e::INTERNAL, "Cant store lobby"));
-  init_child(it.first->second, child_id, client)
-      .or_else([](const auto& error) -> Ev {
-        return std::unexpected(log_and_forward(error));
-      })
-      .and_then([this, &client, &message]() -> Ev {
-        erase_socket_handler(client, message);
-        return {};
-      });
-  return {};
+    return std::unexpected(Error(er_e::INTERNAL,
+                                 "Unable to emplace lobby into map",
+                                 us_e::CANT_CREATE_LOBBY));
+  if (auto result = init_child(it.first->second.ipc_socket, child_id, client);
+      !result) {
+    LOG(result.error().message);
+    kill(it.first->second.pid, SIGKILL);
+    lobbies.erase(it.first);
+    return std::unexpected(Error{er_e::INTERNAL,
+                                 "Unalbe to initialize child process",
+                                 us_e::CANT_CREATE_LOBBY});
+  }
+  return erase_socket_handler(client, message);
 }
 
 Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
@@ -187,6 +200,7 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
       .write_to_user(
           {message_type_e::SOCKET, {"\\socket"}, client.get_socket()})
       .or_else([](const Error& error) -> Ev {
+        LOG(error.message);
         return std::unexpected(log_and_forward(error));
       })
       .and_then([&child_socket, &child_id]() -> Ev {

@@ -45,7 +45,7 @@ class Server : public Application {
   void process_server_socket(SocketHandler* handler);
   void process_client_socket(SocketHandler* handler);
   void handle_client_cmd(SocketHandler& client, const ReadResult& command);
-  std::expected<SocketHandler, Error> spawn_lobby_process();
+  std::expected<LobbyProcess, Error> spawn_lobby_process();
   Ev create_lobby(SocketHandler& client, const ReadResult& message);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id,
                 SocketHandler& client);
@@ -57,7 +57,7 @@ class Server : public Application {
 
   Ev erase_socket_handler(SocketHandler& client, const ReadResult& message);
   void handle_zombie_pocesses();
-  std::unordered_map<int64_t, SocketHandler> lobbies;
+  std::unordered_map<int64_t, LobbyProcess> lobbies;
 
   using Handler = Ev (Server::*)(SocketHandler&, const ReadResult&);
   struct Command {
