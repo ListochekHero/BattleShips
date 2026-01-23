@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <system_error>
 
+#include "socket_routine.h"
 #include "utility.h"
 
 namespace bsm {

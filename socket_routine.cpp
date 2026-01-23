@@ -122,7 +122,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() const {
 }
 
 Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
-  LOG(std::format("Message for user: {}", msg.payloads.data()));
+  LOG(std::format("Message for user: {}", msg.payloads));
   MsgHeader hdr{.msg_type = msg.msg_type, .payload_count = msg.payloads.size()};
   std::vector<iovec> iov;
   iov.reserve(msg.payloads.size());

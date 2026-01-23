@@ -19,8 +19,6 @@
 
 #include "logger.h"
 
-// #include "interfaces.h"
-
 #define BACKLOG 10
 #define BUFF_SIZE 1024  //  add this magic number to config
 namespace bsm {

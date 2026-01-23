@@ -18,14 +18,17 @@ namespace bsm {
 
 void LOG(const std::string_view message_to_log);
 
+// std::unexpected<Error> log_and_replace();
+// void log_and_ignore(const Error& error, std::string_view context);
+
 inline auto log_and_forward = [](const auto& error) -> Error {
   LOG(error.message);
   return error;
 };
 
 inline auto with_log(std::string_view context) {
-  return [context](const auto& error) -> Error {
-    error.message = {std::format("[{}]: [{}]", context, error.message)};
+  return [context](auto&& error) -> Error {
+    error.message = std::format("[{}]: [{}]", context, error.message);
     log_and_forward(error);
     return error;
   };
