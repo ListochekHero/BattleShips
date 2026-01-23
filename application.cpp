@@ -80,7 +80,7 @@ void Server::process_server_socket(SocketHandler* handler) {
                 sockets.emplace_back(std::move(client));
                 return {};
               })
-              .or_else([&client](auto&& error) {
+              .or_else([&client](auto&& error)->Ev {
                 LOG(error.message);
                 client.reset(nullptr);
                 return std::unexpected(
@@ -215,7 +215,11 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
 
 Ev Server::erase_socket_handler(SocketHandler& client,
                                 const ReadResult& message) {
-  epoll_handler.remove_socket(&client).transform_error(log_and_forward);
+  epoll_handler.remove_socket(&client).or_else([](auto&& error) -> Ev {
+    LOG(error.message);
+    return std::unexpected(Error{
+        er_e::SYSTEM, "Unable to remove socket from epoll before deleting"});
+  });
   std::erase_if(sockets, [&client](const auto& s) {
     return s.get()->get_socket() == client.get_socket();
   });
@@ -254,29 +258,37 @@ Ev Server::send_connection_code(SocketHandler& parrent,
   }
   return {};
 }
-
-Ev Server::general_command(SocketHandler& client, const ReadResult& message) {
-  // in case we didnt found a specific command lets see what else we can do
-  if (int64_t child_id{std::stol(parse_conn_code(message.payload))}) {
-    // maybe this is a connection code, lets try find lobby for it
-    found_lobby(child_id).and_then(
-        [this, &client, child_id, &message](auto child_ipc) -> Ev {
-          client.remove_cloexec();
-          if (!(init_child(*child_ipc, child_id, client))
-                   .and_then([this, &client, &message]() -> Ev {
-                     erase_socket_handler(client, message);
-                     return {};
-                   })
-                   .transform_error(log_and_forward))
-            return std::unexpected(make_error(
-                er_e::INTERNAL, "Cant pass socket to child process"));
-          return {};
-        });
+Ev Server::join_lobby(SocketHandler& client, const ReadResult& message) {
+  auto parse_result = ConnectionCode::parse(message.payload);
+  if (!parse_result) {
+    LOG(parse_result.error().message);
+    return std::unexpected(Error{er_e::INVALID_ARGS,
+                                 "Unable to get connection code for lobby",
+                                 us_e::CANT_JOIN_LOBBY});
   }
-  return std::unexpected(make_error(er_e::INTERNAL, "Unknown command"));
+  int64_t child_id{parse_result.value().int_code};
+  auto lobby = found_lobby(child_id);
+  if (!lobby) {
+    LOG(lobby.error().message);
+    return std::unexpected(Error{er_e::INVALID_ARGS,
+                                 "Unable to find lobby with given id",
+                                 us_e::CANT_JOIN_LOBBY});
+  }
+  if (auto result = init_child(lobby.value()->ipc_socket, child_id, client);
+      !result) {
+    LOG(result.error().message);
+    return std::unexpected(Error{er_e::INTERNAL,
+                                 "Unable to pass client socket to lobby",
+                                 us_e::CANT_JOIN_LOBBY});
+  }
+  return erase_socket_handler(client, message);
 }
 
-std::expected<SocketHandler*, Error> Server::found_lobby(int64_t child_id) {
+Ev Server::general_command(SocketHandler& client, const ReadResult& message) {
+  return std::unexpected(Error(er_e::INVALID_ARGS, "Unknown command"));
+}
+
+std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   auto it{lobbies.find(child_id)};
   if (it != lobbies.end()) return &(it->second);
   return std::unexpected(make_error(er_e::NOT_FOUND, "No such lobby"));
