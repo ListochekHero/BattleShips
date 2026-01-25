@@ -3,16 +3,13 @@
 
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <optional>
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <cstring>
 #include <expected>
-#include <functional>
-#include <iostream>
-#include <map>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -35,7 +32,7 @@ struct MsgHeader {
 struct OutgoingMessage {
   message_type_e msg_type;
   std::vector<std::string_view> payloads;
-  std::optional<int> socket;
+  std::optional<int> socket {std::nullopt};
 };
 
 struct ReadResult {
@@ -55,7 +52,7 @@ class SocketHandler {
   SocketHandler& operator=(const SocketHandler&) = delete;
   SocketHandler& operator=(SocketHandler&&);
   Ev setup_listener(int port);
-  const int get_socket() const;
+  int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
   std::expected<std::vector<std::unique_ptr<SocketHandler>>, Error>

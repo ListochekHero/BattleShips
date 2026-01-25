@@ -1,4 +1,5 @@
 #include "socket_routine.h"
+#include <cstddef>
 
 namespace bsm {
 
@@ -55,7 +56,7 @@ Ev SocketHandler::setup_listener(int port) {
   return {};
 }
 
-const int SocketHandler::get_socket() const { return socket_fd; }
+int SocketHandler::get_socket() const { return socket_fd; }
 
 socket_type_e SocketHandler::get_socket_type() const {
   return this->socket_type_v;
@@ -90,7 +91,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() const {
   ReadResult result;
   struct iovec iov[2]{{&hdr, sizeof(hdr)},
                       {result.payload.data(), result.payload.size()}};
-  struct msghdr msg{0};
+  struct msghdr msg{};
   msg.msg_iov = iov;
   msg.msg_iovlen = 2;
   char buf[CMSG_SPACE(sizeof(int))];
@@ -130,7 +131,7 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
   for (auto message : msg.payloads) {
     iov.push_back({const_cast<char*>(message.data()), message.size()});
   }
-  struct msghdr m{0};
+  struct msghdr m{};
   m.msg_iov = iov.data();
   m.msg_iovlen = iov.size();
   if (msg.socket) {
@@ -201,17 +202,17 @@ Ev EpollHandler::remove_socket(const SocketHandler* const socket_handler) {
   return {};
 }
 
-std::expected<std::vector<SocketHandler*>, Error> EpollHandler::wait_for_events(
-    size_t max_events) const {
+std::expected<std::vector<SocketHandler*>, Error>
+EpollHandler::wait_for_events(size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
-  int n = epoll_wait(this->epollfd, events.data(), 10, -1);
+  ssize_t n = epoll_wait(this->epollfd, events.data(), 10, -1);
   if (n == -1)
     return std::unexpected(make_error_c(er_e::SYSTEM, "Error in epoll_wait()"));
   std::vector<SocketHandler*> ready_fds;
-  for (int i = 0; i < n; ++i) {
+  for (ssize_t i = 0; i < n; ++i) {
     ready_fds.push_back(static_cast<SocketHandler*>((events[i].data.ptr)));
   }
   return ready_fds;
 }
 
-}  // namespace bsm
+} // namespace bsm
