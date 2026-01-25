@@ -3,10 +3,7 @@
 
 #include <sys/wait.h>
 
-#include <atomic>
-#include <list>
 #include <memory>
-#include <ranges>
 #include <unordered_map>
 
 #include "config.h"

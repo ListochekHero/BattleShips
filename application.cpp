@@ -1,4 +1,5 @@
 #include "application.h"
+#include "utility.h"
 
 namespace bsm {
 
@@ -24,16 +25,17 @@ Ev Server::init(SocketHandler&& parrent_socket) {
 void Server::run() {
   while (true) {
     handle_zombie_pocesses();
-    epoll_handler.wait_for_events(MAX_EVENTS)
-        .and_then([this](auto&& events) -> Ev {
-          process_events(events);
-          return {};
-        })
-        .or_else([](auto&& error) -> Ev {
-          LOG(error.message);
-          LOG("Cant get events");
-          return {};
-        });
+    [[maybe_unused]]
+    auto __ = epoll_handler.wait_for_events(MAX_EVENTS)
+                  .and_then([this](auto&& events) -> Ev {
+                    process_events(events);
+                    return {};
+                  })
+                  .or_else([](auto&& error) -> Ev {
+                    LOG(error.message);
+                    LOG("Cant get events");
+                    return {};
+                  });
   }
 }
 
@@ -72,45 +74,42 @@ void Server::process_events(std::vector<SocketHandler*>& events) {
 }
 
 void Server::process_server_socket(SocketHandler* handler) {
-  handler->accept_connections()
-      .and_then([this](auto&& new_clients) -> Ev {
-        for (auto& client : new_clients) {
-          epoll_handler.add_socket(client.get())
-              .and_then([this, &client]() -> Ev {
-                sockets.emplace_back(std::move(client));
-                return {};
-              })
-              .or_else([&client](auto&& error)->Ev {
-                LOG(error.message);
-                client.reset(nullptr);
-                return std::unexpected(
-                    Error{er_e::SYSTEM, "Cant add new client to epoll"});
-              });
-        }
-        return {};
-      })
-      .or_else([](auto&& error) -> Ev {
-        LOG(error.message);
-        LOG("Cant accept new connections");
-        return {};
-      });
+  [[maybe_unused]]
+  auto __ = handler->accept_connections()
+                .and_then([this](auto&& new_clients) -> Ev {
+                  for (auto& client : new_clients) {
+                    epoll_handler.add_socket(client.get())
+                        .and_then([this, &client]() -> Ev {
+                          sockets.emplace_back(std::move(client));
+                          return {};
+                        })
+                        .or_else([&client](auto&& error) -> Ev {
+                          LOG(error.message);
+                          client.reset(nullptr);
+                          return std::unexpected(Error{
+                              er_e::SYSTEM, "Cant add new client to epoll"});
+                        });
+                  }
+                  return {};
+                })
+                .or_else([](auto&& error) -> Ev {
+                  LOG(error.message);
+                  LOG("Cant accept new connections");
+                  return {};
+                });
 }
 void Server::process_client_socket(SocketHandler* handler) {
-  while (true) {
+  status_code_e read_status = status_code_e::DATA;
+  while (read_status == status_code_e::DATA) {
     auto read_result = handler->read_user_input();
     if (!read_result) {
       LOG(read_result.error().message);
       break;
     }
     ReadResult message{read_result.value()};
-    switch (message.status) {
-      case status_code_e::WOULDBLOCK:
-      case status_code_e::CLOSED:
-        break;
-      case status_code_e::DATA:
-        handle_client_cmd(*handler, message);
-        break;
-    }
+    read_status = message.status;
+    if (message.status == status_code_e::DATA)
+      handle_client_cmd(*handler, message);
   }
 }
 
@@ -119,39 +118,43 @@ void Server::handle_client_cmd(SocketHandler& client,
   LOG(std::format("Command to handle: {}", message.payload));
   for (const auto& cmd : commands) {
     if (match_cmd(cmd, message)) {
-      auto command_result = (this->*cmd.handler)(client, message);
-      if (!command_result) {
-        client
-            .write_to_user({message_type_e::DEFAULT,
-                            {user_message(command_result.error().user_code)}})
-            .or_else([](auto&& error) -> Ev {
-              LOG(error.message);
-              LOG("handle_client_cmd - cant send answer to user");
-              return {};
-            });
+      if (auto command_result = (this->*cmd.handler)(client, message);
+          !command_result) {
+        [[maybe_unused]]
+        auto __ = client
+                      .write_to_user(
+                          {message_type_e::DEFAULT,
+                           {user_message(command_result.error().user_code)}})
+                      .or_else([](auto&& error) -> Ev {
+                        LOG(error.message);
+                        LOG("handle_client_cmd - cant send answer to user");
+                        return {};
+                      });
       }
       return;
     }
   }
-  general_command(client, message).or_else([&client](const auto& error) -> Ev {
-    return client
-        .write_to_user(
-            {message_type_e::DEFAULT, {user_message(error.user_code)}})
-        .or_else([](auto&& error) -> Ev {
-          LOG(error.message);
-          LOG("handle_client_cmd - cant send answer to user");
-          return {};
-        });
-  });
+  [[maybe_unused]]
+  auto __ = general_command(client, message)
+                .or_else([&client](const auto& error) -> Ev {
+                  return client
+                      .write_to_user({message_type_e::DEFAULT,
+                                      {user_message(error.user_code)}})
+                      .or_else([](auto&& error) -> Ev {
+                        LOG(error.message);
+                        LOG("handle_client_cmd - cant send answer to user");
+                        return {};
+                      });
+                });
   return;
 }
 
 std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
   int sv[2];
   if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1)
-    return std::unexpected(make_error(
-        er_e::SYSTEM,
-        std::format("Failed to create socketpair: {}", c_error_string())));
+    return std::unexpected(
+        make_error(er_e::SYSTEM, std::format("Failed to create socketpair: {}",
+                                             c_error_string())));
   pid_t pid = fork();
   if (pid == -1)
     return std::unexpected(make_error(
@@ -191,7 +194,13 @@ Ev Server::create_lobby(SocketHandler& client, const ReadResult& message) {
                                  "Unalbe to initialize child process",
                                  us_e::CANT_CREATE_LOBBY});
   }
-  return erase_socket_handler(client, message);
+  return erase_socket_handler(client, message).or_else([](auto&& error) -> Ev {
+    LOG(error.message);
+    return std::unexpected(
+        Error{er_e::SYSTEM,
+              "Unable to erase socket after passing it to lobby process",
+              us_e::CANT_CREATE_LOBBY})
+  });
 }
 
 Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
@@ -214,12 +223,15 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
 }
 
 Ev Server::erase_socket_handler(SocketHandler& client,
-                                const ReadResult& message) {
-  epoll_handler.remove_socket(&client).or_else([](auto&& error) -> Ev {
-    LOG(error.message);
-    return std::unexpected(Error{
-        er_e::SYSTEM, "Unable to remove socket from epoll before deleting"});
-  });
+                                [[maybe_unused]] const ReadResult& message) {
+  [[maybe_unused]]
+  auto __ =
+      epoll_handler.remove_socket(&client).or_else([](auto&& error) -> Ev {
+        LOG(error.message);
+        return std::unexpected(
+            Error{er_e::SYSTEM,
+                  "Unable to remove socket from epoll before deleting"});
+      });
   std::erase_if(sockets, [&client](const auto& s) {
     return s.get()->get_socket() == client.get_socket();
   });
@@ -236,25 +248,51 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-Ev Server::accept_socket(SocketHandler& parrent, const ReadResult& message) {
+Ev Server::accept_socket([[maybe_unused]] SocketHandler& parrent,
+                         const ReadResult& message) {
   if (message.socket) {
     sockets.emplace_back(std::make_unique<SocketHandler>(*message.socket));
-    epoll_handler.add_socket(sockets.back().get());
-    sockets.back().get()->write_to_user(
-        {message_type_e::DEFAULT, {"Connected to lobby"}});
+    [[maybe_unused]]
+    auto __ =
+        epoll_handler.add_socket(sockets.back().get())
+            .or_else([this](auto&& error) -> Ev {
+              LOG(error.message);
+              sockets.pop_back();
+              return std::unexpected(Error{
+                  er_e::SYSTEM, "Unable to add socket from parent into epoll"});
+            })
+            .and_then([this]() -> Ev {
+              return sockets.back()
+                  ->write_to_user(
+                      {message_type_e::DEFAULT, {"Connected to lobby"}})
+                  .or_else([](auto&& error) -> Ev {
+                    LOG(error.message);
+                    return std::unexpected(Error{
+                        er_e::SYSTEM,
+                        "lobby process - unable to communicate with client"});
+                  });
+            });
   }
   return {};
 }
 
-Ev Server::send_connection_code(SocketHandler& parrent,
+Ev Server::send_connection_code([[maybe_unused]] SocketHandler& parrent,
                                 const ReadResult& message) {
   auto conn_code = ConnectionCode::parse(message.payload);
   auto it = std::ranges::find_if(sockets, [](const auto& c) {
     return c.get()->get_socket_type() == socket_type_e::CLIENT;
   });
   if (it != sockets.end()) {
-    it->get()->write_to_user(
-        {message_type_e::DEFAULT, {conn_code->string_code}});
+    [[maybe_unused]] auto __ =
+        it->get()
+            ->write_to_user({message_type_e::DEFAULT, {conn_code->string_code}})
+            .or_else([](auto&& error) -> Ev {
+              LOG(error.message);
+              return std::unexpected(Error{
+                  er_e::SYSTEM,
+                  "lobby process - unable to send connection code to client"});
+            });
+    ;
   }
   return {};
 }
@@ -284,13 +322,15 @@ Ev Server::join_lobby(SocketHandler& client, const ReadResult& message) {
   return erase_socket_handler(client, message);
 }
 
-Ev Server::general_command(SocketHandler& client, const ReadResult& message) {
+Ev Server::general_command([[maybe_unused]] SocketHandler& client,
+                           [[maybe_unused]] const ReadResult& message) {
   return std::unexpected(Error(er_e::INVALID_ARGS, "Unknown command"));
 }
 
 std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   auto it{lobbies.find(child_id)};
-  if (it != lobbies.end()) return &(it->second);
+  if (it != lobbies.end())
+    return &(it->second);
   return std::unexpected(make_error(er_e::NOT_FOUND, "No such lobby"));
 }
 
@@ -306,10 +346,12 @@ const std::array<Server::Command, 5> Server::commands = {
       .match = {{"\\join"}, message_type_e::CONN_CODE}}}};
 
 bool Server::match_cmd(const Command& cmd, const ReadResult& msg) {
-  if (cmd.match.msg_type && cmd.match.msg_type == msg.msg_type) return true;
+  if (cmd.match.msg_type && cmd.match.msg_type == msg.msg_type)
+    return true;
   for (auto alias : cmd.match.text_aliases)
-    if (msg.payload.starts_with(alias)) return true;
+    if (msg.payload.starts_with(alias))
+      return true;
   return false;
 }
 
-}  // namespace bsm
+} // namespace bsm
