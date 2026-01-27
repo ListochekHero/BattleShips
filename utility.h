@@ -28,18 +28,18 @@ inline Error make_error(internal_error_e code, std::string message) {
 
 std::string c_error_string();
 inline Error make_error_c(internal_error_e code, std::string message) {
-  return {
-      .error_code = code,
-      .message = std::move(std::format("{}: {}", message, c_error_string()))};
+  return {.error_code = code,
+          .message = std::format("{}: {}", message, c_error_string())};
 }
 
 std::string_view user_message(user_error_e user);
 bool is_file_exist(const std::string& filename);
 int64_t generate_conn_code();
+std::expected<std::string, Error> parse(const std::string& message);
 
 using er_e = internal_error_e;
 using us_e = user_error_e;
 using Ev = std::expected<void, Error>;
-}  // namespace bsm
+} // namespace bsm
 
 #endif
