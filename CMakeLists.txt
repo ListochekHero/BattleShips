@@ -4,10 +4,14 @@ cmake_minimum_required(VERSION 3.10)
 project(BattleShips)
 
 #C++ version
-set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_COMPILER /opt/gcc-15/bin/g++)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -O0 -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -std=c++23")
 
 set(CMAKE_BUILD_TYPE Debug)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 #Server source files
 set(SERVER_SOURCES
@@ -16,6 +20,9 @@ application.cpp
 interfaces.cpp
 logger.cpp
 socket_routine.cpp
+utility.cpp
+config.cpp
+data_storage.cpp
 )
 
 #Create an executable for the Server
@@ -25,6 +32,12 @@ add_executable(server ${SERVER_SOURCES})
 set(LOBBY_SOURCES
 lobby.cpp
 logger.cpp
+application.cpp
+interfaces.cpp
+socket_routine.cpp
+utility.cpp
+config.cpp
+data_storage.cpp
 )
 
 #Create an executable for the Lobby
@@ -37,6 +50,9 @@ application.cpp
 interfaces.cpp
 logger.cpp
 socket_routine.cpp
+config.cpp
+utility.cpp
+data_storage.cpp
 )
 
 #Create an executable for the Client
