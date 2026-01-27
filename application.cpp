@@ -1,5 +1,5 @@
 #include "application.h"
-#include "utility.h"
+
 
 namespace bsm {
 
@@ -199,7 +199,7 @@ Ev Server::create_lobby(SocketHandler& client, const ReadResult& message) {
     return std::unexpected(
         Error{er_e::SYSTEM,
               "Unable to erase socket after passing it to lobby process",
-              us_e::CANT_CREATE_LOBBY})
+              us_e::CANT_CREATE_LOBBY});
   });
 }
 
@@ -210,14 +210,20 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
           {message_type_e::SOCKET, {"\\socket"}, client.get_socket()})
       .or_else([](const Error& error) -> Ev {
         LOG(error.message);
-        return std::unexpected(log_and_forward(error));
+        return std::unexpected(Error{
+            er_e::SYSTEM, "Unable to send client socket to lobby process,",
+            us_e::CANT_CREATE_LOBBY});
       })
       .and_then([&child_socket, &child_id]() -> Ev {
         return child_socket
             .write_to_user(
                 {message_type_e::CONN_CODE, {std::to_string(child_id)}})
             .or_else([](const Error& error) -> Ev {
-              return std::unexpected(log_and_forward(error));
+              LOG(error.message);
+              return std::unexpected(
+                  Error{er_e::SYSTEM,
+                        "Unable to send connection code to lobby process,",
+                        us_e::CANT_CREATE_LOBBY});
             });
       });
 }
@@ -279,22 +285,14 @@ Ev Server::accept_socket([[maybe_unused]] SocketHandler& parrent,
 Ev Server::send_connection_code([[maybe_unused]] SocketHandler& parrent,
                                 const ReadResult& message) {
   auto conn_code = ConnectionCode::parse(message.payload);
-  auto it = std::ranges::find_if(sockets, [](const auto& c) {
-    return c.get()->get_socket_type() == socket_type_e::CLIENT;
-  });
-  if (it != sockets.end()) {
-    [[maybe_unused]] auto __ =
-        it->get()
-            ->write_to_user({message_type_e::DEFAULT, {conn_code->string_code}})
-            .or_else([](auto&& error) -> Ev {
-              LOG(error.message);
-              return std::unexpected(Error{
-                  er_e::SYSTEM,
+  return sockets.back()
+      ->write_to_user({message_type_e::DEFAULT, {conn_code->string_code}})
+      .or_else([](auto&& error) -> Ev {
+        LOG(error.message);
+        return std::unexpected(
+            Error{er_e::SYSTEM,
                   "lobby process - unable to send connection code to client"});
-            });
-    ;
-  }
-  return {};
+      });
 }
 Ev Server::join_lobby(SocketHandler& client, const ReadResult& message) {
   auto parse_result = ConnectionCode::parse(message.payload);
@@ -334,7 +332,39 @@ std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   return std::unexpected(make_error(er_e::NOT_FOUND, "No such lobby"));
 }
 
-const std::array<Server::Command, 5> Server::commands = {
+Ev Server::chat_message([[maybe_unused]]SocketHandler& client, const ReadResult& message) {
+  auto parse_result = parse(message.payload);
+  if (!parse_result) {
+    LOG(parse_result.error().message);
+    return std::unexpected(
+        Error{er_e::INTERNAL, "Unable to parse client chat message"});
+  }
+  const std::string chat_message{std::move(parse_result.value())};
+  bool had_error {false};
+  for (auto& receiver : sockets) {
+    switch (receiver->get_socket_type()) {
+    case bsm::socket_type_e::IPC:
+    case bsm::socket_type_e::SERVER:
+    case bsm::socket_type_e::UNKNOWN:
+      continue;
+    case bsm::socket_type_e::CLIENT:
+    case bsm::socket_type_e::SPECTATOR:
+      if (auto result = receiver->write_to_user(
+              {message_type_e::DEFAULT, {chat_message}});
+          !result) {
+        LOG(result.error().message);
+        had_error = true;
+      }
+    }
+  }
+
+  return !had_error ? Ev{}:std::unexpected(Error{
+            er_e::SYSTEM,
+            "Unable to send chat message to every client currently active"});
+
+}
+
+const std::array<Server::Command, 6> Server::commands = {
     {{.handler = &Server::create_lobby, .match = {{"\\create"}, std::nullopt}},
      {.handler = &Server::erase_socket_handler,
       .match = {{"\\close"}, std::nullopt}},
@@ -343,7 +373,8 @@ const std::array<Server::Command, 5> Server::commands = {
      {.handler = &Server::send_connection_code,
       .match = {{"\\conn_code"}, message_type_e::CONN_CODE}},
      {.handler = &Server::join_lobby,
-      .match = {{"\\join"}, message_type_e::CONN_CODE}}}};
+      .match = {{"\\join"}, message_type_e::CONN_CODE}},
+     {.handler = &Server::chat_message, .match = {{"\\msg"}, std::nullopt}}}};
 
 bool Server::match_cmd(const Command& cmd, const ReadResult& msg) {
   if (cmd.match.msg_type && cmd.match.msg_type == msg.msg_type)

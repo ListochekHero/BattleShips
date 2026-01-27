@@ -3,39 +3,40 @@
 
 #include <sys/wait.h>
 
-#include <memory>
-#include <unordered_map>
-
 #include "config.h"
 #include "data_storage.h"
 #include "logger.h"
 #include "socket_routine.h"
+#include "utility.h"
+#include <memory>
+#include <optional>
+#include <unordered_map>
 
 #define MAX_EVENTS 10
 
 namespace bsm {
 
 class Application {
- public:
+public:
   virtual void run() = 0;
   virtual ~Application() = default;
 
- protected:
+protected:
   EpollHandler epoll_handler;
   std::vector<std::unique_ptr<SocketHandler>> sockets;
 
- private:
+private:
 };
 
 class Server : public Application {
- public:
+public:
   friend struct Command;
   Server() = default;
-  Ev init();                                // init() for Server
-  Ev init(SocketHandler&& parrent_socket);  // init() for Lobby
+  Ev init();                               // init() for Server
+  Ev init(SocketHandler&& parrent_socket); // init() for Lobby
   virtual void run();
 
- private:
+private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
   void process_events(std::vector<SocketHandler*>& events);
@@ -51,6 +52,7 @@ class Server : public Application {
   Ev join_lobby(SocketHandler& client, const ReadResult& message);
   Ev general_command(SocketHandler& client, const ReadResult& message);
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
+  Ev chat_message(SocketHandler& client, const ReadResult& message);
 
   Ev erase_socket_handler(SocketHandler& client, const ReadResult& message);
   void handle_zombie_pocesses();
@@ -64,13 +66,13 @@ class Server : public Application {
       std::optional<message_type_e> msg_type;
     } match;
   };
-  static const std::array<Command, 5> commands;
+  static const std::array<Command, 6> commands;
   bool match_cmd(const Command& cmd, const ReadResult& msg);
 };
 class Client : public Application {
- public:
- private:
+public:
+private:
 };
 
-}  // namespace bsm
+} // namespace bsm
 #endif
