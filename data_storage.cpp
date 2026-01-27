@@ -9,7 +9,7 @@ std::expected<ConnectionCode, Error> ConnectionCode::parse(
   if (!int_code) {
     size_t pos{message.find_last_of(' ')};
     if (pos != std::string::npos) {
-      string_code = message, ++pos;
+      string_code = {message, ++pos};
       int_code = std::strtol(string_code.c_str(), nullptr, 10);
     } else {
       return std::unexpected(
