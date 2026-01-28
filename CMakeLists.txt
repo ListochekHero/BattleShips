@@ -1,78 +1,90 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 #Project name
 project(BattleShips)
 
 #C++ version
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-set(CMAKE_CXX_COMPILER /opt/gcc-15/bin/g++)
 set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb -O0 -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -std=c++23")
-
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-#Server source files
-set(SERVER_SOURCES
-main.cpp
-application.cpp
-interfaces.cpp
-logger.cpp
-socket_routine.cpp
-utility.cpp
-config.cpp
-data_storage.cpp
-)
-
-#Create an executable for the Server
-add_executable(server ${SERVER_SOURCES})
-
-#Lobby source files
-set(LOBBY_SOURCES
-lobby.cpp
-logger.cpp
-application.cpp
-interfaces.cpp
-socket_routine.cpp
-utility.cpp
-config.cpp
-data_storage.cpp
-)
-
-#Create an executable for the Lobby
-add_executable(lobby ${LOBBY_SOURCES})
-
-#Client source files
-set(CLIENT_SOURCES
-client.cpp
-application.cpp
-interfaces.cpp
-logger.cpp
-socket_routine.cpp
-config.cpp
-utility.cpp
-data_storage.cpp
-)
-
-#Create an executable for the Client
-add_executable(client ${CLIENT_SOURCES})
-
-
-#Include directories for shared headers
-target_include_directories(server PRIVATE ${CMAKE_SOURCE_DIR})
-target_include_directories(lobby PRIVATE ${CMAKE_SOURCE_DIR})
-target_include_directories(client PRIVATE ${CMAKE_SOURCE_DIR})
-
-
-# Default build type if not specified
-if(NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Debug CACHE STRING "Choose the type of build." FORCE)
-endif()
-
-# Define DEBUG_LOGS macro for Debug builds
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    add_definitions(-DDEBUG_LOGS)
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Debug CACHE STRING "Build type" FORCE)
 endif()
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+
+add_library(common OBJECT
+application.cpp
+interfaces.cpp
+logger.cpp
+socket_routine.cpp
+utility.cpp
+config.cpp
+data_storage.cpp
+)
+
+# add_library(sanitizers INTERFACE)
+
+# target_compile_options(sanitizers INTERFACE
+#   $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+# )
+
+# target_link_options(sanitizers INTERFACE
+#   $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+# )
+
+target_compile_options(common PRIVATE
+-Wall
+-Wextra
+-Wpedantic
+-Wconversion
+-Wsign-conversion
+-Weffc++
+)
+
+target_compile_options(common PRIVATE
+  $<$<CONFIG:Debug>:-O0 -ggdb>
+)
+
+target_compile_definitions(common PRIVATE
+  $<$<CONFIG:Debug>:DEBUG_LOGS>
+)
+
+option(ENABLE_SANITIZERS "Enable address/undefined sanitizers" ON)
+
+if(ENABLE_SANITIZERS)
+  target_compile_options(common PRIVATE
+    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+  )
+  target_link_options(common PRIVATE
+    $<$<CONFIG:Debug>:-fsanitize=address,undefined>
+  )
+endif()
+
+#Create an executable for the Server
+add_executable(server
+  main.cpp
+  $<TARGET_OBJECTS:common>
+)
+
+
+
+#Create an executable for the Lobby
+add_executable(lobby
+  lobby.cpp
+  $<TARGET_OBJECTS:common>
+)
+
+
+#Create an executable for the Client
+add_executable(client
+  client.cpp
+  $<TARGET_OBJECTS:common>
+)
+
+target_link_options(server PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+target_link_options(lobby PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
+target_link_options(client PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
