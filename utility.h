@@ -36,6 +36,7 @@ std::string_view user_message(user_error_e user);
 bool is_file_exist(const std::string& filename);
 int64_t generate_conn_code();
 std::expected<std::string, Error> parse(const std::string& message);
+std::expected<std::string, Error> generate_name();
 
 using er_e = internal_error_e;
 using us_e = user_error_e;

@@ -1,4 +1,5 @@
 #include "utility.h"
+#include <string>
 
 namespace bsm {
 
@@ -45,4 +46,10 @@ std::expected<std::string, Error> parse(const std::string& message) {
   };
   return string_code;
 }
+
+std::expected<std::string, Error> generate_name(){
+  std::string new_name = "user" + std::to_string(generate_conn_code());
+  return new_name;
+}
+
 } // namespace bsm
