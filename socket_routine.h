@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "logger.h"
+#include "utility.h"
 
 #define BACKLOG 10
 #define BUFF_SIZE 1024  //  add this magic number to config
@@ -60,6 +61,7 @@ class SocketHandler {
   std::expected<ReadResult, Error> read_user_input() const;
   Ev write_to_user(const OutgoingMessage& msg) const;
   Ev remove_cloexec();
+  std::string nick_name {*generate_name()};
 
  private:
   int socket_fd{-1};

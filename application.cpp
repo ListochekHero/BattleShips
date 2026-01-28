@@ -1,6 +1,5 @@
 #include "application.h"
 
-
 namespace bsm {
 
 Ev Server::init() {
@@ -332,7 +331,8 @@ std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   return std::unexpected(make_error(er_e::NOT_FOUND, "No such lobby"));
 }
 
-Ev Server::chat_message([[maybe_unused]]SocketHandler& client, const ReadResult& message) {
+Ev Server::chat_message([[maybe_unused]] SocketHandler& client,
+                        const ReadResult& message) {
   auto parse_result = parse(message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
@@ -340,7 +340,7 @@ Ev Server::chat_message([[maybe_unused]]SocketHandler& client, const ReadResult&
         Error{er_e::INTERNAL, "Unable to parse client chat message"});
   }
   const std::string chat_message{std::move(parse_result.value())};
-  bool had_error {false};
+  bool had_error{false};
   for (auto& receiver : sockets) {
     switch (receiver->get_socket_type()) {
     case bsm::socket_type_e::IPC:
@@ -350,7 +350,8 @@ Ev Server::chat_message([[maybe_unused]]SocketHandler& client, const ReadResult&
     case bsm::socket_type_e::CLIENT:
     case bsm::socket_type_e::SPECTATOR:
       if (auto result = receiver->write_to_user(
-              {message_type_e::DEFAULT, {chat_message}});
+              {message_type_e::DEFAULT,
+               {receiver->nick_name + " " + chat_message}});
           !result) {
         LOG(result.error().message);
         had_error = true;
@@ -358,10 +359,10 @@ Ev Server::chat_message([[maybe_unused]]SocketHandler& client, const ReadResult&
     }
   }
 
-  return !had_error ? Ev{}:std::unexpected(Error{
-            er_e::SYSTEM,
-            "Unable to send chat message to every client currently active"});
-
+  return !had_error ? Ev{}
+                    : std::unexpected(
+                          Error{er_e::SYSTEM, "Unable to send chat message to "
+                                              "every client currently active"});
 }
 
 const std::array<Server::Command, 6> Server::commands = {
