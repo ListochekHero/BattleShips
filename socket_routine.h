@@ -18,12 +18,13 @@
 #include "utility.h"
 
 #define BACKLOG 10
-#define BUFF_SIZE 1024  //  add this magic number to config
+#define BUFF_SIZE 1024 //  add this magic number to config
 namespace bsm {
 
 enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
+enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
 enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
-enum class status_code_e { DATA, WOULDBLOCK, CLOSED };
+enum class message_status_e { DATA, WOULDBLOCK, NONVALID};
 
 struct MsgHeader {
   message_type_e msg_type;
@@ -33,18 +34,18 @@ struct MsgHeader {
 struct OutgoingMessage {
   message_type_e msg_type;
   std::vector<std::string_view> payloads;
-  std::optional<int> socket {std::nullopt};
+  std::optional<int> socket{std::nullopt};
 };
 
 struct ReadResult {
-  status_code_e status;
+  message_status_e status;
   message_type_e msg_type;
   std::string payload{std::string(1024, '\0')};
   std::optional<int> socket;
 };
 
 class SocketHandler {
- public:
+public:
   SocketHandler() = default;
   SocketHandler(int socket_fd);
   ~SocketHandler();
@@ -58,12 +59,14 @@ class SocketHandler {
   void set_socket_type(socket_type_e socket_type);
   std::expected<std::vector<std::unique_ptr<SocketHandler>>, Error>
   accept_connections() const;
-  std::expected<ReadResult, Error> read_user_input() const;
+  std::expected<ReadResult, Error> read_user_input();
   Ev write_to_user(const OutgoingMessage& msg) const;
   Ev remove_cloexec();
-  std::string nick_name {*generate_name()};
+  std::string nick_name{*generate_name()};
 
- private:
+  socket_status_e socket_status_v{socket_status_e::EMPTY};
+
+private:
   int socket_fd{-1};
   socket_type_e socket_type_v{-1};
 
@@ -72,19 +75,19 @@ class SocketHandler {
 };
 
 class EpollHandler {
- public:
+public:
   EpollHandler() = default;
   ~EpollHandler();
   Ev init();
   Ev add_socket(SocketHandler* const socket_handler);
   Ev remove_socket(const SocketHandler* const socket_handler);
-  std::expected<std::vector<SocketHandler*>, Error> wait_for_events(
-      size_t max_events) const;
+  std::expected<std::vector<SocketHandler*>, Error>
+  wait_for_events(size_t max_events) const;
 
- private:
+private:
   int epollfd = 0;
 };
 
-}  // namespace bsm
+} // namespace bsm
 
 #endif

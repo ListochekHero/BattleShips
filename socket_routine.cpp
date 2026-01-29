@@ -4,18 +4,22 @@
 namespace bsm {
 
 SocketHandler::SocketHandler(int socket_fd)
-    : socket_fd{socket_fd}, socket_type_v{socket_type_e::CLIENT} {}
+    : socket_status_v{socket_status_e::ALIVE}, socket_fd{socket_fd},
+      socket_type_v{socket_type_e::CLIENT} {}
 
 SocketHandler::~SocketHandler() { close_socket(); }
 
 SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
-    : socket_fd{std::exchange(sock_hndl.socket_fd, -1)},
+    : socket_status_v{socket_status_e::ALIVE},
+      socket_fd{std::exchange(sock_hndl.socket_fd, -1)},
       socket_type_v{
           std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN)} {}
 
 SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   if (this != &sock_hndl) {
     this->close_socket();
+    socket_status_v =
+        std::exchange(sock_hndl.socket_status_v, socket_status_e::EMPTY);
     socket_fd = std::exchange(sock_hndl.socket_fd, -1);
     socket_type_v =
         std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN);
@@ -52,6 +56,7 @@ Ev SocketHandler::setup_listener(int port) {
     return std::unexpected(
         make_error_c(er_e::SYSTEM, "Error listening on socket"));
   }
+  socket_status_v = socket_status_e::ALIVE,
   socket_type_v = socket_type_e::SERVER;
   return {};
 }
@@ -86,7 +91,7 @@ SocketHandler::accept_connections() const {
   return new_clients;
 }
 
-std::expected<ReadResult, Error> SocketHandler::read_user_input() const {
+std::expected<ReadResult, Error> SocketHandler::read_user_input() {
   MsgHeader hdr;
   ReadResult result;
   struct iovec iov[2]{{&hdr, sizeof(hdr)},
@@ -110,12 +115,12 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() const {
       result.socket = socket;
     }
     LOG(std::format("Message received: {}", result.payload));
-    result.status = status_code_e::DATA;
+    result.status = message_status_e::DATA;
   } else if (n == 0) {
-    result.payload = "\\close";
-    result.status = status_code_e::CLOSED;
+    result.status = message_status_e::NONVALID;
+    this->socket_status_v = socket_status_e::CLOSED;
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-    result.status = status_code_e::WOULDBLOCK;
+    result.status = message_status_e::WOULDBLOCK;
   } else {
     return std::unexpected(make_error_c(er_e::SYSTEM, "Read error"));
   }
@@ -134,8 +139,8 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
   struct msghdr m{};
   m.msg_iov = iov.data();
   m.msg_iovlen = iov.size();
+  char buf[CMSG_SPACE(sizeof(int))];
   if (msg.socket) {
-    char buf[CMSG_SPACE(sizeof(int))];
     m.msg_control = buf;
     m.msg_controllen = sizeof(buf);
     struct cmsghdr* cmsg;
