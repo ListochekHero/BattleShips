@@ -3,10 +3,12 @@
 
 #include <expected>
 #include <filesystem>
+#include <optional>
 #include <system_error>
 
 namespace bsm {
 enum class internal_error_e {
+  GENERIC,
   INVALID_ARGS,
   NOT_FOUND,
   PERMISSION_DENIED,
@@ -15,11 +17,17 @@ enum class internal_error_e {
   SYSTEM
 };
 enum class user_error_e { GENERIC, CANT_CREATE_LOBBY, CANT_JOIN_LOBBY };
+enum class command_status_e { CONTINUE, TERMINATE };
 
 struct Error {
-  internal_error_e error_code;
+  internal_error_e error_code{0};
   std::string message;
   user_error_e user_code{0};
+};
+
+struct CommandStatus {
+  command_status_e command_status_v;
+  std::optional<Error> error{std::nullopt};
 };
 
 inline Error make_error(internal_error_e code, std::string message) {

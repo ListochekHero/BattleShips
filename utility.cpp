@@ -37,7 +37,7 @@ int64_t generate_conn_code() {
 
 std::expected<std::string, Error> parse(const std::string& message) {
   std::string string_code;
-  size_t pos{message.find_last_of(' ')};
+  size_t pos{message.find_first_of(' ')};
   if (pos != std::string::npos) {
     string_code = {message, ++pos};
   } else {
