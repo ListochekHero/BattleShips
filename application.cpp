@@ -109,24 +109,25 @@ void Server::process_client_socket(SocketHandler* handler) {
       LOG(read_result.error().message);
       break;
     }
-    cmd_status = process_message(handler, read_result.value());
+    CommandContext context{*handler, read_result.value()};
+    cmd_status = process_message(context);
   }
 }
 
-CommandStatus Server::process_message(SocketHandler* handler,
-                                      const ReadResult& message) {
-  switch (message.status) {
+CommandStatus Server::process_message(CommandContext& context) {
+  switch (context.message.status) {
   case bsm::message_status_e::DATA:
     break;
   case bsm::message_status_e::WOULDBLOCK:
   case bsm::message_status_e::NONVALID:
     return CommandStatus{cmd_se::TERMINATE};
   }
-  CommandStatus cmd_status = handle_client_cmd(*handler, message);
+  CommandStatus cmd_status = handle_client_cmd(context);
   if (cmd_status.error) {
     LOG(cmd_status.error->message);
-    LOG("Unable to handle client command: {}" + message.payload);
-    if (auto result = send_command_error_reply(*handler, *cmd_status.error);
+    LOG("Unable to handle client command: {}" + context.message.payload);
+    if (auto result =
+            send_command_error_reply(context.client, *cmd_status.error);
         !result)
       LOG(result.error().message);
   }
@@ -142,15 +143,14 @@ Ev Server::send_command_error_reply(const SocketHandler& client, Error& error) {
       });
 }
 
-CommandStatus Server::handle_client_cmd(SocketHandler& client,
-                                        const ReadResult& message) {
-  LOG(std::format("Command to handle: {}", message.payload));
+CommandStatus Server::handle_client_cmd(CommandContext& context) {
+  LOG(std::format("Command to handle: {}", context.message.payload));
   for (const auto& cmd : commands) {
-    if (match_cmd(cmd, message)) {
-      return (this->*cmd.handler)(client, message);
+    if (match_cmd(cmd, context.message)) {
+      return (this->*cmd.handler)(context);
     }
   }
-  return general_command(client, message);
+  return general_command(context);
 }
 
 std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
@@ -173,8 +173,7 @@ std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
   return LobbyProcess{pid, std::move(child_handler)};
 }
 
-CommandStatus Server::create_lobby(SocketHandler& client,
-                                   const ReadResult& message) {
+CommandStatus Server::create_lobby(CommandContext& context) {
   auto lobby_result = spawn_lobby_process();
   if (!lobby_result) {
     LOG(lobby_result.error().message);
@@ -183,21 +182,24 @@ CommandStatus Server::create_lobby(SocketHandler& client,
         Error{"Unable to spawn child process", us_e::CANT_CREATE_LOBBY}};
   }
   int64_t child_id{generate_conn_code()};
-  auto it = lobbies.emplace(child_id, std::move(*lobby_result));
-  if (!it.second)
+  auto [it, inserted] = lobbies.try_emplace(child_id, std::move(*lobby_result));
+  if (!inserted){
+    kill(lobby_result->pid, SIGKILL);
     return CommandStatus{
-        cmd_se::CONTINUE,
-        Error("Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY)};
-  if (auto result = init_child(it.first->second.ipc_socket, child_id, client);
+      cmd_se::CONTINUE,
+      Error("Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY)};
+    }
+  if (auto result =
+          init_child(it->second.ipc_socket, child_id, context.client);
       !result) {
     LOG(result.error().message);
-    kill(it.first->second.pid, SIGKILL);
-    lobbies.erase(it.first);
+    kill(it->second.pid, SIGKILL);
+    lobbies.erase(it->first);
     return CommandStatus{
-        cmd_se::CONTINUE,
+        cmd_se::TERMINATE,
         Error{"Unalbe to initialize child process", us_e::CANT_CREATE_LOBBY}};
   }
-  client.socket_status_v = socket_status_e::TRANSFERED;
+  context.client.socket_status_v = socket_status_e::TRANSFERED;
   // if (auto result = erase_socket_handler(client, message);
   //     result.error.has_value()) {
   //   LOG(result.error->message);
@@ -234,18 +236,16 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
       });
 }
 
-CommandStatus
-Server::erase_socket_handler(SocketHandler& client,
-                             [[maybe_unused]] const ReadResult& message) {
+CommandStatus Server::erase_socket_handler(CommandContext& context) {
   [[maybe_unused]]
-  auto __ =
-      epoll_handler.remove_socket(&client).or_else([](auto&& error) -> Ev {
-        LOG(error.message);
-        return std::unexpected(
-            Error{"Unable to remove socket from epoll before deleting"});
-      });
-  std::erase_if(sockets, [&client](const auto& s) {
-    return s->get_socket() == client.get_socket();
+  auto __ = epoll_handler.remove_socket(&context.client)
+                .or_else([](auto&& error) -> Ev {
+                  LOG(error.message);
+                  return std::unexpected(Error{
+                      "Unable to remove socket from epoll before deleting"});
+                });
+  std::erase_if(sockets, [&context](const auto& s) {
+    return s->get_socket() == context.client.get_socket();
   });
   return {};
 }
@@ -260,10 +260,10 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-CommandStatus Server::accept_socket([[maybe_unused]] SocketHandler& parrent,
-                                    const ReadResult& message) {
-  if (message.socket) {
-    sockets.emplace_back(std::make_unique<SocketHandler>(*message.socket));
+CommandStatus Server::accept_socket(CommandContext& context) {
+  if (context.message.socket) {
+    sockets.emplace_back(
+        std::make_unique<SocketHandler>(context.message.socket.value()));
     [[maybe_unused]]
     auto __ =
         epoll_handler.add_socket(sockets.back().get())
@@ -287,10 +287,8 @@ CommandStatus Server::accept_socket([[maybe_unused]] SocketHandler& parrent,
   return {};
 }
 
-CommandStatus
-Server::send_connection_code([[maybe_unused]] SocketHandler& parrent,
-                             const ReadResult& message) {
-  auto conn_code = ConnectionCode::parse(message.payload);
+CommandStatus Server::send_connection_code(CommandContext& context) {
+  auto conn_code = ConnectionCode::parse(context.message.payload);
   if (auto result = sockets.back()->write_to_user(
           {message_type_e::DEFAULT, {conn_code->string_code}});
       !result) {
@@ -302,9 +300,8 @@ Server::send_connection_code([[maybe_unused]] SocketHandler& parrent,
   return CommandStatus{cmd_se::CONTINUE};
 }
 
-CommandStatus Server::join_lobby(SocketHandler& client,
-                                 const ReadResult& message) {
-  auto parse_result = ConnectionCode::parse(message.payload);
+CommandStatus Server::join_lobby(CommandContext& context) {
+  auto parse_result = ConnectionCode::parse(context.message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
     return CommandStatus{cmd_se::CONTINUE,
@@ -319,20 +316,20 @@ CommandStatus Server::join_lobby(SocketHandler& client,
         cmd_se::CONTINUE,
         Error{"Unable to find lobby with given id", us_e::CANT_JOIN_LOBBY}};
   }
-  if (auto result = init_child(lobby.value()->ipc_socket, child_id, client);
+  if (auto result =
+          init_child(lobby.value()->ipc_socket, child_id, context.client);
       !result) {
     LOG(result.error().message);
     return CommandStatus{
         cmd_se::CONTINUE,
         Error{"Unable to pass client socket to lobby", us_e::CANT_JOIN_LOBBY}};
   }
-  client.socket_status_v = socket_status_e::TRANSFERED;
+  context.client.socket_status_v = socket_status_e::TRANSFERED;
   return CommandStatus{cmd_se::TERMINATE};
 }
 
 CommandStatus
-Server::general_command([[maybe_unused]] SocketHandler& client,
-                        [[maybe_unused]] const ReadResult& message) {
+Server::general_command([[maybe_unused]] CommandContext& context) {
   return CommandStatus{cmd_se::CONTINUE, Error("Unknown command")};
 }
 
@@ -343,9 +340,8 @@ std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   return std::unexpected(Error("No such lobby"));
 }
 
-CommandStatus Server::chat_message([[maybe_unused]] SocketHandler& client,
-                                   const ReadResult& message) {
-  auto parse_result = parse(message.payload);
+CommandStatus Server::chat_message(CommandContext& context) {
+  auto parse_result = parse(context.message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
     return CommandStatus{cmd_se::CONTINUE,

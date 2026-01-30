@@ -42,31 +42,25 @@ private:
   void process_events(std::vector<SocketHandler*>& events);
   void process_server_socket(SocketHandler* handler);
   void process_client_socket(SocketHandler* handler);
-  CommandStatus handle_client_cmd(SocketHandler& client,
-                                  const ReadResult& message);
+  CommandStatus handle_client_cmd(CommandContext& context);
   std::expected<LobbyProcess, Error> spawn_lobby_process();
-  CommandStatus create_lobby(SocketHandler& client, const ReadResult& message);
+  CommandStatus create_lobby(CommandContext& context);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id,
                 SocketHandler& client);
-  CommandStatus accept_socket(SocketHandler& parrent,
-                              const ReadResult& message);
-  CommandStatus send_connection_code(SocketHandler& parrent,
-                                     const ReadResult& message);
-  CommandStatus join_lobby(SocketHandler& client, const ReadResult& message);
-  CommandStatus general_command(SocketHandler& client,
-                                const ReadResult& message);
+  CommandStatus accept_socket(CommandContext& context);
+  CommandStatus send_connection_code(CommandContext& context);
+  CommandStatus join_lobby(CommandContext& context);
+  CommandStatus general_command(CommandContext& context);
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
-  CommandStatus chat_message(SocketHandler& client, const ReadResult& message);
+  CommandStatus chat_message(CommandContext& context);
 
   Ev send_command_error_reply(const SocketHandler& client, Error& error);
-  CommandStatus erase_socket_handler(SocketHandler& client,
-                                     const ReadResult& message);
+  CommandStatus erase_socket_handler(CommandContext& context);
   void handle_zombie_pocesses();
   std::unordered_map<int64_t, LobbyProcess> lobbies;
-  CommandStatus process_message(SocketHandler* handler,
-                                const ReadResult& message);
+  CommandStatus process_message(CommandContext& context);
 
-  using Handler = CommandStatus (Server::*)(SocketHandler&, const ReadResult&);
+  using Handler = CommandStatus (Server::*)(CommandContext& context);
   struct Command {
     Handler handler;
     struct Match {
