@@ -29,16 +29,16 @@ SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
 Ev SocketHandler::setup_listener(int port) {
   if (!socket_fd)
     return std::unexpected(
-        make_error_c(er_e::ALREADY_EXIST, "Socket is already exist"));
+        make_error_c("Socket is already exist"));
 
   socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
   if (socket_fd == -1)
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Error creating socket"));
+    return std::unexpected(make_error_c("Error creating socket"));
 
   int opt = 1;
   if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     return std::unexpected(
-        make_error_c(er_e::SYSTEM, "Error setting socket options"));
+        make_error_c("Error setting socket options"));
 
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
@@ -48,13 +48,13 @@ Ev SocketHandler::setup_listener(int port) {
   if (bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) ==
       -1) {
     close(socket_fd);
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Error binding socket"));
+    return std::unexpected(make_error_c("Error binding socket"));
   }
 
   if (listen(socket_fd, BACKLOG) == -1) {
     close(socket_fd);
     return std::unexpected(
-        make_error_c(er_e::SYSTEM, "Error listening on socket"));
+        make_error_c("Error listening on socket"));
   }
   socket_status_v = socket_status_e::ALIVE,
   socket_type_v = socket_type_e::SERVER;
@@ -83,7 +83,7 @@ SocketHandler::accept_connections() const {
         break;
       } else {
         return std::unexpected(
-            make_error_c(er_e::SYSTEM, "Error while accepting new connection"));
+            make_error_c("Error while accepting new connection"));
       }
     }
     new_clients.emplace_back(std::make_unique<SocketHandler>(client_fd));
@@ -122,7 +122,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
     result.status = message_status_e::WOULDBLOCK;
   } else {
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Read error"));
+    return std::unexpected(make_error_c("Read error"));
   }
   return result;
 }
@@ -153,18 +153,18 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
   }
   if (sendmsg(this->socket_fd, &m, MSG_NOSIGNAL) == -1)
     return std::unexpected(
-        make_error_c(er_e::SYSTEM, "Failed to send a message, error"));
+        make_error_c("Failed to send a message, error"));
   return {};
 }
 
 Ev SocketHandler::remove_cloexec() {
   int flags = fcntl(this->socket_fd, F_GETFD);
   if (flags == -1) {
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Cant get socket flags"));
+    return std::unexpected(make_error_c("Cant get socket flags"));
   }
   flags &= ~FD_CLOEXEC;
   if (fcntl(this->socket_fd, F_SETFD, flags) == -1) {
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Cant set socket flags"));
+    return std::unexpected(make_error_c("Cant set socket flags"));
   }
   return {};
 }
@@ -184,7 +184,7 @@ EpollHandler::~EpollHandler() { close(epollfd); }
 Ev EpollHandler::init() {
   epollfd = epoll_create1(EPOLL_CLOEXEC);
   if (epollfd == -1)
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Error creating epoll"));
+    return std::unexpected(make_error_c("Error creating epoll"));
   return {};
 }
 
@@ -195,7 +195,7 @@ Ev EpollHandler::add_socket(SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler->get_socket(), &event) ==
       -1)
     return std::unexpected(
-        make_error_c(er_e::SYSTEM, "Error adding socket to epoll"));
+        make_error_c("Error adding socket to epoll"));
   return {};
 }
 
@@ -203,7 +203,7 @@ Ev EpollHandler::remove_socket(const SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
       -1)
     return std::unexpected(
-        make_error_c(er_e::SYSTEM, "Error removing socket from epoll"));
+        make_error_c("Error removing socket from epoll"));
   return {};
 }
 
@@ -212,7 +212,7 @@ EpollHandler::wait_for_events(size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
   ssize_t n = epoll_wait(this->epollfd, events.data(), 10, -1);
   if (n == -1)
-    return std::unexpected(make_error_c(er_e::SYSTEM, "Error in epoll_wait()"));
+    return std::unexpected(make_error_c("Error in epoll_wait()"));
   std::vector<SocketHandler*> ready_fds;
   for (ssize_t i = 0; i < n; ++i) {
     ready_fds.push_back(static_cast<SocketHandler*>((events[i].data.ptr)));

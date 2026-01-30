@@ -13,7 +13,7 @@ std::expected<ConnectionCode, Error> ConnectionCode::parse(
       int_code = std::strtol(string_code.c_str(), nullptr, 10);
     } else {
       return std::unexpected(
-          Error{er_e::INVALID_ARGS, "Cant parse connetion code"});
+          Error{"Cant parse connetion code"});
     };
   } else {
     string_code = std::to_string(int_code);

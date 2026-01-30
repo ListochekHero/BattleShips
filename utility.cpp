@@ -42,7 +42,7 @@ std::expected<std::string, Error> parse(const std::string& message) {
     string_code = {message, ++pos};
   } else {
     return std::unexpected(
-        Error{er_e::INVALID_ARGS, "Cant parse chat message"});
+        Error{"Cant parse chat message"});
   };
   return string_code;
 }
