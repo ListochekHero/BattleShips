@@ -1,6 +1,7 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+#include <cstddef>
 #include <sys/wait.h>
 
 #include "config.h"
@@ -11,6 +12,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #define MAX_EVENTS 10
 
@@ -39,15 +41,15 @@ public:
 private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
-  void process_events(std::vector<SocketHandler*>& events);
-  void process_server_socket(SocketHandler* handler);
-  void process_client_socket(SocketHandler* handler);
+  void process_events(std::vector<size_t>& event_slots);
+  void process_server_socket(SocketHandler& handler);
+  void process_client_socket(SocketHandler& handler);
   CommandStatus handle_client_cmd(CommandContext& context);
   std::expected<LobbyProcess, Error> spawn_lobby_process();
   CommandStatus create_lobby(CommandContext& context);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id,
                 SocketHandler& client);
-  CommandStatus accept_socket(CommandContext& context);
+  CommandStatus accept_socket_from_parent(CommandContext& context);
   CommandStatus send_connection_code(CommandContext& context);
   CommandStatus join_lobby(CommandContext& context);
   CommandStatus general_command(CommandContext& context);
@@ -57,7 +59,10 @@ private:
   Ev send_command_error_reply(const SocketHandler& client, Error& error);
   CommandStatus erase_socket_handler(CommandContext& context);
   void handle_zombie_pocesses();
+  void register_new_clients(std::vector<int> new_clients);
+
   std::unordered_map<int64_t, LobbyProcess> lobbies;
+  std::vector<size_t> avaiable_slots;
   CommandStatus process_message(CommandContext& context);
 
   using Handler = CommandStatus (Server::*)(CommandContext& context);

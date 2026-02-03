@@ -1,12 +1,17 @@
 #include "application.h"
+#include "logger.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <cstddef>
 #include <expected>
+#include <memory>
 
 namespace bsm {
 
 Ev Server::init() {
-  this->sockets.emplace_back(std::make_unique<SocketHandler>());
+  auto socket_ptr{std::make_unique<SocketHandler>()};
+  socket_ptr->set_occupied_slot(sockets.size());
+  this->sockets.emplace_back(std::move(socket_ptr));
   return this->sockets[0]
       .get()
       ->setup_listener(Config::instance().get_line("port"))
@@ -18,8 +23,9 @@ Ev Server::init() {
 }
 
 Ev Server::init(SocketHandler&& parrent_socket) {
-  this->sockets.emplace_back(
-      std::make_unique<SocketHandler>(std::move(parrent_socket)));
+  auto socket_ptr{std::make_unique<SocketHandler>(std::move(parrent_socket))};
+  socket_ptr->set_occupied_slot(sockets.size());
+  this->sockets.emplace_back(std::move(socket_ptr));
   this->sockets[0].get()->set_socket_type(socket_type_e::IPC);
   return init_epoll_wrapper();
 }
@@ -29,8 +35,8 @@ void Server::run() {
     handle_zombie_pocesses();
     [[maybe_unused]]
     auto __ = epoll_handler.wait_for_events(MAX_EVENTS)
-                  .and_then([this](auto&& events) -> Ev {
-                    process_events(events);
+                  .and_then([this](auto&& event_slots) -> Ev {
+                    process_events(event_slots);
                     return {};
                   })
                   .or_else([](auto&& error) -> Ev {
@@ -55,7 +61,6 @@ Ev Server::init_epoll() {
               return std::unexpected(Error{"Cant add socket to epoll"});
             });
       });
-  return {};
 }
 
 Ev Server::init_epoll_wrapper() {
@@ -65,9 +70,10 @@ Ev Server::init_epoll_wrapper() {
   });
 }
 
-void Server::process_events(std::vector<SocketHandler*>& events) {
-  for (SocketHandler* handler : events) {
-    if (handler->get_socket_type() == socket_type_e::SERVER) {
+void Server::process_events(std::vector<size_t>& event_slots) {
+  for (size_t slot : event_slots) {
+    SocketHandler& handler{*sockets[slot]};
+    if (handler.get_socket_type() == socket_type_e::SERVER) {
       process_server_socket(handler);
     } else {
       process_client_socket(handler);
@@ -75,11 +81,12 @@ void Server::process_events(std::vector<SocketHandler*>& events) {
   }
 }
 
-void Server::process_server_socket(SocketHandler* handler) {
+void Server::process_server_socket(SocketHandler& handler) {
   [[maybe_unused]]
-  auto __ = handler->accept_connections()
+  auto __ = handler.accept_connections()
                 .and_then([this](auto&& new_clients) -> Ev {
-                  for (auto& client : new_clients) {
+                  register_new_clients(new_clients);
+                  for (int client : new_clients) {
                     epoll_handler.add_socket(client.get())
                         .and_then([this, &client]() -> Ev {
                           sockets.emplace_back(std::move(client));
@@ -100,16 +107,16 @@ void Server::process_server_socket(SocketHandler* handler) {
                   return {};
                 });
 }
-void Server::process_client_socket(SocketHandler* handler) {
+void Server::process_client_socket(SocketHandler& handler) {
   CommandStatus cmd_status{cmd_se::CONTINUE};
   while (cmd_status.command_status_v == cmd_se::CONTINUE &&
-         handler->socket_status_v == socket_status_e::ALIVE) {
-    auto read_result = handler->read_user_input();
+         handler.socket_status_v == socket_status_e::ALIVE) {
+    auto read_result = handler.read_user_input();
     if (!read_result) {
       LOG(read_result.error().message);
       break;
     }
-    CommandContext context{*handler, read_result.value()};
+    CommandContext context{handler, read_result.value()};
     cmd_status = process_message(context);
   }
 }
@@ -125,7 +132,7 @@ CommandStatus Server::process_message(CommandContext& context) {
   CommandStatus cmd_status = handle_client_cmd(context);
   if (cmd_status.error) {
     LOG(cmd_status.error->message);
-    LOG("Unable to handle client command: {}" + context.message.payload);
+    LOG("Unable to handle client command: " + context.message.payload);
     if (auto result =
             send_command_error_reply(context.client, *cmd_status.error);
         !result)
@@ -174,6 +181,12 @@ std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
 }
 
 CommandStatus Server::create_lobby(CommandContext& context) {
+  if (auto result = epoll_handler.remove_socket(&context.client); !result) {
+    LOG(result.error().message);
+    return CommandStatus{
+        cmd_se::CONTINUE,
+        Error{"Unable to remove socket from epoll", us_e::CANT_CREATE_LOBBY}};
+  }
   auto lobby_result = spawn_lobby_process();
   if (!lobby_result) {
     LOG(lobby_result.error().message);
@@ -183,14 +196,13 @@ CommandStatus Server::create_lobby(CommandContext& context) {
   }
   int64_t child_id{generate_conn_code()};
   auto [it, inserted] = lobbies.try_emplace(child_id, std::move(*lobby_result));
-  if (!inserted){
+  if (!inserted) {
     kill(lobby_result->pid, SIGKILL);
     return CommandStatus{
-      cmd_se::CONTINUE,
-      Error("Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY)};
-    }
-  if (auto result =
-          init_child(it->second.ipc_socket, child_id, context.client);
+        cmd_se::CONTINUE,
+        Error("Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY)};
+  }
+  if (auto result = init_child(it->second.ipc_socket, child_id, context.client);
       !result) {
     LOG(result.error().message);
     kill(it->second.pid, SIGKILL);
@@ -200,15 +212,6 @@ CommandStatus Server::create_lobby(CommandContext& context) {
         Error{"Unalbe to initialize child process", us_e::CANT_CREATE_LOBBY}};
   }
   context.client.socket_status_v = socket_status_e::TRANSFERED;
-  // if (auto result = erase_socket_handler(client, message);
-  //     result.error.has_value()) {
-  //   LOG(result.error->message);
-  //   return CommandStatus{
-  //       command_status_e::TERMINATE,
-  //       Error{er_e::SYSTEM,
-  //             "Unable to erase socket after passing it to lobby process",
-  //             us_e::CANT_CREATE_LOBBY}};
-  // };
   return CommandStatus{cmd_se::TERMINATE};
 }
 
@@ -247,7 +250,7 @@ CommandStatus Server::erase_socket_handler(CommandContext& context) {
   std::erase_if(sockets, [&context](const auto& s) {
     return s->get_socket() == context.client.get_socket();
   });
-  return {};
+  return CommandStatus{cmd_se::TERMINATE};
 }
 
 void Server::handle_zombie_pocesses() {
@@ -255,12 +258,29 @@ void Server::handle_zombie_pocesses() {
   pid_t pid;
   while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
     if (WIFEXITED(status)) {
-      // TODO logging
+      LOG(std::format("Child process exited: pid={}, status={}", pid,
+                      WEXITSTATUS(status)));
     }
   }
 }
 
-CommandStatus Server::accept_socket(CommandContext& context) {
+void Server::register_new_clients(std::vector<int> new_clients) {
+  for (int client : new_clients) {
+    if (!avaiable_slots.empty()) {
+      size_t slot = avaiable_slots.back();
+      avaiable_slots.pop_back();
+      sockets[slot]->reset_with_new(client);
+      epoll_handler.add_socket(sockets[slot].get());
+    } else {
+      auto socket_ptr{std::make_unique<SocketHandler>(client)};
+      socket_ptr->set_occupied_slot(sockets.size());
+      epoll_handler.add_socket(socket_ptr.get());
+      sockets.emplace_back(std::move(socket_ptr));
+    }
+  }
+}
+
+CommandStatus Server::accept_socket_from_parent(CommandContext& context) {
   if (context.message.socket) {
     sockets.emplace_back(
         std::make_unique<SocketHandler>(context.message.socket.value()));
@@ -359,7 +379,7 @@ CommandStatus Server::chat_message(CommandContext& context) {
     case bsm::socket_type_e::SPECTATOR:
       if (auto result = receiver->write_to_user(
               {message_type_e::DEFAULT,
-               {receiver->nick_name + " " + chat_message}});
+               {context.client.nick_name + " " + chat_message}});
           !result) {
         LOG(result.error().message);
         had_error = true;
@@ -376,7 +396,7 @@ const std::array<Server::Command, 6> Server::commands = {
     {{.handler = &Server::create_lobby, .match = {{"\\create"}, std::nullopt}},
      {.handler = &Server::erase_socket_handler,
       .match = {{"\\close"}, std::nullopt}},
-     {.handler = &Server::accept_socket,
+     {.handler = &Server::accept_socket_from_parent,
       .match = {{"\\socket"}, message_type_e::SOCKET}},
      {.handler = &Server::send_connection_code,
       .match = {{"\\conn_code"}, message_type_e::CONN_CODE}},
