@@ -2,7 +2,9 @@
 #define SOCKET_HANDLING_H
 
 #include <arpa/inet.h>
+#include <cstddef>
 #include <fcntl.h>
+#include <limits>
 #include <optional>
 #include <stdlib.h>
 #include <sys/epoll.h>
@@ -24,7 +26,7 @@ namespace bsm {
 enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
 enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
-enum class message_status_e { DATA, WOULDBLOCK, NONVALID};
+enum class message_status_e { DATA, WOULDBLOCK, NONVALID };
 
 struct MsgHeader {
   message_type_e msg_type;
@@ -57,18 +59,21 @@ public:
   int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
-  std::expected<std::vector<std::unique_ptr<SocketHandler>>, Error>
-  accept_connections() const;
+  size_t get_occupied_slot();
+  void set_occupied_slot(size_t slot);
+  std::expected<std::vector<int>, Error> accept_connections() const;
   std::expected<ReadResult, Error> read_user_input();
   Ev write_to_user(const OutgoingMessage& msg) const;
   Ev remove_cloexec();
+  void reset_with_new(int new_socket, socket_type_e type = socket_type_e::CLIENT);
+  void reset_to_empty();
   std::string nick_name{*generate_name()};
-
   socket_status_e socket_status_v{socket_status_e::EMPTY};
 
 private:
   int socket_fd{-1};
   socket_type_e socket_type_v{-1};
+  size_t occupied_slot{std::numeric_limits<std::size_t>::max()};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
   void close_socket();
@@ -81,7 +86,7 @@ public:
   Ev init();
   Ev add_socket(SocketHandler* const socket_handler);
   Ev remove_socket(const SocketHandler* const socket_handler);
-  std::expected<std::vector<SocketHandler*>, Error>
+  std::expected<std::vector<size_t>, Error>
   wait_for_events(size_t max_events) const;
 
 private:

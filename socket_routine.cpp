@@ -1,5 +1,7 @@
 #include "socket_routine.h"
 #include <cstddef>
+#include <unistd.h>
+#include <utility>
 
 namespace bsm {
 
@@ -13,7 +15,9 @@ SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
     : socket_status_v{socket_status_e::ALIVE},
       socket_fd{std::exchange(sock_hndl.socket_fd, -1)},
       socket_type_v{
-          std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN)} {}
+          std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN)},
+      occupied_slot{std::exchange(sock_hndl.occupied_slot,
+                                  std::numeric_limits<std::size_t>::max())} {}
 
 SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   if (this != &sock_hndl) {
@@ -23,13 +27,14 @@ SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
     socket_fd = std::exchange(sock_hndl.socket_fd, -1);
     socket_type_v =
         std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN);
+    occupied_slot = std::exchange(sock_hndl.occupied_slot,
+                                  std::numeric_limits<std::size_t>::max());
   }
   return *this;
 }
 Ev SocketHandler::setup_listener(int port) {
   if (!socket_fd)
-    return std::unexpected(
-        make_error_c("Socket is already exist"));
+    return std::unexpected(make_error_c("Socket is already exist"));
 
   socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
   if (socket_fd == -1)
@@ -37,8 +42,7 @@ Ev SocketHandler::setup_listener(int port) {
 
   int opt = 1;
   if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
-    return std::unexpected(
-        make_error_c("Error setting socket options"));
+    return std::unexpected(make_error_c("Error setting socket options"));
 
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
@@ -53,8 +57,7 @@ Ev SocketHandler::setup_listener(int port) {
 
   if (listen(socket_fd, BACKLOG) == -1) {
     close(socket_fd);
-    return std::unexpected(
-        make_error_c("Error listening on socket"));
+    return std::unexpected(make_error_c("Error listening on socket"));
   }
   socket_status_v = socket_status_e::ALIVE,
   socket_type_v = socket_type_e::SERVER;
@@ -72,9 +75,13 @@ void SocketHandler::set_socket_type(socket_type_e socket_type) {
   return;
 }
 
-std::expected<std::vector<std::unique_ptr<SocketHandler>>, Error>
+size_t SocketHandler::get_occupied_slot() { return occupied_slot; }
+
+void SocketHandler::set_occupied_slot(size_t slot) { occupied_slot = slot; }
+
+std::expected<std::vector<int>, Error>
 SocketHandler::accept_connections() const {
-  std::vector<std::unique_ptr<SocketHandler>> new_clients;
+  std::vector<int> new_clients;
   while (true) {
     int client_fd =
         accept4(socket_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
@@ -86,7 +93,7 @@ SocketHandler::accept_connections() const {
             make_error_c("Error while accepting new connection"));
       }
     }
-    new_clients.emplace_back(std::make_unique<SocketHandler>(client_fd));
+    new_clients.push_back(client_fd);
   }
   return new_clients;
 }
@@ -152,8 +159,7 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
     std::memcpy(CMSG_DATA(cmsg), &socket, sizeof(int));
   }
   if (sendmsg(this->socket_fd, &m, MSG_NOSIGNAL) == -1)
-    return std::unexpected(
-        make_error_c("Failed to send a message, error"));
+    return std::unexpected(make_error_c("Failed to send a message, error"));
   return {};
 }
 
@@ -167,6 +173,17 @@ Ev SocketHandler::remove_cloexec() {
     return std::unexpected(make_error_c("Cant set socket flags"));
   }
   return {};
+}
+void SocketHandler::reset_with_new(int new_socket, socket_type_e type) {
+  close_socket();
+  socket_fd = new_socket;
+  socket_type_v = type;
+  socket_status_v = socket_status_e::ALIVE;
+}
+void SocketHandler::reset_to_empty() {
+  close_socket();
+  socket_type_v = socket_type_e::UNKNOWN;
+  socket_status_v = socket_status_e::EMPTY;
 }
 
 void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
@@ -190,34 +207,33 @@ Ev EpollHandler::init() {
 
 Ev EpollHandler::add_socket(SocketHandler* const socket_handler) {
   struct epoll_event event;
-  event.data.ptr = static_cast<void*>(socket_handler);
+  event.data.u64 = socket_handler->get_occupied_slot();
+  // event.data.ptr = static_cast<void*>(socket_handler);
   event.events = EPOLLIN | EPOLLET;
   if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler->get_socket(), &event) ==
       -1)
-    return std::unexpected(
-        make_error_c("Error adding socket to epoll"));
+    return std::unexpected(make_error_c("Error adding socket to epoll"));
   return {};
 }
 
 Ev EpollHandler::remove_socket(const SocketHandler* const socket_handler) {
   if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
       -1)
-    return std::unexpected(
-        make_error_c("Error removing socket from epoll"));
+    return std::unexpected(make_error_c("Error removing socket from epoll"));
   return {};
 }
 
-std::expected<std::vector<SocketHandler*>, Error>
+std::expected<std::vector<size_t>, Error>
 EpollHandler::wait_for_events(size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
   ssize_t n = epoll_wait(this->epollfd, events.data(), 10, -1);
   if (n == -1)
     return std::unexpected(make_error_c("Error in epoll_wait()"));
-  std::vector<SocketHandler*> ready_fds;
+  std::vector<size_t> ready_slots;
   for (ssize_t i = 0; i < n; ++i) {
-    ready_fds.push_back(static_cast<SocketHandler*>((events[i].data.ptr)));
+    ready_slots.push_back((events[i].data.u64));
   }
-  return ready_fds;
+  return ready_slots;
 }
 
 } // namespace bsm
