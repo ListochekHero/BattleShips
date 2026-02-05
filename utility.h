@@ -2,8 +2,9 @@
 #define UTILITY_H
 
 #include <expected>
-#include <filesystem>
+#include <format>
 #include <optional>
+#include <string>
 
 namespace bsm {
 
@@ -19,7 +20,12 @@ enum class internal_error_e {
   INTERNAL,
   SYSTEM
 };
-enum class user_error_e { GENERIC, CANT_CREATE_LOBBY, CANT_JOIN_LOBBY };
+enum class user_error_e {
+  GENERIC,
+  CANT_CREATE_LOBBY,
+  CANT_JOIN_LOBBY,
+  UNKNOWN_COMMAND
+};
 enum class command_status_e { CONTINUE, TERMINATE };
 
 struct Error {
@@ -47,6 +53,8 @@ bool is_file_exist(const std::string& filename);
 int64_t generate_conn_code();
 std::expected<std::string, Error> parse(const std::string& message);
 std::expected<std::string, Error> generate_name();
+
+template <typename T, typename E> void drop(std::expected<T, E>&&) {}
 
 using er_e = internal_error_e;
 using us_e = user_error_e;
