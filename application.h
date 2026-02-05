@@ -4,9 +4,7 @@
 #include <cstddef>
 #include <sys/wait.h>
 
-#include "config.h"
 #include "data_storage.h"
-#include "logger.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <memory>
@@ -34,12 +32,15 @@ class Server : public Application {
 public:
   friend struct Command;
   Server() = default;
-  Ev init();                               // init() for Server
+  Ev init();                   // init() for Server
   Ev init(int parrent_socket); // init() for Lobby
   virtual void run();
 
 private:
-  Ev init_epoll();
+Ev emplace_socket_to_pool(std::unique_ptr<SocketHandler> socket_ptr);
+Ev add_to_socket_pool();
+Ev add_to_socket_pool(int socket_fd);
+Ev init_epoll();
   Ev init_epoll_wrapper();
   void process_events(std::vector<size_t>& event_slots);
   void process_server_socket(SocketHandler& handler);
@@ -57,9 +58,9 @@ private:
   CommandStatus chat_message(CommandContext& context);
 
   Ev send_error_reply(const SocketHandler& client, Error& error);
-  CommandStatus erase_socket_handler(CommandContext& context);
+  CommandStatus free_socket_handler(CommandContext& context);
   void handle_zombie_pocesses();
-  void register_new_clients(std::vector<int>& new_clients);
+  void process_new_clients(std::vector<int>& new_clients);
 
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   std::vector<size_t> avaiable_slots;

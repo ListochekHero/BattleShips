@@ -1,17 +1,20 @@
 #include "application.h"
+#include "config.h"
 #include "logger.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
+#include <exception>
 #include <expected>
 #include <memory>
 
 namespace bsm {
 
 Ev Server::init() {
-  auto socket_ptr{std::make_unique<SocketHandler>()};
-  socket_ptr->set_occupied_slot(sockets.size());
-  this->sockets.emplace_back(std::move(socket_ptr));
+  if (auto result = add_to_socket_pool(); !result) {
+    LOG(result.error().message);
+    return std::unexpected(Error{"Unable to add init socket to pool"});
+  };
   return this->sockets[0]
       ->setup_listener(Config::instance().get_line("port"))
       .or_else([](auto&& error) -> Ev {
@@ -22,11 +25,41 @@ Ev Server::init() {
 }
 
 Ev Server::init(int parrent_socket) {
-  auto socket_ptr{std::make_unique<SocketHandler>(parrent_socket)};
-  socket_ptr->set_occupied_slot(sockets.size());
-  this->sockets.emplace_back(std::move(socket_ptr));
+  if (auto result = add_to_socket_pool(parrent_socket); !result) {
+    LOG(result.error().message);
+    return std::unexpected(Error{"Unable to add parent socket to pool"});
+  }
   this->sockets[0]->set_socket_type(socket_type_e::IPC);
   return init_epoll_wrapper();
+}
+
+Ev Server::emplace_socket_to_pool(std::unique_ptr<SocketHandler> socket_ptr) {
+  try {
+    this->sockets.emplace_back(std::move(socket_ptr));
+    sockets.back()->set_occupied_slot(sockets.size() - 1);
+  } catch (const std::exception& e) {
+    LOG(e.what());
+    return std::unexpected(Error{"Unable to emplace new socket handler"});
+  }
+  return {};
+}
+
+Ev Server::add_to_socket_pool() {
+  return emplace_socket_to_pool(std::make_unique<SocketHandler>())
+      .transform_error([](auto&& error) {
+        LOG(error.message);
+        error.message = "Unable to increase socket pool size";
+        return error;
+      });
+}
+
+Ev Server::add_to_socket_pool(int socket_fd) {
+  return emplace_socket_to_pool(std::make_unique<SocketHandler>(socket_fd))
+      .transform_error([](auto&& error) {
+        LOG(error.message);
+        error.message = "Unable to add given socket to socket pool";
+        return error;
+      });
 }
 
 void Server::run() {
@@ -65,7 +98,7 @@ Ev Server::init_epoll() {
 Ev Server::init_epoll_wrapper() {
   return init_epoll().or_else([](auto&& error) -> Ev {
     LOG(error.message);
-    return std::unexpected(Error{"Cant init epoll"});
+    return std::unexpected(Error{"Unable to init epoll"});
   });
 }
 
@@ -84,7 +117,7 @@ void Server::process_server_socket(SocketHandler& handler) {
   [[maybe_unused]]
   auto __ = handler.accept_connections()
                 .and_then([this](auto&& new_clients) -> Ev {
-                  register_new_clients(new_clients);
+                  process_new_clients(new_clients);
                   return {};
                 })
                 .or_else([](auto&& error) -> Ev {
@@ -223,17 +256,14 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
       });
 }
 
-CommandStatus Server::erase_socket_handler(CommandContext& context) {
-  [[maybe_unused]]
-  auto __ = epoll_handler.remove_socket(context.client)
-                .or_else([](auto&& error) -> Ev {
-                  LOG(error.message);
-                  return std::unexpected(Error{
-                      "Unable to remove socket from epoll before deleting"});
-                });
-  // std::erase_if(sockets, [&context](const auto& s) {
-  //   return s.get_socket() == context.client.get_socket();
-  // });
+CommandStatus Server::free_socket_handler(CommandContext& context) {
+  if (auto result = epoll_handler.remove_socket(context.client); !result) {
+    LOG(result.error().message);
+    return {cmd_se::CONTINUE,
+            Error{"Unable to remove socket from epoll before deleting"}};
+  }
+  context.client.reset_to_empty();
+  avaiable_slots.emplace_back(context.client.get_occupied_slot());
   return CommandStatus{cmd_se::TERMINATE};
 }
 
@@ -248,7 +278,7 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-void Server::register_new_clients(std::vector<int>& new_clients) {
+void Server::process_new_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
     SocketHandler& client_handler = [&]() -> SocketHandler& {
       if (!avaiable_slots.empty()) {
@@ -277,29 +307,25 @@ void Server::register_new_clients(std::vector<int>& new_clients) {
 
 CommandStatus Server::accept_socket_from_parent(CommandContext& context) {
   if (context.message.socket) {
-    auto tmp{std::make_unique<SocketHandler>(context.message.socket.value())};
-    tmp->set_occupied_slot(sockets.size());
-    sockets.emplace_back(std::move(tmp));
-    [[maybe_unused]]
-    auto __ =
-        epoll_handler.add_socket(*sockets.back())
-            .or_else([this](auto&& error) -> Ev {
-              LOG(error.message);
-              sockets.pop_back();
-              return std::unexpected(
-                  Error{"Unable to add socket from parent into epoll"});
-            })
-            .and_then([this]() -> Ev {
-              return sockets.back()
-                  ->write_to_user({{"Connected to lobby"}})
-                  .or_else([](auto&& error) -> Ev {
-                    LOG(error.message);
-                    return std::unexpected(Error{
-                        "lobby process - unable to communicate with client"});
-                  });
-            });
+    add_to_socket_pool(context.message.socket.value());
+    drop(epoll_handler.add_socket(*sockets.back())
+             .or_else([this](auto&& error) -> Ev {
+               LOG(error.message);
+               sockets.pop_back();
+               return std::unexpected(
+                   Error{"Unable to add socket from parent into epoll"});
+             })
+             .and_then([this]() -> Ev {
+               return sockets.back()
+                   ->write_to_user({{"Connected to lobby"}})
+                   .or_else([](auto&& error) -> Ev {
+                     LOG(error.message);
+                     return std::unexpected(Error{
+                         "lobby process - unable to communicate with client"});
+                   });
+             }));
   }
-  return {};
+  return {cmd_se::CONTINUE};
 }
 
 CommandStatus Server::send_connection_code(CommandContext& context) {
@@ -344,7 +370,8 @@ CommandStatus Server::join_lobby(CommandContext& context) {
 
 CommandStatus
 Server::general_command([[maybe_unused]] CommandContext& context) {
-  return CommandStatus{cmd_se::CONTINUE, Error("Unknown command")};
+  return CommandStatus{cmd_se::CONTINUE,
+                       Error("Unknown command", us_e::UNKNOWN_COMMAND)};
 }
 
 std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
@@ -387,7 +414,7 @@ CommandStatus Server::chat_message(CommandContext& context) {
 
 const std::array<Server::Command, 6> Server::commands = {
     {{.handler = &Server::create_lobby, .match = {{"\\create"}, std::nullopt}},
-     {.handler = &Server::erase_socket_handler,
+     {.handler = &Server::free_socket_handler,
       .match = {{"\\close"}, std::nullopt}},
      {.handler = &Server::accept_socket_from_parent,
       .match = {{"\\socket"}, message_type_e::SOCKET}},
