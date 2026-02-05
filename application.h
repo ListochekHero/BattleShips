@@ -35,7 +35,7 @@ public:
   friend struct Command;
   Server() = default;
   Ev init();                               // init() for Server
-  Ev init(SocketHandler&& parrent_socket); // init() for Lobby
+  Ev init(int parrent_socket); // init() for Lobby
   virtual void run();
 
 private:
@@ -56,10 +56,10 @@ private:
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
   CommandStatus chat_message(CommandContext& context);
 
-  Ev send_command_error_reply(const SocketHandler& client, Error& error);
+  Ev send_error_reply(const SocketHandler& client, Error& error);
   CommandStatus erase_socket_handler(CommandContext& context);
   void handle_zombie_pocesses();
-  void register_new_clients(std::vector<int> new_clients);
+  void register_new_clients(std::vector<int>& new_clients);
 
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   std::vector<size_t> avaiable_slots;
