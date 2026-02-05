@@ -34,8 +34,8 @@ struct MsgHeader {
 };
 
 struct OutgoingMessage {
-  message_type_e msg_type;
   std::vector<std::string_view> payloads;
+  message_type_e msg_type{message_type_e::DEFAULT};
   std::optional<int> socket{std::nullopt};
 };
 
@@ -84,8 +84,8 @@ public:
   EpollHandler() = default;
   ~EpollHandler();
   Ev init();
-  Ev add_socket(SocketHandler* const socket_handler);
-  Ev remove_socket(const SocketHandler* const socket_handler);
+  Ev add_socket(SocketHandler& socket_handler);
+  Ev remove_socket(SocketHandler& socket_handler);
   std::expected<std::vector<size_t>, Error>
   wait_for_events(size_t max_events) const;
 

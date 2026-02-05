@@ -147,10 +147,10 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
   m.msg_iov = iov.data();
   m.msg_iovlen = iov.size();
   char buf[CMSG_SPACE(sizeof(int))];
+  struct cmsghdr* cmsg;
   if (msg.socket) {
     m.msg_control = buf;
     m.msg_controllen = sizeof(buf);
-    struct cmsghdr* cmsg;
     cmsg = CMSG_FIRSTHDR(&m);
     cmsg->cmsg_level = SOL_SOCKET;
     cmsg->cmsg_type = SCM_RIGHTS;
@@ -205,19 +205,19 @@ Ev EpollHandler::init() {
   return {};
 }
 
-Ev EpollHandler::add_socket(SocketHandler* const socket_handler) {
+Ev EpollHandler::add_socket(SocketHandler& socket_handler) {
   struct epoll_event event;
-  event.data.u64 = socket_handler->get_occupied_slot();
+  event.data.u64 = socket_handler.get_occupied_slot();
   // event.data.ptr = static_cast<void*>(socket_handler);
   event.events = EPOLLIN | EPOLLET;
-  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler->get_socket(), &event) ==
+  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==
       -1)
     return std::unexpected(make_error_c("Error adding socket to epoll"));
   return {};
 }
 
-Ev EpollHandler::remove_socket(const SocketHandler* const socket_handler) {
-  if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler->get_socket(), NULL) ==
+Ev EpollHandler::remove_socket(SocketHandler& socket_handler) {
+  if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler.get_socket(), NULL) ==
       -1)
     return std::unexpected(make_error_c("Error removing socket from epoll"));
   return {};
