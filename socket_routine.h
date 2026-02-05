@@ -12,11 +12,8 @@
 
 #include <cstring>
 #include <expected>
-#include <memory>
-#include <utility>
 #include <vector>
 
-#include "logger.h"
 #include "utility.h"
 
 #define BACKLOG 10

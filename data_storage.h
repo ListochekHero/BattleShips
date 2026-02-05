@@ -2,13 +2,12 @@
 #define DATA_STORAGE_H
 
 #include <expected>
-#include <filesystem>
-#include <system_error>
-
 #include "socket_routine.h"
+
 #include "utility.h"
 
 namespace bsm {
+
 struct ConnectionCode {
   std::string string_code;
   int64_t int_code;
