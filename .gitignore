@@ -1,3 +1,27 @@
+#logs
+*.log
+log.txt
+
+#editor / temp / backups
+*~
+*.swp
+*.swo
+*.bak
+
+#clang / clangd
+.cache
+.clangd/
+*.clang*
+
+#build dirs
+build/
+build-debug/
+cmake-build-*/
+out/
+
+#temporary / random generated files
+*.tmp
+
 # Prerequisites
 *.d
 
@@ -45,3 +69,7 @@
 build/
 /build*/
 /install_manifest.txt
+*.cpp.*
+*.h.*
+*.cmake
+*.conf
