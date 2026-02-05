@@ -1,4 +1,6 @@
 #include "client.h"
+#include "logger.h"
+#include "socket_routine.h"
 
 #define SERVER_PORT 8000
 
@@ -25,7 +27,7 @@ int main(int argc, char* argv[]) {
     perror("Connection to the server failed");
     exit(EXIT_FAILURE);
   }
-  bsm::SocketHandler socket_server {sockfd};
+  bsm::SocketHandler socket_server{sockfd};
   printf("Connected to the server on port %d\n", SERVER_PORT);
 
   while (1) {
@@ -33,30 +35,28 @@ int main(int argc, char* argv[]) {
     std::string message;
     std::getline(std::cin, message);
 
-    socket_server.write_to_user({bsm::message_type_e::DEFAULT, {message}});
+    socket_server.write_to_user({{message}});
 
-    //send(sockfd, message.c_str(), message.size(), 0);
+    // send(sockfd, message.c_str(), message.size(), 0);
 
     memset(buffer, 0, BUFF_SIZE);
 
     struct timeval timeout;
-    timeout.tv_sec = 5;
+    timeout.tv_sec = 10;
     timeout.tv_usec = 0;
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout,
                sizeof(timeout));
     while (true) {
-    auto result = socket_server.read_user_input();
-      if (result)
-      {
-      printf("Server: %s\n", (*result).payload.c_str());
-
+      auto result = socket_server.read_user_input();
+      if (result) {
+        printf("Server: %s\n", (*result).payload.c_str());
       }
 
-      //int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
-      if ((*result).status == bsm::status_code_e::WOULDBLOCK) {
+      // int bytes_received = recv(sockfd, buffer, BUFF_SIZE, 0);
+      if ((*result).status == bsm::message_status_e::WOULDBLOCK) {
         perror("Error receiving data from server");
         break;
-      } else if ((*result).status == bsm::status_code_e::CLOSED) {
+      } else if ((*result).status == bsm::message_status_e::NONVALID) {
         printf("Server closed the connection");
         break;
       }
