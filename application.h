@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 
 #include "data_storage.h"
+#include "deferred.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <memory>
@@ -15,7 +16,6 @@
 #define MAX_EVENTS 10
 
 namespace bsm {
-
 class Application {
 public:
   virtual void run() = 0;
@@ -35,38 +35,41 @@ public:
   Ev init();                   // init() for Server
   Ev init(int parrent_socket); // init() for Lobby
   virtual void run();
+  void cleanup_slot(size_t slot);
 
 private:
-Ev emplace_socket_to_pool(std::unique_ptr<SocketHandler> socket_ptr);
-Ev add_to_socket_pool();
-Ev add_to_socket_pool(int socket_fd);
-Ev init_epoll();
+  Ev emplace_socket_to_pool(std::unique_ptr<SocketHandler> socket_ptr);
+  Ev add_to_socket_pool();
+  Ev add_to_socket_pool(int socket_fd);
+  Ev init_epoll();
   Ev init_epoll_wrapper();
   void process_events(std::vector<size_t>& event_slots);
   void process_server_socket(SocketHandler& handler);
   void process_client_socket(SocketHandler& handler);
   CommandStatus handle_client_cmd(CommandContext& context);
   std::expected<LobbyProcess, Error> spawn_lobby_process();
-  CommandStatus create_lobby(CommandContext& context);
+  CommandStatus create_lobby(const CommandContext& context);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id,
                 SocketHandler& client);
-  CommandStatus accept_socket_from_parent(CommandContext& context);
-  CommandStatus send_connection_code(CommandContext& context);
-  CommandStatus join_lobby(CommandContext& context);
-  CommandStatus general_command(CommandContext& context);
+  CommandStatus accept_socket_from_parent(const CommandContext& context);
+  CommandStatus send_connection_code(const CommandContext& context);
+  CommandStatus join_lobby(const CommandContext& context);
+  CommandStatus general_command(const CommandContext& context);
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
-  CommandStatus chat_message(CommandContext& context);
+  CommandStatus chat_message(const CommandContext& context);
 
   Ev send_error_reply(const SocketHandler& client, Error& error);
-  CommandStatus free_socket_handler(CommandContext& context);
+  CommandStatus free_socket_handler(const CommandContext& context);
   void handle_zombie_pocesses();
   void process_new_clients(std::vector<int>& new_clients);
+  void run_deferred_actions();
 
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   std::vector<size_t> avaiable_slots;
+  std::vector<std::unique_ptr<DeferredAction>> deferred_actions;
   CommandStatus process_message(CommandContext& context);
 
-  using Handler = CommandStatus (Server::*)(CommandContext& context);
+  using Handler = CommandStatus (Server::*)(const CommandContext& context);
   struct Command {
     Handler handler;
     struct Match {

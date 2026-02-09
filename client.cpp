@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
       if ((*result).status == bsm::message_status_e::WOULDBLOCK) {
         perror("Error receiving data from server");
         break;
-      } else if ((*result).status == bsm::message_status_e::NONVALID) {
+      } else if ((*result).status == bsm::message_status_e::DISCONNECTED) {
         printf("Server closed the connection");
         break;
       }

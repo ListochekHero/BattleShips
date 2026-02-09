@@ -61,7 +61,12 @@ Ev Server::add_to_socket_pool(int socket_fd) {
         return error;
       });
 }
-
+void Server::run_deferred_actions() {
+  for (auto& action : deferred_actions) {
+    action->run(*this);
+  }
+  deferred_actions.clear();
+}
 void Server::run() {
   while (true) {
     handle_zombie_pocesses();
@@ -77,7 +82,7 @@ void Server::run() {
                     return {};
                   });
   }
-  // add cleanup routine!!!
+  run_deferred_actions();
 }
 
 Ev Server::init_epoll() {
@@ -142,11 +147,13 @@ void Server::process_client_socket(SocketHandler& handler) {
 
 CommandStatus Server::process_message(CommandContext& context) {
   switch (context.message.status) {
+  case bsm::message_status_e::EMPTY:
+  case bsm::message_status_e::WOULDBLOCK:
+    return CommandStatus{cmd_se::TERMINATE};
+  case message_status_e::DISCONNECTED:
+    return free_socket_handler(context);
   case bsm::message_status_e::DATA:
     break;
-  case bsm::message_status_e::WOULDBLOCK:
-  case bsm::message_status_e::NONVALID:
-    return CommandStatus{cmd_se::TERMINATE};
   }
   CommandStatus cmd_status = handle_client_cmd(context);
   if (cmd_status.error) {
@@ -197,7 +204,7 @@ std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
   return LobbyProcess{pid, std::move(child_handler)};
 }
 
-CommandStatus Server::create_lobby(CommandContext& context) {
+CommandStatus Server::create_lobby(const CommandContext& context) {
   if (auto result = epoll_handler.remove_socket(context.client); !result) {
     LOG(result.error().message);
     return CommandStatus{
@@ -229,6 +236,8 @@ CommandStatus Server::create_lobby(CommandContext& context) {
         Error{"Unalbe to initialize child process", us_e::CANT_CREATE_LOBBY}};
   }
   context.client.socket_status_v = socket_status_e::TRANSFERED;
+  deferred_actions.emplace_back(
+      std::make_unique<CleanupSHP_Slot>(context.client.get_occupied_slot()));
   return CommandStatus{cmd_se::TERMINATE};
 }
 
@@ -256,11 +265,10 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
       });
 }
 
-CommandStatus Server::free_socket_handler(CommandContext& context) {
+CommandStatus Server::free_socket_handler(const CommandContext& context) {
   if (auto result = epoll_handler.remove_socket(context.client); !result) {
     LOG(result.error().message);
-    return {cmd_se::CONTINUE,
-            Error{"Unable to remove socket from epoll before deleting"}};
+    LOG("Unable to remove socket from epoll before closing");
   }
   context.client.reset_to_empty();
   avaiable_slots.emplace_back(context.client.get_occupied_slot());
@@ -276,6 +284,11 @@ void Server::handle_zombie_pocesses() {
                       WEXITSTATUS(status)));
     }
   }
+}
+
+void Server::cleanup_slot(size_t slot) {
+  ReadResult result{};
+  free_socket_handler((CommandContext{*sockets[slot], result}));
 }
 
 void Server::process_new_clients(std::vector<int>& new_clients) {
@@ -305,9 +318,13 @@ void Server::process_new_clients(std::vector<int>& new_clients) {
   }
 }
 
-CommandStatus Server::accept_socket_from_parent(CommandContext& context) {
+CommandStatus Server::accept_socket_from_parent(const CommandContext& context) {
   if (context.message.socket) {
-    add_to_socket_pool(context.message.socket.value());
+    if (auto result = add_to_socket_pool(context.message.socket.value());
+        !result) {
+      LOG(result.error().message);
+      return CommandStatus{cmd_se::TERMINATE}; // finish!
+    }
     drop(epoll_handler.add_socket(*sockets.back())
              .or_else([this](auto&& error) -> Ev {
                LOG(error.message);
@@ -328,7 +345,7 @@ CommandStatus Server::accept_socket_from_parent(CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
 
-CommandStatus Server::send_connection_code(CommandContext& context) {
+CommandStatus Server::send_connection_code(const CommandContext& context) {
   auto conn_code = ConnectionCode::parse(context.message.payload);
   if (auto result = sockets.back()->write_to_user({{conn_code->string_code}});
       !result) {
@@ -340,7 +357,7 @@ CommandStatus Server::send_connection_code(CommandContext& context) {
   return CommandStatus{cmd_se::CONTINUE};
 }
 
-CommandStatus Server::join_lobby(CommandContext& context) {
+CommandStatus Server::join_lobby(const CommandContext& context) {
   auto parse_result = ConnectionCode::parse(context.message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
@@ -369,7 +386,7 @@ CommandStatus Server::join_lobby(CommandContext& context) {
 }
 
 CommandStatus
-Server::general_command([[maybe_unused]] CommandContext& context) {
+Server::general_command([[maybe_unused]] const CommandContext& context) {
   return CommandStatus{cmd_se::CONTINUE,
                        Error("Unknown command", us_e::UNKNOWN_COMMAND)};
 }
@@ -381,7 +398,7 @@ std::expected<LobbyProcess*, Error> Server::found_lobby(int64_t child_id) {
   return std::unexpected(Error("No such lobby"));
 }
 
-CommandStatus Server::chat_message(CommandContext& context) {
+CommandStatus Server::chat_message(const CommandContext& context) {
   auto parse_result = parse(context.message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
