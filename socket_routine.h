@@ -23,11 +23,11 @@ namespace bsm {
 enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
 enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
-enum class message_status_e { DATA, WOULDBLOCK, NONVALID };
+enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
 
 struct MsgHeader {
-  message_type_e msg_type;
-  uint64_t payload_count;
+  message_type_e msg_type{message_type_e::DEFAULT};
+  uint64_t payload_count{0};
 };
 
 struct OutgoingMessage {
@@ -37,10 +37,10 @@ struct OutgoingMessage {
 };
 
 struct ReadResult {
-  message_status_e status;
-  message_type_e msg_type;
+  message_status_e status{message_status_e::EMPTY};
+  message_type_e msg_type{message_type_e::DEFAULT};
   std::string payload{std::string(1024, '\0')};
-  std::optional<int> socket;
+  std::optional<int> socket{std::nullopt};
 };
 
 class SocketHandler {

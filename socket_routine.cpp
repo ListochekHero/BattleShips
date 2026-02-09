@@ -125,7 +125,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
     LOG(std::format("Message received: {}", result.payload));
     result.status = message_status_e::DATA;
   } else if (n == 0) {
-    result.status = message_status_e::NONVALID;
+    result.status = message_status_e::DISCONNECTED;
     this->socket_status_v = socket_status_e::CLOSED;
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
     result.status = message_status_e::WOULDBLOCK;
