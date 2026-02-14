@@ -48,29 +48,33 @@ public:
   SocketHandler() = default;
   SocketHandler(int socket_fd);
   ~SocketHandler();
-  SocketHandler(const SocketHandler&) = delete;
   SocketHandler(SocketHandler&&);
-  SocketHandler& operator=(const SocketHandler&) = delete;
   SocketHandler& operator=(SocketHandler&&);
   Ev setup_listener(int port);
   int get_socket() const;
   socket_type_e get_socket_type() const;
   void set_socket_type(socket_type_e socket_type);
-  size_t get_occupied_slot();
+  socket_status_e get_socket_status() const;
+  void set_socket_status(socket_status_e socket_status);
+  size_t get_occupied_slot() const;
   void set_occupied_slot(size_t slot);
   std::expected<std::vector<int>, Error> accept_connections() const;
   std::expected<ReadResult, Error> read_user_input();
   Ev write_to_user(const OutgoingMessage& msg) const;
   Ev remove_cloexec();
-  void reset_with_new(int new_socket, socket_type_e type = socket_type_e::CLIENT);
+  void reset_with_new(int new_socket);
   void reset_to_empty();
+
   std::string nick_name{*generate_name()};
-  socket_status_e socket_status_v{socket_status_e::EMPTY};
+
+  SocketHandler(const SocketHandler&) = delete;
+  SocketHandler& operator=(const SocketHandler&) = delete;
 
 private:
-  int socket_fd{-1};
-  socket_type_e socket_type_v{-1};
-  size_t occupied_slot{std::numeric_limits<std::size_t>::max()};
+  int socket_{-1};
+  socket_type_e socket_type_{-1};
+  socket_status_e socket_status_{socket_status_e::EMPTY};
+  size_t occupied_slot_{std::numeric_limits<std::size_t>::max()};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
   void close_socket();
@@ -87,7 +91,7 @@ public:
   wait_for_events(size_t max_events) const;
 
 private:
-  int epollfd = 0;
+  int epollfd_ = 0;
 };
 
 } // namespace bsm

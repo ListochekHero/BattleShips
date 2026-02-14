@@ -7,42 +7,43 @@
 namespace bsm {
 
 SocketHandler::SocketHandler(int socket_fd)
-    : socket_status_v{socket_status_e::ALIVE}, socket_fd{socket_fd},
-      socket_type_v{socket_type_e::CLIENT} {}
+    : socket_{socket_fd}, socket_type_{socket_type_e::CLIENT},
+      socket_status_{socket_status_e::ALIVE} {}
 
 SocketHandler::~SocketHandler() { close_socket(); }
 
 SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
-    : socket_status_v{socket_status_e::ALIVE},
-      socket_fd{std::exchange(sock_hndl.socket_fd, -1)},
-      socket_type_v{
-          std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN)},
-      occupied_slot{std::exchange(sock_hndl.occupied_slot,
-                                  std::numeric_limits<std::size_t>::max())} {}
+    : socket_{std::exchange(sock_hndl.socket_, -1)},
+      socket_type_{
+          std::exchange(sock_hndl.socket_type_, socket_type_e::UNKNOWN)},
+      socket_status_{socket_status_e::ALIVE},
+      occupied_slot_{std::exchange(sock_hndl.occupied_slot_,
+                                   std::numeric_limits<std::size_t>::max())} {}
 
 SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   if (this != &sock_hndl) {
-    this->close_socket();
-    socket_status_v =
-        std::exchange(sock_hndl.socket_status_v, socket_status_e::EMPTY);
-    socket_fd = std::exchange(sock_hndl.socket_fd, -1);
-    socket_type_v =
-        std::exchange(sock_hndl.socket_type_v, socket_type_e::UNKNOWN);
-    occupied_slot = std::exchange(sock_hndl.occupied_slot,
-                                  std::numeric_limits<std::size_t>::max());
+    close_socket();
+    socket_ = std::exchange(sock_hndl.socket_, -1);
+    socket_type_ =
+        std::exchange(sock_hndl.socket_type_, socket_type_e::UNKNOWN);
+    socket_status_ =
+        std::exchange(sock_hndl.socket_status_, socket_status_e::EMPTY);
+    occupied_slot_ = std::exchange(sock_hndl.occupied_slot_,
+                                   std::numeric_limits<std::size_t>::max());
   }
   return *this;
 }
+
 Ev SocketHandler::setup_listener(int port) {
-  if (!socket_fd)
+  if (!socket_)
     return std::unexpected(make_error_c("Socket is already exist"));
 
-  socket_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-  if (socket_fd == -1)
+  socket_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
+  if (socket_ == -1)
     return std::unexpected(make_error_c("Error creating socket"));
 
   int opt = 1;
-  if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+  if (setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
     return std::unexpected(make_error_c("Error setting socket options"));
 
   struct sockaddr_in server_addr;
@@ -50,42 +51,47 @@ Ev SocketHandler::setup_listener(int port) {
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
 
-  if (bind(socket_fd, (struct sockaddr*)&server_addr, sizeof(server_addr)) ==
+  if (bind(socket_, (struct sockaddr*)&server_addr, sizeof(server_addr)) ==
       -1) {
-    close(socket_fd);
+    close(socket_);
     return std::unexpected(make_error_c("Error binding socket"));
   }
 
-  if (listen(socket_fd, BACKLOG) == -1) {
-    close(socket_fd);
+  if (listen(socket_, BACKLOG) == -1) {
+    close(socket_);
     return std::unexpected(make_error_c("Error listening on socket"));
   }
-  socket_status_v = socket_status_e::ALIVE,
-  socket_type_v = socket_type_e::SERVER;
+  socket_status_ = socket_status_e::ALIVE, socket_type_ = socket_type_e::SERVER;
   return {};
 }
 
-int SocketHandler::get_socket() const { return socket_fd; }
+int SocketHandler::get_socket() const { return socket_; }
 
-socket_type_e SocketHandler::get_socket_type() const {
-  return this->socket_type_v;
-}
+socket_type_e SocketHandler::get_socket_type() const { return socket_type_; }
 
 void SocketHandler::set_socket_type(socket_type_e socket_type) {
-  this->socket_type_v = socket_type;
+  socket_type_ = socket_type;
   return;
 }
 
-size_t SocketHandler::get_occupied_slot() { return occupied_slot; }
+socket_status_e SocketHandler::get_socket_status() const {
+  return socket_status_;
+}
 
-void SocketHandler::set_occupied_slot(size_t slot) { occupied_slot = slot; }
+void SocketHandler::set_socket_status(socket_status_e socket_status) {
+  socket_status_ = socket_status;
+}
+
+size_t SocketHandler::get_occupied_slot() const { return occupied_slot_; }
+
+void SocketHandler::set_occupied_slot(size_t slot) { occupied_slot_ = slot; }
 
 std::expected<std::vector<int>, Error>
 SocketHandler::accept_connections() const {
   std::vector<int> new_clients;
   while (true) {
     int client_fd =
-        accept4(socket_fd, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+        accept4(socket_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (client_fd < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
@@ -111,7 +117,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
   msg.msg_control = buf;
   msg.msg_controllen = sizeof(buf);
 
-  ssize_t n = recvmsg(this->socket_fd, &msg, 0);
+  ssize_t n = recvmsg(socket_, &msg, 0);
   if (n > 0) {
     result.payload.resize(n - sizeof(hdr));
     result.msg_type = hdr.msg_type;
@@ -126,7 +132,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
     result.status = message_status_e::DATA;
   } else if (n == 0) {
     result.status = message_status_e::DISCONNECTED;
-    this->socket_status_v = socket_status_e::CLOSED;
+    socket_status_ = socket_status_e::CLOSED;
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
     result.status = message_status_e::WOULDBLOCK;
   } else {
@@ -159,32 +165,33 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
     int socket = msg.socket.value();
     std::memcpy(CMSG_DATA(cmsg), &socket, sizeof(int));
   }
-  if (sendmsg(this->socket_fd, &m, MSG_NOSIGNAL) == -1)
+  if (sendmsg(socket_, &m, MSG_NOSIGNAL) == -1)
     return std::unexpected(make_error_c("Failed to send a message, error"));
   return {};
 }
 
 Ev SocketHandler::remove_cloexec() {
-  int flags = fcntl(this->socket_fd, F_GETFD);
+  int flags = fcntl(socket_, F_GETFD);
   if (flags == -1) {
     return std::unexpected(make_error_c("Cant get socket flags"));
   }
   flags &= ~FD_CLOEXEC;
-  if (fcntl(this->socket_fd, F_SETFD, flags) == -1) {
+  if (fcntl(socket_, F_SETFD, flags) == -1) {
     return std::unexpected(make_error_c("Cant set socket flags"));
   }
   return {};
 }
-void SocketHandler::reset_with_new(int new_socket, socket_type_e type) {
+
+void SocketHandler::reset_with_new(int new_socket) {
   close_socket();
-  socket_fd = new_socket;
-  socket_type_v = type;
-  socket_status_v = socket_status_e::ALIVE;
+  socket_ = new_socket;
+  socket_status_ = socket_status_e::ALIVE;
 }
+
 void SocketHandler::reset_to_empty() {
   close_socket();
-  socket_type_v = socket_type_e::UNKNOWN;
-  socket_status_v = socket_status_e::EMPTY;
+  socket_type_ = socket_type_e::UNKNOWN;
+  socket_status_ = socket_status_e::EMPTY;
 }
 
 void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
@@ -192,16 +199,17 @@ void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
 }
 
 void SocketHandler::close_socket() {
-  if (socket_fd != -1) {
-    close(socket_fd);
+  if (socket_ != -1) {
+    close(socket_);
+    socket_ = -1;
   }
 }
 
-EpollHandler::~EpollHandler() { close(epollfd); }
+EpollHandler::~EpollHandler() { close(epollfd_); }
 
 Ev EpollHandler::init() {
-  epollfd = epoll_create1(EPOLL_CLOEXEC);
-  if (epollfd == -1)
+  epollfd_ = epoll_create1(EPOLL_CLOEXEC);
+  if (epollfd_ == -1)
     return std::unexpected(make_error_c("Error creating epoll"));
   return {};
 }
@@ -211,14 +219,14 @@ Ev EpollHandler::add_socket(SocketHandler& socket_handler) {
   event.data.u64 = socket_handler.get_occupied_slot();
   // event.data.ptr = static_cast<void*>(socket_handler);
   event.events = EPOLLIN | EPOLLET;
-  if (epoll_ctl(epollfd, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==
+  if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==
       -1)
     return std::unexpected(make_error_c("Error adding socket to epoll"));
   return {};
 }
 
 Ev EpollHandler::remove_socket(SocketHandler& socket_handler) {
-  if (epoll_ctl(epollfd, EPOLL_CTL_DEL, socket_handler.get_socket(), NULL) ==
+  if (epoll_ctl(epollfd_, EPOLL_CTL_DEL, socket_handler.get_socket(), NULL) ==
       -1)
     return std::unexpected(make_error_c("Error removing socket from epoll"));
   return {};
@@ -227,7 +235,7 @@ Ev EpollHandler::remove_socket(SocketHandler& socket_handler) {
 std::expected<std::vector<size_t>, Error>
 EpollHandler::wait_for_events(size_t max_events) const {
   std::vector<struct epoll_event> events(max_events);
-  ssize_t n = epoll_wait(this->epollfd, events.data(), 10, -1);
+  ssize_t n = epoll_wait(epollfd_, events.data(), 10, -1);
   if (n == -1)
     return std::unexpected(make_error_c("Error in epoll_wait()"));
   std::vector<size_t> ready_slots;
