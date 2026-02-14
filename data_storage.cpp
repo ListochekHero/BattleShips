@@ -2,7 +2,7 @@
 
 namespace bsm {
     
-std::expected<ConnectionCode, Error> ConnectionCode::parse(
+std::expected<JoinLobbyCode, Error> JoinLobbyCode::parse(
     const std::string& message) {
   int64_t int_code{std::strtol(message.c_str(), nullptr, 10)};
   std::string string_code;
@@ -18,6 +18,6 @@ std::expected<ConnectionCode, Error> ConnectionCode::parse(
   } else {
     string_code = std::to_string(int_code);
   }
-  return ConnectionCode{string_code, int_code};
+  return JoinLobbyCode{string_code, int_code};
 }
 }  // namespace bsm

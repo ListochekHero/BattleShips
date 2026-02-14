@@ -2,22 +2,17 @@
 #define DATA_STORAGE_H
 
 #include <expected>
-#include "socket_routine.h"
 
 #include "utility.h"
 
 namespace bsm {
 
-struct ConnectionCode {
+struct JoinLobbyCode {
   std::string string_code;
   int64_t int_code;
 
-  static std::expected<ConnectionCode, Error> parse(const std::string& message);
+  static std::expected<JoinLobbyCode, Error> parse(const std::string& message);
 };
 
-struct LobbyProcess{
-  pid_t pid;
-  SocketHandler ipc_socket;
-};
-}  // namespace bsm
+} // namespace bsm
 #endif
