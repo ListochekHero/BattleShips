@@ -8,7 +8,7 @@
 
 namespace bsm {
 
-class SocketHandler;
+class ConnectionView;
 struct ReadResult;
 
 enum class internal_error_e {
@@ -39,7 +39,7 @@ struct CommandStatus {
 };
 
 struct CommandContext {
-  SocketHandler& client;
+  ConnectionView& client;
   ReadResult& message;
 };
 
