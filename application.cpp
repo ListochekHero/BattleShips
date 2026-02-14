@@ -1,6 +1,8 @@
 #include "application.h"
 #include "config.h"
+#include "lobby_manager.h"
 #include "logger.h"
+#include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
@@ -11,26 +13,34 @@
 namespace bsm {
 
 Ev Server::init() {
-  if (auto result = add_to_socket_pool(); !result) {
-    LOG(result.error().message);
-    return std::unexpected(Error{"Unable to add init socket to pool"});
-  };
-  return this->sockets[0]
-      ->setup_listener(Config::instance().get_line("port"))
-      .or_else([](auto&& error) -> Ev {
-        LOG(error.message);
-        return std::unexpected(Error{"Cant setup listener"});
-      })
-      .and_then([this]() -> Ev { return init_epoll_wrapper(); });
+  net_engine_.init();
+  net_engine_.set_message_handler(
+      [this](CommandContext context) { return handle_client_cmd(context); });
+  //
+  // if (auto result = add_to_socket_pool(); !result) {
+  //   LOG(result.error().message);
+  //   return std::unexpected(Error{"Unable to add init socket to pool"});
+  // };
+  // return this->sockets[0]
+  //     ->setup_listener(Config::instance().get_line("port"))
+  //     .or_else([](auto&& error) -> Ev {
+  //       LOG(error.message);
+  //       return std::unexpected(Error{"Cant setup listener"});
+  //     })
+  //     .and_then([this]() -> Ev { return init_epoll_wrapper(); });
 }
 
 Ev Server::init(int parrent_socket) {
-  if (auto result = add_to_socket_pool(parrent_socket); !result) {
-    LOG(result.error().message);
-    return std::unexpected(Error{"Unable to add parent socket to pool"});
-  }
-  this->sockets[0]->set_socket_type(socket_type_e::IPC);
-  return init_epoll_wrapper();
+  net_engine_.init(parrent_socket);
+  net_engine_.set_message_handler(
+      [this](CommandContext context) { return handle_client_cmd(context); });
+  //
+  // if (auto result = add_to_socket_pool(parrent_socket); !result) {
+  //   LOG(result.error().message);
+  //   return std::unexpected(Error{"Unable to add parent socket to pool"});
+  // }
+  // this->sockets[0]->set_socket_type(socket_type_e::IPC);
+  // return init_epoll_wrapper();
 }
 
 Ev Server::emplace_socket_to_pool(std::unique_ptr<SocketHandler> socket_ptr) {
@@ -61,110 +71,113 @@ Ev Server::add_to_socket_pool(int socket_fd) {
         return error;
       });
 }
+
 void Server::run_deferred_actions() {
   for (auto& action : deferred_actions) {
     action->run(*this);
   }
   deferred_actions.clear();
 }
+
 void Server::run() {
-  while (true) {
-    handle_zombie_pocesses();
-    [[maybe_unused]]
-    auto __ = epoll_handler.wait_for_events(MAX_EVENTS)
-                  .and_then([this](auto&& event_slots) -> Ev {
-                    process_events(event_slots);
-                    return {};
-                  })
-                  .or_else([](auto&& error) -> Ev {
-                    LOG(error.message);
-                    LOG("Cant get events");
-                    return {};
-                  });
-  }
-  run_deferred_actions();
+  net_engine.run();
+  // while (true) {
+  //   handle_zombie_pocesses();
+  //   [[maybe_unused]]
+  //   auto __ = epoll_handler.wait_for_events(MAX_EVENTS)
+  //                 .and_then([this](auto&& event_slots) -> Ev {
+  //                   process_events(event_slots);
+  //                   return {};
+  //                 })
+  //                 .or_else([](auto&& error) -> Ev {
+  //                   LOG(error.message);
+  //                   LOG("Cant get events");
+  //                   return {};
+  //                 });
+  // }
+  // run_deferred_actions();
 }
 
-Ev Server::init_epoll() {
-  return this->epoll_handler.init()
-      .or_else([](auto&& error) -> Ev {
-        LOG(error.message);
-        return std::unexpected(Error{"Cant init epoll_handler"});
-      })
-      .and_then([this]() -> Ev {
-        return this->epoll_handler.add_socket(*sockets[0])
-            .or_else([](auto&& error) -> Ev {
-              LOG(error.message);
-              return std::unexpected(Error{"Cant add socket to epoll"});
-            });
-      });
-}
+// Ev Server::init_epoll() {
+//   return this->epoll_handler.init()
+//       .or_else([](auto&& error) -> Ev {
+//         LOG(error.message);
+//         return std::unexpected(Error{"Cant init epoll_handler"});
+//       })
+//       .and_then([this]() -> Ev {
+//         return this->epoll_handler.add_socket(*sockets[0])
+//             .or_else([](auto&& error) -> Ev {
+//               LOG(error.message);
+//               return std::unexpected(Error{"Cant add socket to epoll"});
+//             });
+//       });
+// }
 
-Ev Server::init_epoll_wrapper() {
-  return init_epoll().or_else([](auto&& error) -> Ev {
-    LOG(error.message);
-    return std::unexpected(Error{"Unable to init epoll"});
-  });
-}
+// Ev Server::init_epoll_wrapper() {
+//   return init_epoll().or_else([](auto&& error) -> Ev {
+//     LOG(error.message);
+//     return std::unexpected(Error{"Unable to init epoll"});
+//   });
+// }
 
-void Server::process_events(std::vector<size_t>& event_slots) {
-  for (size_t slot : event_slots) {
-    SocketHandler& handler{*sockets[slot]};
-    if (handler.get_socket_type() == socket_type_e::SERVER) {
-      process_server_socket(handler);
-    } else {
-      process_client_socket(handler);
-    }
-  }
-}
+// void Server::process_events(std::vector<size_t>& event_slots) {
+//   for (size_t slot : event_slots) {
+//     SocketHandler& handler{*sockets[slot]};
+//     if (handler.get_socket_type() == socket_type_e::SERVER) {
+//       process_server_socket(handler);
+//     } else {
+//       process_client_socket(handler);
+//     }
+//   }
+// }
 
-void Server::process_server_socket(SocketHandler& handler) {
-  [[maybe_unused]]
-  auto __ = handler.accept_connections()
-                .and_then([this](auto&& new_clients) -> Ev {
-                  process_new_clients(new_clients);
-                  return {};
-                })
-                .or_else([](auto&& error) -> Ev {
-                  LOG(error.message);
-                  LOG("Cant accept new connections");
-                  return {};
-                });
-}
-void Server::process_client_socket(SocketHandler& handler) {
-  CommandStatus cmd_status{cmd_se::CONTINUE};
-  while (cmd_status.command_status_v == cmd_se::CONTINUE &&
-         handler.socket_status_v == socket_status_e::ALIVE) {
-    auto read_result = handler.read_user_input();
-    if (!read_result) {
-      LOG(read_result.error().message);
-      break;
-    }
-    CommandContext context{handler, read_result.value()};
-    cmd_status = process_message(context);
-  }
-}
+// void Server::process_server_socket(SocketHandler& handler) {
+//   [[maybe_unused]]
+//   auto __ = handler.accept_connections()
+//                 .and_then([this](auto&& new_clients) -> Ev {
+//                   process_new_clients(new_clients);
+//                   return {};
+//                 })
+//                 .or_else([](auto&& error) -> Ev {
+//                   LOG(error.message);
+//                   LOG("Cant accept new connections");
+//                   return {};
+//                 });
+// }
+// void Server::process_client_socket(SocketHandler& handler) {
+//   CommandStatus cmd_status{cmd_se::CONTINUE};
+//   while (cmd_status.command_status_v == cmd_se::CONTINUE &&
+//          handler.socket_status_v == socket_status_e::ALIVE) {
+//     auto read_result = handler.read_user_input();
+//     if (!read_result) {
+//       LOG(read_result.error().message);
+//       break;
+//     }
+//     CommandContext context{handler, read_result.value()};
+//     cmd_status = process_message(context);
+//   }
+// }
 
-CommandStatus Server::process_message(CommandContext& context) {
-  switch (context.message.status) {
-  case bsm::message_status_e::EMPTY:
-  case bsm::message_status_e::WOULDBLOCK:
-    return CommandStatus{cmd_se::TERMINATE};
-  case message_status_e::DISCONNECTED:
-    return free_socket_handler(context);
-  case bsm::message_status_e::DATA:
-    break;
-  }
-  CommandStatus cmd_status = handle_client_cmd(context);
-  if (cmd_status.error) {
-    LOG(cmd_status.error->message);
-    LOG("Unable to handle client command: " + context.message.payload);
-    if (auto result = send_error_reply(context.client, *cmd_status.error);
-        !result)
-      LOG(result.error().message);
-  }
-  return cmd_status;
-}
+// CommandStatus Server::process_message(CommandContext& context) {
+//   switch (context.message.status) {
+//   case bsm::message_status_e::EMPTY:
+//   case bsm::message_status_e::WOULDBLOCK:
+//     return CommandStatus{cmd_se::TERMINATE};
+//   case message_status_e::DISCONNECTED:
+//     return free_socket_handler(context);
+//   case bsm::message_status_e::DATA:
+//     break;
+//   }
+//   CommandStatus cmd_status = handle_client_cmd(context);
+//   if (cmd_status.error) {
+//     LOG(cmd_status.error->message);
+//     LOG("Unable to handle client command: " + context.message.payload);
+//     if (auto result = send_error_reply(context.client, *cmd_status.error);
+//         !result)
+//       LOG(result.error().message);
+//   }
+//   return cmd_status;
+// }
 
 Ev Server::send_error_reply(const SocketHandler& client, Error& error) {
   return client.write_to_user({{user_message(error.user_code)}})
@@ -201,7 +214,22 @@ std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
   }
   close(sv[0]);
   SocketHandler child_handler{sv[1]};
-  return LobbyProcess{pid, std::move(child_handler)};
+  return LobbyProcess{pid, sv[1]};
+}
+
+void Server::execute_action(const CreateLobby& action, const CommandContext& context) {
+  auto proc = lobby_manager_.spawn_lobby();
+  if (!proc) {
+    LOG(proc.error().message);
+  }
+  ConnectionView lobby_ipc =
+      net_engine_.attach(proc->control_socket, end_point_type_e::LOBBY);
+  auto lobby_handler = lobby_manager_.attach(proc->pid, lobby_ipc);
+  if (!lobby_handler) {
+    LOG(lobby_handler.error().message);
+    LOG("Unable");
+  }
+
 }
 
 CommandStatus Server::create_lobby(const CommandContext& context) {
@@ -265,15 +293,15 @@ Ev Server::init_child(const SocketHandler& child_socket, int64_t child_id,
       });
 }
 
-CommandStatus Server::free_socket_handler(const CommandContext& context) {
-  if (auto result = epoll_handler.remove_socket(context.client); !result) {
-    LOG(result.error().message);
-    LOG("Unable to remove socket from epoll before closing");
-  }
-  context.client.reset_to_empty();
-  avaiable_slots.emplace_back(context.client.get_occupied_slot());
-  return CommandStatus{cmd_se::TERMINATE};
-}
+// CommandStatus Server::free_socket_handler(const CommandContext& context) {
+//   if (auto result = epoll_handler.remove_socket(context.client); !result) {
+//     LOG(result.error().message);
+//     LOG("Unable to remove socket from epoll before closing");
+//   }
+//   context.client.reset_to_empty();
+//   avaiable_slots.emplace_back(context.client.get_occupied_slot());
+//   return CommandStatus{cmd_se::TERMINATE};
+// }
 
 void Server::handle_zombie_pocesses() {
   int status;
@@ -286,10 +314,10 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-void Server::cleanup_slot(size_t slot) {
-  ReadResult result{};
-  free_socket_handler((CommandContext{*sockets[slot], result}));
-}
+// void Server::cleanup_slot(size_t slot) {
+//   ReadResult result{};
+//   free_socket_handler((CommandContext{*sockets[slot], result}));
+// }
 
 void Server::process_new_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
@@ -346,7 +374,7 @@ CommandStatus Server::accept_socket_from_parent(const CommandContext& context) {
 }
 
 CommandStatus Server::send_connection_code(const CommandContext& context) {
-  auto conn_code = ConnectionCode::parse(context.message.payload);
+  auto conn_code = JoinLobbyCode::parse(context.message.payload);
   if (auto result = sockets.back()->write_to_user({{conn_code->string_code}});
       !result) {
     LOG(result.error().message);
@@ -358,7 +386,7 @@ CommandStatus Server::send_connection_code(const CommandContext& context) {
 }
 
 CommandStatus Server::join_lobby(const CommandContext& context) {
-  auto parse_result = ConnectionCode::parse(context.message.payload);
+  auto parse_result = JoinLobbyCode::parse(context.message.payload);
   if (!parse_result) {
     LOG(parse_result.error().message);
     return CommandStatus{cmd_se::CONTINUE,
@@ -381,7 +409,7 @@ CommandStatus Server::join_lobby(const CommandContext& context) {
         cmd_se::CONTINUE,
         Error{"Unable to pass client socket to lobby", us_e::CANT_JOIN_LOBBY}};
   }
-  context.client.socket_status_v = socket_status_e::TRANSFERED;
+  net_engine.set_status_to(context.client, socket_status_e::TRANSFERED);
   return CommandStatus{cmd_se::TERMINATE};
 }
 

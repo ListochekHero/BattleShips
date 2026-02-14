@@ -6,6 +6,8 @@
 
 #include "data_storage.h"
 #include "deferred.h"
+#include "lobby_manager.h"
+#include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <memory>
@@ -16,6 +18,9 @@
 #define MAX_EVENTS 10
 
 namespace bsm {
+
+struct CreateLobby {};
+
 class Application {
 public:
   virtual void run() = 0;
@@ -63,11 +68,15 @@ private:
   void handle_zombie_pocesses();
   void process_new_clients(std::vector<int>& new_clients);
   void run_deferred_actions();
+  void execute_action(const CreateLobby& action, const CommandContext& context);
 
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   std::vector<size_t> avaiable_slots;
   std::vector<std::unique_ptr<DeferredAction>> deferred_actions;
   CommandStatus process_message(CommandContext& context);
+
+  NetworkEngine net_engine_;
+  LobbyManager lobby_manager_;
 
   using Handler = CommandStatus (Server::*)(const CommandContext& context);
   struct Command {
