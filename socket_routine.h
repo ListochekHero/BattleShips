@@ -20,7 +20,6 @@
 #define BUFF_SIZE 1024 //  add this magic number to config
 namespace bsm {
 
-enum class socket_type_e { UNKNOWN = -1, SERVER, IPC, CLIENT, SPECTATOR };
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
 enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
 enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
@@ -52,12 +51,8 @@ public:
   SocketHandler& operator=(SocketHandler&&);
   Ev setup_listener(int port);
   int get_socket() const;
-  socket_type_e get_socket_type() const;
-  void set_socket_type(socket_type_e socket_type);
   socket_status_e get_socket_status() const;
   void set_socket_status(socket_status_e socket_status);
-  size_t get_occupied_slot() const;
-  void set_occupied_slot(size_t slot);
   std::expected<std::vector<int>, Error> accept_connections() const;
   std::expected<ReadResult, Error> read_user_input();
   Ev write_to_user(const OutgoingMessage& msg) const;
@@ -72,9 +67,7 @@ public:
 
 private:
   int socket_{-1};
-  socket_type_e socket_type_{-1};
   socket_status_e socket_status_{socket_status_e::EMPTY};
-  size_t occupied_slot_{std::numeric_limits<std::size_t>::max()};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
   void close_socket();

@@ -7,29 +7,20 @@
 namespace bsm {
 
 SocketHandler::SocketHandler(int socket_fd)
-    : socket_{socket_fd}, socket_type_{socket_type_e::CLIENT},
-      socket_status_{socket_status_e::ALIVE} {}
+    : socket_{socket_fd}, socket_status_{socket_status_e::ALIVE} {}
 
 SocketHandler::~SocketHandler() { close_socket(); }
 
 SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
     : socket_{std::exchange(sock_hndl.socket_, -1)},
-      socket_type_{
-          std::exchange(sock_hndl.socket_type_, socket_type_e::UNKNOWN)},
-      socket_status_{socket_status_e::ALIVE},
-      occupied_slot_{std::exchange(sock_hndl.occupied_slot_,
-                                   std::numeric_limits<std::size_t>::max())} {}
+      socket_status_{socket_status_e::ALIVE} {}
 
 SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   if (this != &sock_hndl) {
     close_socket();
     socket_ = std::exchange(sock_hndl.socket_, -1);
-    socket_type_ =
-        std::exchange(sock_hndl.socket_type_, socket_type_e::UNKNOWN);
     socket_status_ =
         std::exchange(sock_hndl.socket_status_, socket_status_e::EMPTY);
-    occupied_slot_ = std::exchange(sock_hndl.occupied_slot_,
-                                   std::numeric_limits<std::size_t>::max());
   }
   return *this;
 }
@@ -61,18 +52,11 @@ Ev SocketHandler::setup_listener(int port) {
     close(socket_);
     return std::unexpected(make_error_c("Error listening on socket"));
   }
-  socket_status_ = socket_status_e::ALIVE, socket_type_ = socket_type_e::SERVER;
+  socket_status_ = socket_status_e::ALIVE;
   return {};
 }
 
 int SocketHandler::get_socket() const { return socket_; }
-
-socket_type_e SocketHandler::get_socket_type() const { return socket_type_; }
-
-void SocketHandler::set_socket_type(socket_type_e socket_type) {
-  socket_type_ = socket_type;
-  return;
-}
 
 socket_status_e SocketHandler::get_socket_status() const {
   return socket_status_;
@@ -81,10 +65,6 @@ socket_status_e SocketHandler::get_socket_status() const {
 void SocketHandler::set_socket_status(socket_status_e socket_status) {
   socket_status_ = socket_status;
 }
-
-size_t SocketHandler::get_occupied_slot() const { return occupied_slot_; }
-
-void SocketHandler::set_occupied_slot(size_t slot) { occupied_slot_ = slot; }
 
 std::expected<std::vector<int>, Error>
 SocketHandler::accept_connections() const {
@@ -190,7 +170,6 @@ void SocketHandler::reset_with_new(int new_socket) {
 
 void SocketHandler::reset_to_empty() {
   close_socket();
-  socket_type_ = socket_type_e::UNKNOWN;
   socket_status_ = socket_status_e::EMPTY;
 }
 
