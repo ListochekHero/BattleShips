@@ -3,49 +3,52 @@
 
 namespace bsm {
 
-bool Server::match_cmd(const Command& cmd, const ReadResult& msg) {
-  if (cmd.match.msg_type && cmd.match.msg_type == msg.msg_type)
+bool Dispatcher::match_cmd(const Command& cmd, const ReadResult& msg) {
+  if (cmd.msg_type && cmd.msg_type == msg.msg_type)
     return true;
-  for (auto alias : cmd.match.text_aliases)
+  for (auto alias : cmd.text_aliases)
     if (msg.payload.starts_with(alias))
       return true;
   return false;
 }
 
-ServerAction dispatch(const CommandContext& context) {
-
+ServerAction Dispatcher::dispatch(const CommandContext& context) {
+  for (const auto& cmd : commands) {
+    if (match_cmd(cmd, context.message)) {
+      if (allows(cmd.mask, context.peer)) {
+        return cmd.make();
+      } else {
+        return Command::make_action<NotAllowed>();
+      }
+    }
+  }
+  return Command::make_action<GeneralAction>();
 }
 
 const std::array<Dispatcher::Command, 6> Dispatcher::commands = {
     {{.text_aliases = {"\\create"},
       .msg_type = std::nullopt,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return CreateLobby{};
-      }},
+      .mask = end_point_e::CLIENT,
+      .make = Command::make_action<CreateLobby>},
      {.text_aliases = {"\\close"},
       .msg_type = std::nullopt,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return Quit{};
-      }},
+      .mask = end_point_e::CLIENT,
+      .make = Command::make_action<Quit>},
      {.text_aliases = {"\\socket"},
       .msg_type = message_type_e::SOCKET,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return AcceptSocket{};
-      }},
+      .mask = end_point_e::SERVER,
+      .make = Command::make_action<AcceptSocket>},
      {.text_aliases = {"\\conn_code"},
       .msg_type = message_type_e::CONN_CODE,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return ConnectionCode{};
-      }},
+      .mask = end_point_e::CLIENT,
+      .make = Command::make_action<ConnectionCode>},
      {.text_aliases = {"\\join"},
       .msg_type = message_type_e::CONN_CODE,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return JoinLobby{};
-      }},
+      .mask = end_point_e::CLIENT,
+      .make = Command::make_action<JoinLobby>},
      {.text_aliases = {"\\msg"},
       .msg_type = std::nullopt,
-      .make = [](const CommandContext&) -> std::optional<ServerAction> {
-        return ChatMessage{};
-      }}}};
+      .mask = end_point_e::CLIENT,
+      .make = Command::make_action<ChatMessage>}}};
 
 } // namespace bsm
