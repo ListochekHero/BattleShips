@@ -24,6 +24,9 @@ socket_routine.cpp
 utility.cpp
 config.cpp
 data_storage.cpp
+deferred_actions.cpp
+network_routine.cpp
+lobby_manager.cpp
 )
 
 # add_library(sanitizers INTERFACE)

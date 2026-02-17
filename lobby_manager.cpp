@@ -38,8 +38,8 @@ LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
       lobbies_.try_emplace(lobby_id, LobbyEntry{pid, control_connection});
   if (!inserted) {
     kill(pid, SIGKILL);
-    return std::unexpected(Error{"Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY
-  });
+    return std::unexpected(
+        Error{"Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY});
+  }
 }
-}
-}
+} // namespace bsm
