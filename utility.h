@@ -11,6 +11,8 @@ namespace bsm {
 class ConnectionView;
 struct ReadResult;
 
+enum class PeerKind { CLIENT, LOBBY };
+
 enum class internal_error_e {
   GENERIC,
   INVALID_ARGS,
@@ -41,6 +43,7 @@ struct CommandStatus {
 struct CommandContext {
   ConnectionView& client;
   ReadResult& message;
+  PeerKind peer;
 };
 
 std::string c_error_string();
@@ -54,7 +57,7 @@ int64_t generate_conn_code();
 std::expected<std::string, Error> parse(const std::string& message);
 std::expected<std::string, Error> generate_name();
 
-template <typename T, typename E> void drop(std::expected<T, E>&&) {}
+template <typename T, typename E> void drop_result(std::expected<T, E>&&) {}
 
 using er_e = internal_error_e;
 using us_e = user_error_e;
