@@ -1,7 +1,6 @@
 #ifndef NETWORK_ROUTINE_H
 #define NETWORK_ROUTINE_H
 
-#include "deferred.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
@@ -10,12 +9,13 @@
 
 namespace bsm {
 
-enum class end_point_type_e { CLIENT, LOBBY, SERVER };
+struct DeferredAction;
+enum class end_point_type_e { CLIENT = 1, LOBBY = 2, SERVER = 4, IPC = 8 };
 
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
-  end_point_type_e type{end_point_type_e::CLIENT};
-  size_t slot{std::numeric_limits<std::size_t>::max()};
+  end_point_type_e type;
+  const size_t slot;
   size_t generation{std::numeric_limits<std::size_t>::max()};
 };
 
@@ -24,7 +24,7 @@ public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
 
   Ev init();
-  Ev init(int parrent_socket); // init() for Lobby
+  Ev init(int parrent_socket, end_point_type_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
   void send_message_to(const ConnectionView& conn_view,
@@ -36,17 +36,25 @@ public:
 private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
-  std::expected<size_t, Error> emplace_new_entry_to_pool(SlotEntry slot_entry);
+  std::expected<size_t, Error>
+  emplace_new_entry_to_pool(int socket_fd, end_point_type_e socket_type);
+  std::expected<size_t, Error>
+  emplace_new_entry_to_pool(end_point_type_e socket_type);
   std::expected<size_t, Error> add_to_socket_pool();
   std::expected<size_t, Error> add_to_socket_pool(int socket_fd,
                                                   end_point_type_e socket_type);
-  CommandStatus free_socket_handler(SlotEntry& slot_entry);
+  CommandStatus free_slot_entry(SlotEntry& slot_entry);
+  std::optional<size_t> find_spot_for_new_client(int client_socket,
+                                                 end_point_type_e socket_type);
+  Ev subscribe_to_events(SlotEntry& slot_entry);
+  void unsubscribe_from_events(SlotEntry& slot_entry);
+  void release_client(SlotEntry& slot_entry);
+  void register_client(int client_socket, end_point_type_e socket_type);
+  void register_clients(std::vector<int>& new_clients);
   void run_deferred_actions();
   void process_events(std::vector<size_t>& event_slots);
   void process_server_socket(SlotEntry& slot_entry);
   void process_client_socket(SlotEntry& slot_entry);
-  Ev register_client(int client_socket, end_point_type_e socket_type);
-  void register_clients(std::vector<int>& new_clients);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
   Ev send_error_reply(const SlotEntry& slot_entry, Error& error);
 
