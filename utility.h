@@ -10,8 +10,7 @@ namespace bsm {
 
 class ConnectionView;
 struct ReadResult;
-
-enum class PeerKind { CLIENT, LOBBY };
+enum class end_point_e : uint8_t;
 
 enum class internal_error_e {
   GENERIC,
@@ -43,7 +42,7 @@ struct CommandStatus {
 struct CommandContext {
   ConnectionView& client;
   ReadResult& message;
-  PeerKind peer;
+  end_point_e peer;
 };
 
 std::string c_error_string();

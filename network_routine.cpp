@@ -23,7 +23,7 @@ Ev NetworkEngine::init() {
       .and_then([this]() -> Ev { return init_epoll_wrapper(); });
 }
 
-Ev NetworkEngine::init(int parrent_socket, end_point_type_e socket_type) {
+Ev NetworkEngine::init(int parrent_socket, end_point_e socket_type) {
   if (auto result = add_to_socket_pool(parrent_socket, socket_type); !result) {
     LOG(result.error().message);
     return std::unexpected(Error{"Unable to add parent socket to pool"});
@@ -65,7 +65,7 @@ void NetworkEngine::set_status_to(ConnectionView& conn_view,
 
 // ConnectionView NetworkEngine::attach(int socket) { register_client(socket); }
 
-ConnectionView NetworkEngine::attach(int socket, end_point_type_e socket_type) {
+ConnectionView NetworkEngine::attach(int socket, end_point_e socket_type) {
   register_client(socket, socket_type);
 }
 
@@ -93,7 +93,7 @@ Ev NetworkEngine::init_epoll_wrapper() {
 
 std::expected<size_t, Error>
 NetworkEngine::emplace_new_entry_to_pool(int socket_fd,
-                                         end_point_type_e socket_type) {
+                                         end_point_e socket_type) {
   try {
     socket_pool.emplace_back(
         SlotEntry{std::make_unique<SocketHandler>(socket_fd), socket_type});
@@ -106,7 +106,7 @@ NetworkEngine::emplace_new_entry_to_pool(int socket_fd,
   }
 }
 std::expected<size_t, Error>
-NetworkEngine::emplace_new_entry_to_pool(end_point_type_e socket_type) {
+NetworkEngine::emplace_new_entry_to_pool(end_point_e socket_type) {
   try {
     socket_pool.emplace_back(
         SlotEntry{std::make_unique<SocketHandler>(), socket_type});
@@ -119,7 +119,7 @@ NetworkEngine::emplace_new_entry_to_pool(end_point_type_e socket_type) {
   }
 }
 std::expected<size_t, Error> NetworkEngine::add_to_socket_pool() {
-  return emplace_new_entry_to_pool(end_point_type_e::SERVER)
+  return emplace_new_entry_to_pool(end_point_e::SERVER)
       .transform_error([](auto&& error) {
         LOG(error.message);
         error.message = "Unable to increase socket pool size";
@@ -127,7 +127,7 @@ std::expected<size_t, Error> NetworkEngine::add_to_socket_pool() {
       });
 }
 std::expected<size_t, Error>
-NetworkEngine::add_to_socket_pool(int socket_fd, end_point_type_e socket_type) {
+NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type) {
   return emplace_new_entry_to_pool(socket_fd, socket_type)
       .transform_error([](auto&& error) {
         LOG(error.message);
@@ -144,7 +144,7 @@ CommandStatus NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
 
 std::optional<size_t>
 NetworkEngine::find_spot_for_new_client(int client_socket,
-                                        end_point_type_e socket_type) {
+                                        end_point_e socket_type) {
   if (!avaiable_slots.empty()) {
     size_t slot = avaiable_slots.back();
     avaiable_slots.pop_back();
@@ -187,7 +187,7 @@ void NetworkEngine::release_client(SlotEntry& slot_entry) {
 }
 
 void NetworkEngine::register_client(int client_socket,
-                                    end_point_type_e socket_type) {
+                                    end_point_e socket_type) {
   auto new_client_slot = find_spot_for_new_client(client_socket, socket_type);
   if (!new_client_slot) {
     LOG("Unable to register new client");
@@ -206,7 +206,7 @@ void NetworkEngine::register_client(int client_socket,
 
 void NetworkEngine::register_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
-    register_client(client, end_point_type_e::CLIENT);
+    register_client(client, end_point_e::CLIENT);
   }
 }
 
@@ -268,7 +268,7 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
     break;
   }
   ConnectionView connection{slot_entry.slot};
-  CommandContext context{connection, message};
+  CommandContext context{connection, message, slot_entry.type};
   CommandStatus cmd_status =
       on_message_callback(context); //<-CallBack to Server, process user message
   if (cmd_status.error) {
