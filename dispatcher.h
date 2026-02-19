@@ -13,12 +13,12 @@ struct JoinLobby {
 };
 struct Quit {};
 struct AcceptSocket {};
-struct ConnectionCode {};
+struct LobbyIdSetter {};
 struct ChatMessage {};
 struct NotAllowed {};
 struct GeneralAction {};
 using ServerAction =
-    std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, ConnectionCode,
+    std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
                  ChatMessage, NotAllowed, GeneralAction>;
 
 inline end_point_e operator|(end_point_e a, end_point_e b) {
@@ -39,10 +39,7 @@ private:
 
     using Factory = ServerAction (*)();
 
-    template <typename T>
-    static ServerAction make_action() {
-      return T{};
-    }
+    template <typename T> static ServerAction make_action() { return T{}; }
     Factory make;
   };
 
