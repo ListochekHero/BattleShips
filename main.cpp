@@ -2,6 +2,9 @@
 #include "application.h"
 #include "config.h"
 #include "logger.h"
+#include "network_routine.h"
+#include <cstdlib>
+#include <memory>
 
 int main(int argc, char* argv[]) {
   char* program_name = strrchr(argv[0], '/');
@@ -11,20 +14,21 @@ int main(int argc, char* argv[]) {
 #ifdef DEBUG_LOGS
   bsm::LOG("DEBUG Enabled!");
 #endif
-  bsm::Ev init_result;
-  std::unique_ptr<bsm::Server> server{std::make_unique<bsm::Server>()};
+  bsm::Ev init_result{};
+  std::unique_ptr<bsm::Application> app;
   if (argc > 1) {
-    // bsm::SocketHandler parrent_ipc{std::stoi(argv[1])};
     bsm::LOG("Starting Lobby!");
-    init_result = server->init(std::stoi(argv[1]));
+    app = std::make_unique<bsm::Lobby>();
+    init_result = app->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
   } else {
+    app = std::make_unique<bsm::Server>();
     bsm::LOG("Starting Server!");
-    init_result = server->init();
+    init_result = app->init();
   }
   if (!init_result) {
     bsm::LOG(init_result.error().message);
-    return 1;
+    return EXIT_FAILURE;
   }
-  server->run();
+  app->run();
   return 0;
 }
