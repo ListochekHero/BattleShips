@@ -193,9 +193,9 @@ Ev EpollHandler::init() {
   return {};
 }
 
-Ev EpollHandler::add_socket(SocketHandler& socket_handler) {
+Ev EpollHandler::add_socket(SocketHandler& socket_handler, size_t slot) {
   struct epoll_event event;
-  event.data.u64 = socket_handler.get_occupied_slot();
+  event.data.u64 = slot;
   // event.data.ptr = static_cast<void*>(socket_handler);
   event.events = EPOLLIN | EPOLLET;
   if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==

@@ -21,7 +21,7 @@
 namespace bsm {
 
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
-enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE };
+enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE, LOBBY_ID };
 enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
 
 struct MsgHeader {
@@ -78,7 +78,7 @@ public:
   EpollHandler() = default;
   ~EpollHandler();
   Ev init();
-  Ev add_socket(SocketHandler& socket_handler);
+  Ev add_socket(SocketHandler& socket_handler, size_t slot);
   Ev remove_socket(SocketHandler& socket_handler);
   std::expected<std::vector<size_t>, Error>
   wait_for_events(size_t max_events) const;
