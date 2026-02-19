@@ -1,33 +1,38 @@
 #include "application.h"
 #include "config.h"
+#include "dispatcher.h"
 #include "lobby_manager.h"
 #include "logger.h"
 #include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
-#include <exception>
 #include <expected>
 #include <memory>
+#include <string>
+#include <variant>
 
 namespace bsm {
 
+Dispatcher& Application::dispatcher() { return dispatcher_; }
+NetworkEngine& Application::net_engine() { return net_engine_; }
+
 Ev Server::init() {
-  net_engine_.init();
-  net_engine_.set_message_handler(
+  net_engine().init();
+  net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
 }
 
-Ev Server::init(int parrent_socket, end_point_type_e socket_type) {
-  net_engine_.init(parrent_socket, socket_type);
-  net_engine_.set_message_handler(
+Ev Server::init(int parrent_socket, end_point_e socket_type) {
+  net_engine().init(parrent_socket, socket_type);
+  net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
 }
 
-void Server::run() { net_engine_.run(); }
+void Server::run() { net_engine().run(); }
 
-Ev Server::send_error_reply(const SocketHandler& client, Error& error) {
-  return client.write_to_user({{user_message(error.user_code)}})
+Ev Server::send_error_reply(const SocketHandler& client, user_error_e error) {
+  return client.write_to_user({{user_message(error)}})
       .or_else([](auto&& error) -> Ev {
         LOG(error.message);
         return std::unexpected(Error{"Unable to send an answer to user"});
@@ -36,47 +41,45 @@ Ev Server::send_error_reply(const SocketHandler& client, Error& error) {
 
 CommandStatus Server::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  for (const auto& cmd : commands) {
-    if (match_cmd(cmd, context.message)) {
-      return (this->*cmd.handler)(context);
+  auto action_to_exe = dispatcher().dispatch(context);
+  return std::visit(
+      [&](const auto& action_type) -> CommandStatus {
+        return execute_action(action_type, context);
+      },
+      action_to_exe);
+}
+
+CommandStatus Server::execute_action(const CreateLobby& action_type,
+                                     const CommandContext& context) {
+  std::optional<Error> error;
+  do {
+    auto proc = lobby_manager_.spawn_lobby();
+    if (!proc) {
+      error = proc.error();
+      break;
     }
-  }
-  return general_command(context);
-}
+    auto lobby_ipc =
+        net_engine().attach(proc->control_socket, end_point_e::LOBBY);
+    if (!lobby_ipc) {
+      error = lobby_ipc.error();
+      break;
+    }
+    auto lobby_handler = lobby_manager_.attach(proc->pid, *lobby_ipc);
+    if (!lobby_handler) {
+      error = lobby_handler.error();
+      break;
+    }
 
-std::expected<LobbyProcess, Error> Server::spawn_lobby_process() {
-  int sv[2];
-  if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1)
-    return std::unexpected(make_error_c("Failed to create socketpair: {}"));
-  pid_t pid = fork();
-  if (pid == -1)
-    return std::unexpected(make_error_c("Failed to fork: {}"));
-  if (pid == 0) {
-    close(sv[1]);
-    std::string socket_string{std::to_string(sv[0])};
-    execl("/home/listochekhero/projects/battleships/build-debug/server",
-          "./lobby", socket_string.c_str(), NULL);
-    perror("execl failed");
-    _exit(127);
-  }
-  close(sv[0]);
-  SocketHandler child_handler{sv[1]};
-  return LobbyProcess{pid, sv[1]};
-}
+    net_engine().send_message_to(
+        lobby_handler->control_connection,
+        {{std::to_string(lobby_handler->lobby_id)}, message_type_e::LOBBY_ID})
 
-void Server::execute_action(const CreateLobby& action,
-                            const CommandContext& context) {
-  auto proc = lobby_manager_.spawn_lobby();
-  if (!proc) {
-    LOG(proc.error().message);
-    return
-  }
-  ConnectionView lobby_ipc =
-      net_engine_.attach(proc->control_socket, end_point_type_e::LOBBY);
-  auto lobby_handler = lobby_manager_.attach(proc->pid, lobby_ipc);
-  if (!lobby_handler) {
-    LOG(lobby_handler.error().message);
-    LOG("Unable");
+  } while (false);
+  if (error) {
+    LOG(error->message);
+    net_engine().send_message_to(context.client,
+                                {{user_message(us_e::CANT_CREATE_LOBBY)}});
+    return CommandStatus{cmd_se::CONTINUE};
   }
 }
 

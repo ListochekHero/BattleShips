@@ -2,10 +2,12 @@
 #define APPLICATION_H
 
 #include <cstddef>
+#include <cstdint>
 #include <sys/wait.h>
 
 #include "data_storage.h"
 #include "deferred_actions.h"
+#include "dispatcher.h"
 #include "lobby_manager.h"
 #include "network_routine.h"
 #include "socket_routine.h"
@@ -23,28 +25,30 @@ struct CreateLobby;
 
 class Application {
 public:
+  virtual Ev init();
+  virtual Ev init(int, end_point_e);
   virtual void run() = 0;
   virtual ~Application() = default;
 
 protected:
-  EpollHandler epoll_handler;
-  std::vector<std::unique_ptr<SocketHandler>> sockets;
-
+  Dispatcher& dispatcher();
+  NetworkEngine& net_engine();
 private:
+  NetworkEngine net_engine_;
+  Dispatcher dispatcher_;
 };
 
 class Server : public Application {
 public:
   friend struct Command;
   Server() = default;
-  Ev init();                   // init() for Server
-  Ev init(int parrent_socket, end_point_type_e socket_type); // init() for Lobby
+  Ev init();                                            // init() for Server
+  Ev init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   virtual void run();
   void cleanup_slot(size_t slot);
 
 private:
   CommandStatus handle_client_cmd(CommandContext& context);
-  std::expected<LobbyProcess, Error> spawn_lobby_process();
   CommandStatus create_lobby(const CommandContext& context);
   Ev init_child(const SocketHandler& child_socket, int64_t child_id,
                 SocketHandler& client);
@@ -55,15 +59,39 @@ private:
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
   CommandStatus chat_message(const CommandContext& context);
 
-  Ev send_error_reply(const SocketHandler& client, Error& error);
+  Ev send_error_reply(const SocketHandler& client, user_error_e error);
   void handle_zombie_pocesses();
-  void execute_action(const CreateLobby& action, const CommandContext& context);
-
+  CommandStatus execute_action(const CreateLobby& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const JoinLobby& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const Quit& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const AcceptSocket& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const LobbyIdSetter& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const ChatMessage& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const NotAllowed& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const GeneralAction& action_type,
+                               const CommandContext& context);
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   CommandStatus process_message(CommandContext& context);
 
-  NetworkEngine net_engine_;
+
   LobbyManager lobby_manager_;
+};
+
+class Lobby : public Application {
+public:
+  Ev init(int parrent_socket, end_point_e socket_type);
+  virtual void run();
+
+private:
+  int64_t lobby_id;
+  NetworkEngine net_engine_;
 };
 
 class Client : public Application {
