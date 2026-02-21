@@ -2,9 +2,11 @@
 #include "application.h"
 #include "config.h"
 #include "logger.h"
+#include "scope_guard.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <unistd.h>
@@ -57,9 +59,14 @@ void NetworkEngine::run() {
   run_deferred_actions();
 }
 
-void NetworkEngine::send_message_to(const ConnectionView& conn_view,
-                                    const OutgoingMessage& message) {
-  socket_pool_[conn_view.get_slot()].handler->write_to_user(message);
+Ev NetworkEngine::send_message_to(const ConnectionView& conn_view,
+                                  const OutgoingMessage& message) {
+  return socket_pool_[conn_view.get_slot()]
+      .handler->write_to_user(message)
+      .transform_error([](auto&& error) {
+        LOG(error.message);
+        return Error{"Unable to send message to user"};
+      });
 }
 
 Ev NetworkEngine::send_error_message_to(const ConnectionView& conn_view,
@@ -85,11 +92,26 @@ NetworkEngine::attach(int socket, end_point_e socket_type) {
 }
 Ev NetworkEngine::transfer(const ConnectionView& dest_view,
                            const ConnectionView& src_view) {
-  SlotEntry& destination{socket_pool_[dest_view.get_slot()]};
-  SlotEntry& source{socket_pool_[src_view.get_slot()]};
-  unsubscribe_from_events(source);
-  destination.handler->write_to_user(
-      {{"\\socket"}, message_type_e::SOCKET, source.handler->get_socket()});
+  SlotEntry& dest_entry{socket_pool_[dest_view.get_slot()]};
+  SlotEntry& src_entry{socket_pool_[src_view.get_slot()]};
+  unsubscribe_from_events(src_entry);
+  auto rollback{make_scope_guard([&]() {
+    if (auto result = subscribe_to_events(src_entry); !result) {
+      LOG(result.error().message);
+      if (auto result = free_slot_entry(src_entry); !result) {
+        LOG(result.error().message);
+      }
+    }
+  })};
+  if (auto result =
+          dest_entry.handler->write_to_user({{"\\socket"},
+                                             message_type_e::SOCKET,
+                                             src_entry.handler->get_socket()});
+      !result) {
+    return std::unexpected(Error{"Unable to transfer socket over"});
+  }
+  rollback.dismiss();
+  return free_slot_entry(src_entry);
 }
 
 Ev NetworkEngine::init_epoll() {
@@ -148,9 +170,14 @@ NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type) {
       });
 }
 
-CommandStatus NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
-  slot_entry.handler->reset_to_empty();
-  avaiable_slots_.emplace_back(slot_entry.slot);
+Ev NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
+  try {
+    avaiable_slots_.emplace_back(slot_entry.slot);
+    slot_entry.handler->reset_to_empty();
+  } catch (const std::exception e) {
+    LOG(e.what());
+    return std::unexpected(Error{"Exception caught during freeing slot entry"});
+  }
   return {};
 }
 
@@ -192,6 +219,7 @@ void NetworkEngine::unsubscribe_from_events(SlotEntry& slot_entry) {
                     return {};
                   }));
 }
+
 void NetworkEngine::release_client(SlotEntry& slot_entry) {
   unsubscribe_from_events(slot_entry);
   free_slot_entry(slot_entry);

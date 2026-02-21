@@ -23,7 +23,6 @@ struct SlotEntry {
   size_t slot;
   size_t generation{std::numeric_limits<std::size_t>::max()};
 };
-class Server;
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
@@ -32,7 +31,7 @@ public:
   Ev init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
-  void send_message_to(const ConnectionView& conn_view,
+  Ev send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
   Ev send_error_message_to(const ConnectionView& conn_view,
                            user_error_e user_code);
@@ -50,7 +49,7 @@ private:
   std::expected<size_t, Error> add_to_socket_pool();
   std::expected<size_t, Error> add_to_socket_pool(int socket_fd,
                                                   end_point_e socket_type);
-  CommandStatus free_slot_entry(SlotEntry& slot_entry);
+  Ev free_slot_entry(SlotEntry& slot_entry);
   std::expected<size_t, Error>
   find_spot_for_new_client(int client_socket, end_point_e socket_type);
   Ev subscribe_to_events(SlotEntry& slot_entry);
