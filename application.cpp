@@ -6,10 +6,13 @@
 #include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <csignal>
 #include <cstddef>
 #include <expected>
+#include <functional>
 #include <memory>
 #include <string>
+#include <unistd.h>
 #include <variant>
 
 namespace bsm {
@@ -23,16 +26,12 @@ Ev Server::init() {
       [this](CommandContext context) { return handle_client_cmd(context); });
 }
 
-Ev Server::init(int parrent_socket, end_point_e socket_type) {
-  net_engine().init(parrent_socket, socket_type);
-  net_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
-}
-
 void Server::run() { net_engine().run(); }
 
-Ev Server::send_error_reply(const SocketHandler& client, user_error_e error) {
-  return client.write_to_user({{user_message(error)}})
+Ev Server::send_error_reply(const ConnectionView& conn_view,
+                            user_error_e error) {
+  return net_engine()
+      .send_error_message_to(conn_view, error)
       .or_else([](auto&& error) -> Ev {
         LOG(error.message);
         return std::unexpected(Error{"Unable to send an answer to user"});
@@ -49,38 +48,47 @@ CommandStatus Server::handle_client_cmd(CommandContext& context) {
       action_to_exe);
 }
 
+std::expected<LobbyView, Error> Server::request_lobby() {
+  std::optional<Error> error;
+  auto proc = lobby_manager_.spawn_lobby();
+  if (!proc) {
+    error = proc.error();
+  }
+  auto lobby_ipc =
+      net_engine().attach(proc->control_socket, end_point_e::LOBBY);
+  if (!lobby_ipc) {
+    error = lobby_ipc.error();
+  }
+  auto lobby_handler = lobby_manager_.attach(proc->pid, *lobby_ipc);
+  if (!lobby_handler) {
+    error = lobby_handler.error();
+  }
+  return lobby_handler;
+  LOG(error->message);
+  return std::unexpected(Error{"Unable to setup new lobby for request"});
+}
+
 CommandStatus Server::execute_action(const CreateLobby& action_type,
                                      const CommandContext& context) {
-  std::optional<Error> error;
-  do {
-    auto proc = lobby_manager_.spawn_lobby();
-    if (!proc) {
-      error = proc.error();
-      break;
-    }
-    auto lobby_ipc =
-        net_engine().attach(proc->control_socket, end_point_e::LOBBY);
-    if (!lobby_ipc) {
-      error = lobby_ipc.error();
-      break;
-    }
-    auto lobby_handler = lobby_manager_.attach(proc->pid, *lobby_ipc);
-    if (!lobby_handler) {
-      error = lobby_handler.error();
-      break;
-    }
-
-    net_engine().send_message_to(
-        lobby_handler->control_connection,
-        {{std::to_string(lobby_handler->lobby_id)}, message_type_e::LOBBY_ID})
-
-  } while (false);
-  if (error) {
-    LOG(error->message);
-    net_engine().send_message_to(context.client,
-                                {{user_message(us_e::CANT_CREATE_LOBBY)}});
+  auto lobby_view{request_lobby()};
+  if (!lobby_view) {
+    LOG(lobby_view.error().message);
+    net_engine().send_error_message_to(context.client, us_e::CANT_CREATE_LOBBY);
     return CommandStatus{cmd_se::CONTINUE};
   }
+  if (auto result = net_engine().send_message_to(
+          lobby_view->control_connection,
+          {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
+      !result) {
+    LOG(result.error().message);
+    return CommandStatus{cmd_se::CONTINUE};
+  }
+  if (auto result =
+          net_engine().transfer(lobby_view->control_connection, context.client);
+      !result) {
+    LOG(result.error().message);
+  }
+  return CommandStatus{cmd_se::TERMINATE};
 }
 
 CommandStatus Server::create_lobby(const CommandContext& context) {

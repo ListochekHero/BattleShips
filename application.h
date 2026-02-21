@@ -25,14 +25,13 @@ struct CreateLobby;
 
 class Application {
 public:
-  virtual Ev init();
-  virtual Ev init(int, end_point_e);
   virtual void run() = 0;
   virtual ~Application() = default;
 
 protected:
   Dispatcher& dispatcher();
   NetworkEngine& net_engine();
+
 private:
   NetworkEngine net_engine_;
   Dispatcher dispatcher_;
@@ -40,11 +39,9 @@ private:
 
 class Server : public Application {
 public:
-  friend struct Command;
   Server() = default;
-  Ev init();                                            // init() for Server
-  Ev init(int parrent_socket, end_point_e socket_type); // init() for Lobby
-  virtual void run();
+  Ev init();
+  void run() override;
   void cleanup_slot(size_t slot);
 
 private:
@@ -58,9 +55,10 @@ private:
   CommandStatus general_command(const CommandContext& context);
   std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
   CommandStatus chat_message(const CommandContext& context);
-
-  Ev send_error_reply(const SocketHandler& client, user_error_e error);
+  Ev send_error_reply(const ConnectionView& client, user_error_e error);
   void handle_zombie_pocesses();
+
+  std::expected<LobbyView, Error> request_lobby();
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const JoinLobby& action_type,
@@ -80,16 +78,16 @@ private:
   std::unordered_map<int64_t, LobbyProcess> lobbies;
   CommandStatus process_message(CommandContext& context);
 
-
   LobbyManager lobby_manager_;
 };
 
 class Lobby : public Application {
 public:
   Ev init(int parrent_socket, end_point_e socket_type);
-  virtual void run();
+  void run() override;
 
 private:
+  CommandStatus handle_client_cmd(CommandContext& context);
   int64_t lobby_id;
   NetworkEngine net_engine_;
 };
