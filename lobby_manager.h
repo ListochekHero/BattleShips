@@ -29,7 +29,7 @@ class LobbyManager {
 public:
   std::expected<const LobbyView, Error> find(int64_t lobby_id);
   std::expected<LobbyProcess, Error> spawn_lobby();
-  std::expected<const LobbyView, Error> attach(pid_t pid,
+  std::expected<LobbyView, Error> attach(pid_t pid,
                                          ConnectionView control_connection);
 
 private:

@@ -12,30 +12,25 @@ class ConnectionView;
 struct ReadResult;
 enum class end_point_e : uint8_t;
 
-enum class internal_error_e {
-  GENERIC,
-  INVALID_ARGS,
-  NOT_FOUND,
-  PERMISSION_DENIED,
-  ALREADY_EXIST,
-  INTERNAL,
-  SYSTEM
-};
 enum class user_error_e {
   GENERIC,
   CANT_CREATE_LOBBY,
   CANT_JOIN_LOBBY,
   UNKNOWN_COMMAND
 };
+using us_e = user_error_e;
+
 enum class command_status_e { CONTINUE, TERMINATE };
+using cmd_se = command_status_e;
 
 struct Error {
   std::string message;
-  user_error_e user_code{0};
 };
+using Ev = std::expected<void, Error>;
 
 struct CommandStatus {
   command_status_e command_status_v;
+  std::optional<us_e> user_code{us_e::GENERIC};
   std::optional<Error> error{std::nullopt};
 };
 
@@ -57,11 +52,6 @@ std::expected<std::string, Error> parse(const std::string& message);
 std::expected<std::string, Error> generate_name();
 
 template <typename T, typename E> void drop_result(std::expected<T, E>&&) {}
-
-using er_e = internal_error_e;
-using us_e = user_error_e;
-using cmd_se = command_status_e;
-using Ev = std::expected<void, Error>;
 } // namespace bsm
 
 #endif

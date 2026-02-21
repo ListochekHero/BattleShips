@@ -31,7 +31,7 @@ std::expected<LobbyProcess, Error> LobbyManager::spawn_lobby() {
   return LobbyProcess{pid, sv[1]};
 }
 
-std::expected<const LobbyView, Error>
+std::expected<LobbyView, Error>
 LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
   int64_t lobby_id{generate_conn_code()};
   auto [it, inserted] =
@@ -39,7 +39,7 @@ LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
   if (!inserted) {
     kill(pid, SIGKILL);
     return std::unexpected(
-        Error{"Unable to emplace lobby into map", us_e::CANT_CREATE_LOBBY});
+        Error{"Unable to emplace lobby into map"});
   }
 }
 } // namespace bsm

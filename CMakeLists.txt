@@ -27,6 +27,7 @@ data_storage.cpp
 deferred_actions.cpp
 network_routine.cpp
 lobby_manager.cpp
+dispatcher.cpp
 )
 
 # add_library(sanitizers INTERFACE)

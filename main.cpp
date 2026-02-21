@@ -9,7 +9,10 @@
 int main(int argc, char* argv[]) {
   char* program_name = strrchr(argv[0], '/');
   program_name++;
-  bsm::Logger::instance().init(program_name);
+  if (auto result = bsm::Logger::instance().init(program_name); !result) {
+    std::cout << "Unable to init Logger";
+    return EXIT_FAILURE;
+  }
   bsm::Config config;
 #ifdef DEBUG_LOGS
   bsm::LOG("DEBUG Enabled!");
@@ -18,12 +21,14 @@ int main(int argc, char* argv[]) {
   std::unique_ptr<bsm::Application> app;
   if (argc > 1) {
     bsm::LOG("Starting Lobby!");
-    app = std::make_unique<bsm::Lobby>();
-    init_result = app->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
+    auto lobby{std::make_unique<bsm::Lobby>()};
+    init_result = lobby->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
+    app = std::move(lobby);
   } else {
-    app = std::make_unique<bsm::Server>();
     bsm::LOG("Starting Server!");
-    init_result = app->init();
+    auto server{std::make_unique<bsm::Server>()};
+    init_result = server->init();
+    app = std::move(server);
   }
   if (!init_result) {
     bsm::LOG(init_result.error().message);
