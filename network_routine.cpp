@@ -5,7 +5,10 @@
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
+#include <memory>
 #include <optional>
+#include <unistd.h>
+#include <utility>
 
 namespace bsm {
 
@@ -59,6 +62,10 @@ void NetworkEngine::send_message_to(const ConnectionView& conn_view,
   socket_pool_[conn_view.get_slot()].handler->write_to_user(message);
 }
 
+Ev NetworkEngine::send_error_message_to(const ConnectionView& conn_view,
+                                        user_error_e user_code) {
+  return send_error_reply(socket_pool_[conn_view.get_slot()], user_code);
+}
 void NetworkEngine::set_status_to(ConnectionView& conn_view,
                                   socket_status_e status) {
   socket_pool_[conn_view.get_slot()].handler->set_socket_status(status);
@@ -75,6 +82,14 @@ NetworkEngine::attach(int socket, end_point_e socket_type) {
     LOG(slot_index.error().message);
     return std::unexpected(Error{"Unable to attach new client to engine"});
   }
+}
+Ev NetworkEngine::transfer(const ConnectionView& dest_view,
+                           const ConnectionView& src_view) {
+  SlotEntry& destination{socket_pool_[dest_view.get_slot()]};
+  SlotEntry& source{socket_pool_[src_view.get_slot()]};
+  unsubscribe_from_events(source);
+  destination.handler->write_to_user(
+      {{"\\socket"}, message_type_e::SOCKET, source.handler->get_socket()});
 }
 
 Ev NetworkEngine::init_epoll() {
@@ -99,43 +114,33 @@ Ev NetworkEngine::init_epoll_wrapper() {
   });
 }
 
+template <typename... Args>
 std::expected<size_t, Error>
-NetworkEngine::emplace_new_entry_to_pool(int socket_fd,
-                                         end_point_e socket_type) {
+NetworkEngine::emplace_new_entry_to_pool(Args&&... args) {
   try {
     size_t occupied_slot{socket_pool_.size()};
-    socket_pool_.emplace_back(
-        SlotEntry{std::make_unique<SocketHandler>(socket_fd), socket_type,
-                  occupied_slot});
+    socket_pool_.emplace_back(std::forward<Args>(args)..., occupied_slot);
     return occupied_slot;
   } catch (const std::exception& e) {
     LOG(e.what());
     return std::unexpected(Error{"Unable to emplace new socket handler"});
   }
 }
-std::expected<size_t, Error>
-NetworkEngine::emplace_new_entry_to_pool(end_point_e socket_type) {
-  try {
-    size_t occupied_slot{socket_pool_.size()};
-    socket_pool_.emplace_back(SlotEntry{std::make_unique<SocketHandler>(),
-                                        socket_type, occupied_slot});
-    return occupied_slot;
-  } catch (const std::exception& e) {
-    LOG(e.what());
-    return std::unexpected(Error{"Unable to emplace new socket handler"});
-  }
-}
+
 std::expected<size_t, Error> NetworkEngine::add_to_socket_pool() {
-  return emplace_new_entry_to_pool(end_point_e::SERVER)
+  return emplace_new_entry_to_pool(std::make_unique<SocketHandler>(),
+                                   end_point_e::SERVER)
       .transform_error([](auto error) {
         LOG(error.message);
         error.message = "Unable to increase socket pool size";
         return error;
       });
 }
+
 std::expected<size_t, Error>
 NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type) {
-  return emplace_new_entry_to_pool(socket_fd, socket_type)
+  return emplace_new_entry_to_pool(std::make_unique<SocketHandler>(socket_fd),
+                                   socket_type)
       .transform_error([](auto error) {
         LOG(error.message);
         error.message = "Unable to add given socket to socket pool";
@@ -205,7 +210,7 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
       .transform([&]() { return new_client_entry.slot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.message);
-        if (auto r = send_error_reply(new_client_entry, error); !r) {
+        if (auto r = send_error_reply(new_client_entry, us_e::GENERIC); !r) {
           LOG(r.error().message);
         }
         free_slot_entry(new_client_entry);
@@ -285,15 +290,15 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
   if (cmd_status.error) {
     LOG(cmd_status.error->message);
     LOG("Unable to handle client command: " + context.message.payload);
-    if (auto result = send_error_reply(slot_entry, *cmd_status.error); !result)
+    if (auto result = send_error_reply(slot_entry, us_e::GENERIC); !result)
       LOG(result.error().message);
   }
   return cmd_status;
 }
 
 Ev NetworkEngine::send_error_reply(const SlotEntry& slot_entry,
-                                   const Error& error) {
-  return slot_entry.handler->write_to_user({{user_message(error.user_code)}})
+                                   user_error_e user_code) {
+  return slot_entry.handler->write_to_user({{user_message(user_code)}})
       .or_else([](auto&& error) -> Ev {
         LOG(error.message);
         return std::unexpected(Error{"Unable to send an answer to user"});

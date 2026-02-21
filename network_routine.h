@@ -17,14 +17,13 @@ enum class end_point_e : uint8_t {
   PARENT = 1 << 2,
   SERVER = 1 << 3,
 };
-
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
   end_point_e type;
-  const size_t slot;
+  size_t slot;
   size_t generation{std::numeric_limits<std::size_t>::max()};
 };
-
+class Server;
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
@@ -35,18 +34,19 @@ public:
   void run();
   void send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
+  Ev send_error_message_to(const ConnectionView& conn_view,
+                           user_error_e user_code);
   void set_status_to(ConnectionView& conn_view, socket_status_e status);
   // ConnectionView attach(int socket);
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
+  Ev transfer(const ConnectionView& dest, const ConnectionView& src);
 
 private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
-  std::expected<size_t, Error>
-  emplace_new_entry_to_pool(int socket_fd, end_point_e socket_type);
-  std::expected<size_t, Error>
-  emplace_new_entry_to_pool(end_point_e socket_type);
+  template <typename... Args>
+  std::expected<size_t, Error> emplace_new_entry_to_pool(Args&& ...);
   std::expected<size_t, Error> add_to_socket_pool();
   std::expected<size_t, Error> add_to_socket_pool(int socket_fd,
                                                   end_point_e socket_type);
@@ -64,12 +64,12 @@ private:
   void process_server_socket(SlotEntry& slot_entry);
   void process_client_socket(SlotEntry& slot_entry);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
-  Ev send_error_reply(const SlotEntry& slot_entry, const Error& error);
+  Ev send_error_reply(const SlotEntry& slot_entry, user_error_e user_code);
 
-  std::vector<size_t> avaiable_slots_;
-  MessageHandler on_message_callback_;
-  EpollHandler epoll_handler_;
   std::vector<SlotEntry> socket_pool_;
+  std::vector<size_t> avaiable_slots_;
+  EpollHandler epoll_handler_;
+  MessageHandler on_message_callback_;
   std::vector<std::unique_ptr<DeferredAction>> deferred_actions_;
 };
 
