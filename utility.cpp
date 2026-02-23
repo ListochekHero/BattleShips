@@ -1,32 +1,13 @@
 #include "utility.h"
+#include "logger.h"
 #include <filesystem>
 #include <string>
 
 namespace bsm {
 
-std::string_view user_message(user_error_e user) {
-  switch (user) {
-  case user_error_e::GENERIC:
-    return "Error occurred, please try again latter.";
-  case user_error_e::CANT_CREATE_LOBBY:
-    return "Cant create lobby, please try again latter.";
-  case user_error_e::CANT_JOIN_LOBBY:
-    return "Cant join lobby, please check connection code or try again.";
-  case user_error_e::UNKNOWN_COMMAND:
-    return "Unknown command, please check your input.";
-  // case er_e::INTERNAL:
-  //   return "INTERNAL";
-  // case er_e::SYSTEM:
-  //   return "SYSTEM";
-  default:
-    return "Something unexpeceted happened";
-  }
-}
 bool is_file_exist(const std::string& filename) {
   return std::filesystem::exists(filename);
 }
-
-std::string c_error_string() { return std::system_category().message(errno); }
 
 int64_t generate_conn_code() {
   std::time_t now = std::time(nullptr);
@@ -42,7 +23,7 @@ std::expected<std::string, Error> parse(const std::string& message) {
   if (pos != std::string::npos) {
     string_code = {message, ++pos};
   } else {
-    return std::unexpected(Error{"Cant parse chat message"});
+    return std::unexpected(Error{{"Cant parse chat message"}});
   };
   return string_code;
 }
@@ -50,6 +31,13 @@ std::expected<std::string, Error> parse(const std::string& message) {
 std::expected<std::string, Error> generate_name() {
   std::string new_name = "user" + std::to_string(generate_conn_code());
   return new_name;
+}
+
+void success_or_terminate(Ev&& r) {
+  if (!r) {
+    LOG(r.error().full_report());
+    std::terminate();
+  }
 }
 
 } // namespace bsm
