@@ -1,11 +1,12 @@
 #ifndef UTILITY_H
 #define UTILITY_H
 
+#include "error.h"
+#include "logger.h"
 #include <cstdint>
 #include <expected>
 #include <optional>
 #include <string>
-#include "error.h"
 
 namespace bsm {
 
@@ -35,6 +36,16 @@ std::expected<std::string, Error> generate_name();
 void success_or_terminate(Ev&& r);
 
 template <typename T, typename E> void drop_result(std::expected<T, E>&&) {}
+
+template <typename T, typename E>
+void success_or_terminate(std::expected<T, E>&& r) {
+  if (!r) {
+    LOG(r.error().full_report());
+    LOG("Critical error occured, terminating...");
+    std::terminate();
+  }
+}
+
 } // namespace bsm
 
 #endif

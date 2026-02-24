@@ -1,5 +1,4 @@
 #include "utility.h"
-#include "logger.h"
 #include <filesystem>
 #include <string>
 
@@ -31,13 +30,6 @@ std::expected<std::string, Error> parse(const std::string& message) {
 std::expected<std::string, Error> generate_name() {
   std::string new_name = "user" + std::to_string(generate_conn_code());
   return new_name;
-}
-
-void success_or_terminate(Ev&& r) {
-  if (!r) {
-    LOG(r.error().full_report());
-    std::terminate();
-  }
 }
 
 } // namespace bsm
