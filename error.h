@@ -2,6 +2,7 @@
 #define ERROR_H
 
 #include <expected>
+#include <format>
 #include <source_location>
 #include <string>
 #include <vector>
@@ -18,8 +19,14 @@ using us_e = user_error_e;
 
 struct Error {
   std::vector<std::string> backtrace;
-  void add_context(std::string msg,
-                   std::source_location loc = std::source_location::current());
+  template <typename Self>
+  auto&&
+  add_context(this Self&& self, std::string msg,
+              std::source_location loc = std::source_location::current()) {
+    self.backtrace.push_back(std::format("{}:{} in {}:{}", loc.file_name(),
+                                         loc.line(), loc.function_name(), msg));
+    return std::forward<Self>(self);
+  }
   std::string full_report() const;
 };
 using Ev = std::expected<void, Error>;

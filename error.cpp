@@ -1,13 +1,7 @@
 #include "error.h"
-#include <format>
-#include <source_location>
 
 namespace bsm {
 
-void Error::add_context(std::string msg, std::source_location loc) {
-  backtrace.push_back(std::format("{}:{} in {}:{}", loc.file_name(), loc.line(),
-                                  loc.function_name(), msg));
-}
 std::string Error::full_report() const {
   std::string report{"Error Trace:\n"};
   for (auto it = backtrace.rbegin(); it != backtrace.rend(); ++it) {
