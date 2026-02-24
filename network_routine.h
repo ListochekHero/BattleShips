@@ -39,7 +39,7 @@ public:
   // ConnectionView attach(int socket);
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
-  Ev transfer(const ConnectionView& dest, const ConnectionView& src);
+  std::expected<CommandStatus, Error> transfer(const ConnectionView& dest, const ConnectionView& src);
 
 private:
   Ev init_epoll();
