@@ -1,9 +1,9 @@
 #include "network_routine.h"
 #include "application.h"
 #include "config.h"
+#include "deferred_actions.h"
 #include "error.h"
 #include "logger.h"
-#include "scope_guard.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
@@ -54,7 +54,7 @@ void NetworkEngine::run() {
                     return {};
                   });
   }
-  run_deferred_actions();
+  deferred_actions_.flush(*this);
 }
 
 Ev NetworkEngine::send_message_to(const ConnectionView& conn_view,
@@ -88,9 +88,8 @@ NetworkEngine::attach(int socket, end_point_e socket_type) {
   }
 }
 
-std::expected<CommandStatus, Error>
-NetworkEngine::transfer(const ConnectionView& dest_view,
-                        const ConnectionView& src_view) {
+CommandStatus NetworkEngine::transfer(const ConnectionView& dest_view,
+                                      const ConnectionView& src_view) {
   SlotEntry& dest_entry{socket_pool_[dest_view.get_slot()]};
   SlotEntry& src_entry{socket_pool_[src_view.get_slot()]};
   unsubscribe_from_events(src_entry);
@@ -104,15 +103,21 @@ NetworkEngine::transfer(const ConnectionView& dest_view,
     if (auto result = subscribe_to_events(src_entry); !result) {
       LOG(result.error().full_report());
       LOG("Error while trying to recover socket, closing connection");
-      success_or_terminate(free_slot_entry(src_entry));
+      deferred_actions_.schedule(
+          std::make_unique<Cleanup_Connection>(src_entry.slot), *this);
       return CommandStatus{cmd_se::TERMINATE,
                            Error{{"Transfer failed, connection lost"}}};
     }
     return CommandStatus{cmd_se::CONTINUE,
                          Error{{"Transfer failed, connection preserved"}}};
   }
-  success_or_terminate(free_slot_entry(src_entry));
+  deferred_actions_.schedule(
+      std::make_unique<Cleanup_Connection>(src_entry.slot), *this);
   return CommandStatus{cmd_se::TERMINATE};
+}
+
+void NetworkEngine::cleanup_slot(size_t slot) {
+  release_client(socket_pool_[slot]);
 }
 
 Ev NetworkEngine::init_epoll() {
@@ -216,7 +221,6 @@ void NetworkEngine::unsubscribe_from_events(SlotEntry& slot_entry) {
 void NetworkEngine::release_client(SlotEntry& slot_entry) {
   unsubscribe_from_events(slot_entry);
   success_or_terminate(free_slot_entry(slot_entry));
-  return;
 }
 
 std::expected<size_t, Error>
@@ -246,13 +250,6 @@ void NetworkEngine::register_clients(std::vector<int>& new_clients) {
       LOG(result.error().full_report());
     }
   }
-}
-
-void NetworkEngine::run_deferred_actions() {
-  for (auto& action : deferred_actions_) {
-    action->run(*this);
-  }
-  deferred_actions_.clear();
 }
 
 void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
@@ -324,6 +321,17 @@ Ev NetworkEngine::send_error_reply(const SlotEntry& slot_entry,
         return std::unexpected(
             error.add_context("Unable to send an answer to user"));
       });
+}
+
+void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
+  SlotEntry& entry{engine.socket_pool_[slot]};
+  entry.generation++;
+  entry.type = end_point_e::NONE;
+  entry.handler->set_socket_status(socket_status_e::CLOSED);
+}
+
+void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {
+  engine.release_client(engine.socket_pool_[slot]);
 }
 
 ConnectionView::ConnectionView(size_t slot) : slot{slot} {}

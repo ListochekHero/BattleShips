@@ -1,6 +1,7 @@
 #ifndef NETWORK_ROUTINE_H
 #define NETWORK_ROUTINE_H
 
+#include "deferred_actions.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <cstddef>
@@ -9,7 +10,6 @@
 
 namespace bsm {
 
-struct DeferredAction;
 enum class end_point_e : uint8_t {
   NONE = 0,
   CLIENT = 1 << 0,
@@ -17,12 +17,24 @@ enum class end_point_e : uint8_t {
   PARENT = 1 << 2,
   SERVER = 1 << 3,
 };
+
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
   end_point_e type;
   size_t slot;
   size_t generation{std::numeric_limits<std::size_t>::max()};
 };
+
+class ConnectionView {
+public:
+  ConnectionView(size_t slot);
+  void send(OutgoingMessage message);
+  size_t get_slot() const;
+
+private:
+  size_t slot;
+};
+
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
@@ -32,20 +44,21 @@ public:
   void set_message_handler(MessageHandler h);
   void run();
   Ev send_message_to(const ConnectionView& conn_view,
-                       const OutgoingMessage& message);
+                     const OutgoingMessage& message);
   Ev send_error_message_to(const ConnectionView& conn_view,
                            user_error_e user_code);
   void set_status_to(ConnectionView& conn_view, socket_status_e status);
   // ConnectionView attach(int socket);
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
-  std::expected<CommandStatus, Error> transfer(const ConnectionView& dest, const ConnectionView& src);
+  CommandStatus transfer(const ConnectionView& dest, const ConnectionView& src);
+  void cleanup_slot(size_t slot);
 
 private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
   template <typename... Args>
-  std::expected<size_t, Error> emplace_new_entry_to_pool(Args&& ...);
+  std::expected<size_t, Error> emplace_new_entry_to_pool(Args&&...);
   std::expected<size_t, Error> add_to_socket_pool();
   std::expected<size_t, Error> add_to_socket_pool(int socket_fd,
                                                   end_point_e socket_type);
@@ -58,28 +71,26 @@ private:
   std::expected<size_t, Error> register_client(int client_socket,
                                                end_point_e socket_type);
   void register_clients(std::vector<int>& new_clients);
-  void run_deferred_actions();
   void process_events(std::vector<size_t>& event_slots);
   void process_server_socket(SlotEntry& slot_entry);
   void process_client_socket(SlotEntry& slot_entry);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
   Ev send_error_reply(const SlotEntry& slot_entry, user_error_e user_code);
+  class Cleanup_Connection : public DeferredAction {
+  public:
+    explicit Cleanup_Connection(size_t s) : slot(s) {}
+    explicit Cleanup_Connection(ConnectionView view) : slot(view.get_slot()) {}
+    void prepare(NetworkEngine& engine) override;
+    void execute(NetworkEngine& engine) override;
 
+  private:
+    size_t slot;
+  };
   std::vector<SlotEntry> socket_pool_;
   std::vector<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
-  std::vector<std::unique_ptr<DeferredAction>> deferred_actions_;
-};
-
-class ConnectionView {
-public:
-  ConnectionView(size_t slot);
-  void send(OutgoingMessage message);
-  size_t get_slot() const;
-
-private:
-  size_t slot;
+  DeferredActions deferred_actions_;
 };
 
 } // namespace bsm

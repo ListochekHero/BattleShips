@@ -1,10 +1,16 @@
 #include "deferred_actions.h"
-#include "application.h"
 
 namespace bsm {
 
-void CleanupSHP_Slot::run(NetworkEngine& nw_engine){
-    nw_engine.cleanup_slot(slot);
+void DeferredActions::schedule(std::unique_ptr<DeferredAction> action,
+                               NetworkEngine& engine) {
+  action->prepare(engine);
+  actions_.push_back(std::move(action));
+}
+void DeferredActions::flush(NetworkEngine& engine) {
+  for (auto& a : actions_)
+    a->execute(engine);
+  actions_.clear();
 }
 
 } // namespace bsm
