@@ -1,7 +1,6 @@
 #ifndef LOBBY_MANAGER_H
 #define LOBBY_MANAGER_H
 
-#include "data_storage.h"
 #include "network_routine.h"
 #include "utility.h"
 #include <cstdint>
@@ -21,13 +20,13 @@ struct LobbyEntry {
 };
 
 struct LobbyView {
-   int64_t lobby_id;
-   ConnectionView control_connection;
+  int64_t lobby_id;
+  ConnectionView control_connection;
 };
 
 class LobbyManager {
 public:
-  std::expected<const LobbyView, Error> find(int64_t lobby_id);
+  std::expected<LobbyView, Error> find(int64_t lobby_id);
   std::expected<LobbyProcess, Error> spawn_lobby();
   std::expected<LobbyView, Error> attach(pid_t pid,
                                          ConnectionView control_connection);

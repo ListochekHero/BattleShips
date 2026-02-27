@@ -1,6 +1,8 @@
 #include "client.h"
 #include "logger.h"
 #include "socket_routine.h"
+#include <cstdio>
+#include <iostream>
 
 #define SERVER_PORT 8000
 

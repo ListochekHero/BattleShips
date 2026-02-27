@@ -1,13 +1,14 @@
 #include "lobby_manager.h"
 #include "network_routine.h"
-#include <csignal>
+#include <cstdlib>
+#include <signal.h>
 
 namespace bsm {
 
-std::expected<const LobbyView, Error> LobbyManager::find(int64_t lobby_id) {
+std::expected<LobbyView, Error> LobbyManager::find(int64_t lobby_id) {
   auto it = lobbies_.find(lobby_id);
   if (it == lobbies_.end()) {
-    return std::unexpected(Error{"Lobby with given id doesn`t exist"});
+    return std::unexpected(Error{{"Lobby with given id doesn`t exist"}});
   }
   return LobbyView{lobby_id, it->second.control_connection};
 }
@@ -25,7 +26,7 @@ std::expected<LobbyProcess, Error> LobbyManager::spawn_lobby() {
     execl("/home/listochekhero/projects/battleships/build-debug/server",
           "./lobby", socket_string.c_str(), NULL);
     perror("execl failed");
-    _exit(127);
+    _exit(EXIT_FAILURE);
   }
   close(sv[0]);
   return LobbyProcess{pid, sv[1]};
@@ -38,8 +39,7 @@ LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
       lobbies_.try_emplace(lobby_id, LobbyEntry{pid, control_connection});
   if (!inserted) {
     kill(pid, SIGKILL);
-    return std::unexpected(
-        Error{"Unable to emplace lobby into map"});
+    return std::unexpected(Error{{"Unable to emplace lobby into map"}});
   }
 }
 } // namespace bsm

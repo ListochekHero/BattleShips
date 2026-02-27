@@ -1,4 +1,5 @@
 #include "application.h"
+#include "data_storage.h"
 #include "dispatcher.h"
 #include "error.h"
 #include "lobby_manager.h"

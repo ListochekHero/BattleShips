@@ -1,6 +1,8 @@
 #include "lobby.h"
 #include "application.h"
 #include "logger.h"
+#include "network_routine.h"
+
 using bsm::LOG;
 
 int main(int argc, char* argv[]) {
@@ -12,9 +14,9 @@ int main(int argc, char* argv[]) {
     LOG(argv[i]);
   }
   bsm::SocketHandler sock{std::stoi(argv[1])};
-  std::unique_ptr<bsm::Server> lobby{std::make_unique<bsm::Server>()};
+  std::unique_ptr<bsm::Lobby> lobby{std::make_unique<bsm::Lobby>()};
   bsm::LOG("starting lobby!");
-  lobby->init(std::stoi(argv[1]));
+  lobby->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
   lobby->run();
 #ifdef DEBUG_LOGS
 #endif

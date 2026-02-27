@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "network_routine.h"
 #include <cstdlib>
+#include <iostream>
 #include <memory>
 
 int main(int argc, char* argv[]) {
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]) {
     app = std::move(server);
   }
   if (!init_result) {
-    bsm::LOG(init_result.error().message);
+    bsm::LOG(init_result.error().full_report());
     return EXIT_FAILURE;
   }
   app->run();

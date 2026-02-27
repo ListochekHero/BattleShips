@@ -5,17 +5,17 @@
 
 namespace bsm {
 class Observer {
- public:
+public:
   virtual void update(int sock_fd) = 0;
   virtual ~Observer() = default;
 };
 class ObservableSu8ject {
- public:
+public:
   virtual void attach(std::unique_ptr<Observer> observer) = 0;
   virtual void detach(std::unique_ptr<Observer> observer) = 0;
   virtual void notify(int sock_fd) = 0;
   virtual ~ObservableSu8ject() = default;
 };
-}  // namespace bsm
+} // namespace bsm
 
 #endif

@@ -1,18 +1,14 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
+#include "error.h"
 #include <unistd.h>
 
-#include <ctime>
 #include <expected>
 #include <format>
 #include <fstream>
-#include <iostream>
 #include <mutex>
-#include <sstream>
 #include <string>
-
-#include "utility.h"
 
 namespace bsm {
 
@@ -35,12 +31,12 @@ inline auto with_log(std::string_view context) {
 }
 
 class Logger {
- public:
+public:
   static Logger& instance();
   std::expected<void, std::string> log(const std::string_view message);
   std::expected<void, std::string> init(const std::string& program_name);
 
- private:
+private:
   std::ofstream log_file;
   std::mutex log_mutex;
   std::string program_name;
@@ -52,6 +48,6 @@ class Logger {
   Logger(const Logger&) = delete;
   Logger& operator=(const Logger&) = delete;
 };
-}  // namespace bsm
+} // namespace bsm
 
 #endif

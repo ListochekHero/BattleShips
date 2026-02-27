@@ -1,9 +1,14 @@
 #include "config.h"
+#include "logger.h"
+#include <fstream>
+#include <iostream>
+#include <sstream>
+
 namespace bsm {
 
 Config::Config() { init(); }
 
-Config& Config::instance(){
+Config& Config::instance() {
   static Config instance;
   return instance;
 }
@@ -34,8 +39,6 @@ void Config::init() {
   }
 }
 
-int Config::get_line(std::string line){
-  return 8000;
-}
+int Config::get_line(std::string line) { return 8000; }
 
-}  // namespace bsm
+} // namespace bsm

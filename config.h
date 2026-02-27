@@ -2,19 +2,14 @@
 #define CONFIG_H
 
 #include <array>
-#include <fstream>
-#include <iostream>
-#include <sstream>
 #include <string>
 #include <variant>
-
-#include "logger.h"
 
 #define MAX_OPTIONS 1
 
 namespace bsm {
 class Config {
- public:
+public:
   static Config& instance();
   Config();
   ~Config() = default;
@@ -26,9 +21,9 @@ class Config {
   };
   std::array<configopt_s, 1> configopt_sa{{"port", 0}};
 
- private:
+private:
 };
 
-}  // namespace bsm
+} // namespace bsm
 
 #endif

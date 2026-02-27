@@ -4,7 +4,6 @@
 #include <arpa/inet.h>
 #include <cstddef>
 #include <fcntl.h>
-#include <limits>
 #include <optional>
 #include <stdlib.h>
 #include <sys/epoll.h>
@@ -21,7 +20,13 @@
 namespace bsm {
 
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
-enum class message_type_e : uint8_t { DEFAULT, SOCKET, CONN_CODE, LOBBY_ID };
+enum class message_type_e : uint8_t {
+  DEFAULT,
+  SOCKET,
+  CONN_CODE,
+  LOBBY_ID,
+  ERROR
+};
 enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
 
 struct MsgHeader {
