@@ -5,17 +5,12 @@
 #include <cstdint>
 #include <sys/wait.h>
 
-#include "data_storage.h"
 #include "deferred_actions.h"
 #include "dispatcher.h"
 #include "lobby_manager.h"
 #include "network_routine.h"
-#include "socket_routine.h"
 #include "utility.h"
-#include <memory>
-#include <optional>
 #include <unordered_map>
-#include <vector>
 
 #define MAX_EVENTS 10
 
@@ -46,9 +41,6 @@ public:
 
 private:
   CommandStatus handle_client_cmd(CommandContext& context);
-  CommandStatus create_lobby(const CommandContext& context);
-  Ev init_child(const SocketHandler& child_socket, int64_t child_id,
-                SocketHandler& client);
   CommandStatus accept_socket_from_parent(const CommandContext& context);
   CommandStatus send_connection_code(const CommandContext& context);
   CommandStatus join_lobby(const CommandContext& context);
@@ -83,13 +75,18 @@ private:
 
 class Lobby : public Application {
 public:
+  Lobby() = default;
   Ev init(int parrent_socket, end_point_e socket_type);
   void run() override;
 
 private:
-  CommandStatus handle_client_cmd(CommandContext& context);
-  int64_t lobby_id;
-  NetworkEngine net_engine_;
+  // CommandStatus handle_client_cmd(CommandContext& context);
+  CommandStatus execute_action(const AcceptSocket& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const LobbyIdSetter& action_type,
+                               const CommandContext& context);
+  int64_t lobby_id_{0};
+  ConnectionView parent_view_;
 };
 
 class Client : public Application {
