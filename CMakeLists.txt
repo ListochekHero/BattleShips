@@ -18,16 +18,18 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 add_library(common OBJECT
 application.cpp
-interfaces.cpp
-logger.cpp
-socket_routine.cpp
-utility.cpp
 config.cpp
 data_storage.cpp
 deferred_actions.cpp
-network_routine.cpp
-lobby_manager.cpp
 dispatcher.cpp
+error.cpp
+interfaces.cpp
+lobby_manager.cpp
+logger.cpp
+network_routine.cpp
+socket_routine.cpp
+utility.cpp
+
 )
 
 # add_library(sanitizers INTERFACE)
@@ -74,14 +76,11 @@ add_executable(server
   $<TARGET_OBJECTS:common>
 )
 
-
-
 #Create an executable for the Lobby
 add_executable(lobby
   lobby.cpp
   $<TARGET_OBJECTS:common>
 )
-
 
 #Create an executable for the Client
 add_executable(client
