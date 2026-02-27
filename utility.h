@@ -3,6 +3,7 @@
 
 #include "error.h"
 #include "logger.h"
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -24,19 +25,21 @@ struct CommandStatus {
 };
 
 struct CommandContext {
-  ConnectionView& client;
+  ConnectionView& client_view;
   ReadResult& message;
   end_point_e peer;
+};
+
+struct DeliveryReport {
+  size_t delivered{0};
+  size_t failed{0};
 };
 
 bool is_file_exist(const std::string& filename);
 int64_t generate_conn_code();
 std::expected<std::string, Error> parse(const std::string& message);
 std::expected<std::string, Error> generate_name();
-void success_or_terminate(Ev&& r);
-
 template <typename T, typename E> void drop_result(std::expected<T, E>&&) {}
-
 template <typename T, typename E>
 void success_or_terminate(std::expected<T, E>&& r) {
   if (!r) {

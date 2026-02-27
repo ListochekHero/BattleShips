@@ -27,22 +27,30 @@ struct SlotEntry {
 
 class ConnectionView {
 public:
+  ConnectionView() = default;
   ConnectionView(size_t slot);
-  void send(OutgoingMessage message);
   size_t get_slot() const;
 
 private:
+  size_t slot{std::numeric_limits<std::size_t>::max()};
+};
+
+struct ConnectionMeta {
   size_t slot;
+  end_point_e type;
+  std::string name;
 };
 
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
-
+  using RecipientFilter = std::function<bool(const ConnectionMeta&)>;
   Ev init();
   Ev init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
+  DeliveryReport send_message(const OutgoingMessage& message,
+                              RecipientFilter filter);
   Ev send_message_to(const ConnectionView& conn_view,
                      const OutgoingMessage& message);
   Ev send_error_message_to(const ConnectionView& conn_view,
@@ -75,7 +83,8 @@ private:
   void process_server_socket(SlotEntry& slot_entry);
   void process_client_socket(SlotEntry& slot_entry);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
-  Ev send_error_reply(const SlotEntry& slot_entry, user_error_e user_code);
+  Ev send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
+  Ev send_error_reply_impl(const SlotEntry& slot_entry, user_error_e user_code);
   class Cleanup_Connection : public DeferredAction {
   public:
     explicit Cleanup_Connection(size_t s) : slot(s) {}

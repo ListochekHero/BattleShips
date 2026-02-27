@@ -57,25 +57,43 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
+DeliveryReport NetworkEngine::send_message(const OutgoingMessage& message,
+                                           RecipientFilter filter) {
+  DeliveryReport delivery_report;
+  for (auto& entry : socket_pool_) {
+    if (!entry.handler)
+      continue;
+    ConnectionMeta meta{.slot = entry.slot, .type = entry.type};
+    if (!filter(meta))
+      continue;
+    if (auto result = send_message_impl(entry, message); !result) {
+      delivery_report.failed++;
+      LOG(result.error()
+              .add_context("Unable to send message to specific recipient")
+              .full_report());
+      continue;
+    }
+    delivery_report.delivered++;
+  }
+  return delivery_report;
+}
+
 Ev NetworkEngine::send_message_to(const ConnectionView& conn_view,
                                   const OutgoingMessage& message) {
-  return socket_pool_[conn_view.get_slot()]
-      .handler->write_to_user(message)
-      .transform_error([](auto&& error) {
-        return error.add_context("Unable to send message to user");
-      });
+  return send_message_impl(socket_pool_[conn_view.get_slot()], message);
 }
 
 Ev NetworkEngine::send_error_message_to(const ConnectionView& conn_view,
                                         user_error_e user_code) {
-  return send_error_reply(socket_pool_[conn_view.get_slot()], user_code);
+  return send_error_reply_impl(socket_pool_[conn_view.get_slot()], user_code);
 }
 void NetworkEngine::set_status_to(ConnectionView& conn_view,
                                   socket_status_e status) {
   socket_pool_[conn_view.get_slot()].handler->set_socket_status(status);
 }
 
-// ConnectionView NetworkEngine::attach(int socket) { register_client(socket); }
+// ConnectionView NetworkEngine::attach(int socket) { register_client(socket);
+// }
 
 std::expected<ConnectionView, Error>
 NetworkEngine::attach(int socket, end_point_e socket_type) {
@@ -84,7 +102,7 @@ NetworkEngine::attach(int socket, end_point_e socket_type) {
     return ConnectionView{*slot_index};
   } else {
     return std::unexpected(slot_index.error().add_context(
-        "Unable to attach new client to net_engine"));
+        "Unable to attach new socket to net_engine"));
   }
 }
 
@@ -236,7 +254,8 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
       .transform([&]() { return new_client_entry.slot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.full_report());
-        if (auto r = send_error_reply(new_client_entry, us_e::GENERIC); !r) {
+        if (auto r = send_error_reply_impl(new_client_entry, us_e::GENERIC);
+            !r) {
           LOG(r.error().full_report());
         }
         success_or_terminate(free_slot_entry(new_client_entry));
@@ -308,14 +327,21 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
   if (cmd_status.error) {
     LOG(cmd_status.error->full_report());
     LOG("Unable to handle client command: " + context.message.payload);
-    if (auto result = send_error_reply(slot_entry, us_e::GENERIC); !result)
+    if (auto result = send_error_reply_impl(slot_entry, us_e::GENERIC); !result)
       LOG(result.error().full_report());
   }
   return cmd_status;
 }
+Ev NetworkEngine::send_message_impl(SlotEntry& slot_entry,
+                                    const OutgoingMessage& message) {
+  return slot_entry.handler->write_to_user(message).transform_error(
+      [](auto&& error) {
+        return error.add_context("Unable to send message to socket");
+      });
+}
 
-Ev NetworkEngine::send_error_reply(const SlotEntry& slot_entry,
-                                   user_error_e user_code) {
+Ev NetworkEngine::send_error_reply_impl(const SlotEntry& slot_entry,
+                                        user_error_e user_code) {
   return slot_entry.handler->write_to_user({{user_message(user_code)}})
       .or_else([](auto&& error) -> Ev {
         return std::unexpected(
