@@ -46,7 +46,8 @@ public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
   using RecipientFilter = std::function<bool(const ConnectionMeta&)>;
   Ev init();
-  Ev init(int parrent_socket, end_point_e socket_type); // init() for Lobby
+  std::expected<ConnectionView, Error>
+  init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
   DeliveryReport send_message(const OutgoingMessage& message,

@@ -27,13 +27,19 @@ Ev NetworkEngine::init() {
       .and_then([this]() -> Ev { return init_epoll_wrapper(); });
 }
 
-Ev NetworkEngine::init(int parrent_socket, end_point_e socket_type) {
-  if (auto result = add_to_socket_pool(parrent_socket, socket_type); !result) {
+std::expected<ConnectionView, Error>
+NetworkEngine::init(int parrent_socket, end_point_e socket_type) {
+  auto result = add_to_socket_pool(parrent_socket, socket_type);
+  if (!result) {
     return std::unexpected(
         result.error().add_context("Unable to add parent socket to pool"));
   }
   socket_pool_[0].type = end_point_e::PARENT;
-  return init_epoll_wrapper();
+  if (auto result = init_epoll_wrapper(); !result) {
+    return std::unexpected(
+        std::move(result).error().add_context("Unable to init epoll"));
+  }
+  return ConnectionView{*result};
 }
 
 void NetworkEngine::set_message_handler(MessageHandler h) {
@@ -98,12 +104,11 @@ void NetworkEngine::set_status_to(ConnectionView& conn_view,
 std::expected<ConnectionView, Error>
 NetworkEngine::attach(int socket, end_point_e socket_type) {
   auto slot_index = register_client(socket, socket_type);
-  if (slot_index) {
-    return ConnectionView{*slot_index};
-  } else {
+  if (!slot_index) {
     return std::unexpected(slot_index.error().add_context(
         "Unable to attach new socket to net_engine"));
   }
+  return ConnectionView{*slot_index};
 }
 
 CommandStatus NetworkEngine::transfer(const ConnectionView& dest_view,
