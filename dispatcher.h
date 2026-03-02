@@ -17,10 +17,10 @@ struct LobbyIdSetter {};
 struct ChatMessage {};
 struct NotAllowed {};
 struct GeneralAction {};
-using ServerAction =
+using ParsedCommand =
     std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
                  ChatMessage, NotAllowed, GeneralAction>;
-
+enum class parsed_command_e {};
 inline end_point_e operator|(end_point_e a, end_point_e b) {
   return (end_point_e)(uint8_t(a) | uint8_t(b));
 }
@@ -29,7 +29,7 @@ inline bool allows(end_point_e m, end_point_e k) {
 }
 class Dispatcher {
 public:
-  ServerAction dispatch(const CommandContext& context);
+  ParsedCommand dispatch(const CommandContext& context);
 
 private:
   struct Command {
@@ -37,9 +37,9 @@ private:
     std::optional<message_type_e> msg_type;
     end_point_e mask;
 
-    using Factory = ServerAction (*)();
+    using Factory = ParsedCommand (*)();
 
-    template <typename T> static ServerAction make_action() { return T{}; }
+    template <typename T> static ParsedCommand make_action() { return T{}; }
     Factory make;
   };
 

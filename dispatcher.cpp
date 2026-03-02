@@ -1,4 +1,5 @@
 #include "dispatcher.h"
+#include "network_routine.h"
 #include "utility.h"
 
 namespace bsm {
@@ -12,7 +13,7 @@ bool Dispatcher::match_cmd(const Command& cmd, const ReadResult& msg) {
   return false;
 }
 
-ServerAction Dispatcher::dispatch(const CommandContext& context) {
+ParsedCommand Dispatcher::dispatch(const CommandContext& context) {
   for (const auto& cmd : commands) {
     if (match_cmd(cmd, context.message)) {
       if (allows(cmd.mask, context.peer)) {
@@ -36,7 +37,7 @@ const std::array<Dispatcher::Command, 6> Dispatcher::commands = {
       .make = Command::make_action<Quit>},
      {.text_aliases = {"\\socket"},
       .msg_type = message_type_e::SOCKET,
-      .mask = end_point_e::SERVER,
+      .mask = end_point_e::SERVER | end_point_e::PARENT,
       .make = Command::make_action<AcceptSocket>},
      {.msg_type = message_type_e::LOBBY_ID,
       .mask = end_point_e::PARENT,
