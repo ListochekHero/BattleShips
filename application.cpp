@@ -45,6 +45,26 @@ CommandStatus Server::handle_client_cmd(CommandContext& context) {
       action_to_exe);
 }
 
+CommandStatus Server::execute_action(const CreateLobby&,
+                                     const CommandContext& context) {
+  auto lobby_view{request_lobby()};
+  if (!lobby_view) {
+    if (auto r = net_engine().send_error_message_to(context.client_view,
+                                                    us_e::CANT_CREATE_LOBBY);
+        !r)
+      LOG(r.error().full_report());
+    return CommandStatus{cmd_se::CONTINUE, std::move(lobby_view).error()};
+  }
+  if (auto result = net_engine().send_message_to(
+          lobby_view->control_connection,
+          {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
+      !result) {
+    return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
+  }
+  return net_engine().transfer(lobby_view->control_connection,
+                               context.client_view);
+}
+
 std::expected<LobbyView, Error> Server::request_lobby() {
   std::optional<Error> error;
   auto proc = lobby_manager_.spawn_lobby();
@@ -67,27 +87,7 @@ std::expected<LobbyView, Error> Server::request_lobby() {
   return lobby_handler;
 }
 
-CommandStatus Server::execute_action(const CreateLobby& action_type,
-                                     const CommandContext& context) {
-  auto lobby_view{request_lobby()};
-  if (!lobby_view) {
-    if (auto r = net_engine().send_error_message_to(context.client_view,
-                                                    us_e::CANT_CREATE_LOBBY);
-        !r)
-      LOG(r.error().full_report());
-    return CommandStatus{cmd_se::CONTINUE, std::move(lobby_view).error()};
-  }
-  if (auto result = net_engine().send_message_to(
-          lobby_view->control_connection,
-          {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
-      !result) {
-    return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
-  }
-  return net_engine().transfer(lobby_view->control_connection,
-                               context.client_view);
-}
-
-CommandStatus Server::execute_action(const JoinLobby& action_type,
+CommandStatus Server::execute_action(const JoinLobby&,
                                      const CommandContext& context) {
   auto parse_result = JoinLobbyCode::parse(context.message.payload);
   if (!parse_result) {
@@ -105,20 +105,20 @@ CommandStatus Server::execute_action(const JoinLobby& action_type,
                                context.client_view);
 }
 
-CommandStatus Server::execute_action(const ChatMessage& action_type,
+CommandStatus Server::execute_action(const ChatMessage&,
                                      const CommandContext& context) {
   auto parse_result = parse(context.message.payload);
   if (!parse_result) {
     parse_result.error().add_context("Unable to parse client chat message");
     return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
   }
-  const std::string chat_message{std::move(parse_result).value()};
   net_engine().send_message({{*parse_result}}, [](const auto& meta) {
     return meta.type == end_point_e::CLIENT;
   });
+  return {cmd_se::CONTINUE};
 }
 
-CommandStatus Server::execute_action(const GeneralAction& action_type,
+CommandStatus Server::execute_action(const GeneralAction&,
                                      const CommandContext& context) {
   auto report = net_engine().send_message_to(
       context.client_view, {{user_message(us_e::UNKNOWN_COMMAND)}});
@@ -137,18 +137,44 @@ void Server::handle_zombie_pocesses() {
 }
 
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
-  auto attach_result = net_engine().attach(parrent_socket, socket_type);
-  if (!attach_result) {
-    attach_result.error().add_context(
-        "Unable to init Lobby with parent socket");
-    return std::unexpected(std::move(attach_result).error());
+  net_engine().set_message_handler(
+      [this](CommandContext context) { return handle_client_cmd(context); });
+  auto init_result = net_engine().init(parrent_socket, socket_type);
+  if (!init_result) {
+    init_result.error().add_context("Unable to init Lobby with parent socket");
+    return std::unexpected(std::move(init_result).error());
   }
-  parent_view_ = *attach_result;
+  auto parent_view =
+      net_engine().get_view_by_type([](const ConnectionMeta& meta) {
+        return meta.type == end_point_e::PARENT;
+      });
+  if (!parent_view) {
+    return std::unexpected(
+        std::move(parent_view)
+            .error()
+            .add_context("Unable to get handler of parent socket"));
+  }
+  parent_view_ = *parent_view;
   return {};
 }
-void Lobby::run() {}
 
-CommandStatus Lobby::execute_action(const AcceptSocket& action_type,
+void Lobby::run() { net_engine().run(); }
+
+CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
+  LOG(std::format("Command to handle: {}", context.message.payload));
+  auto action_to_execute = dispatcher().dispatch(context);
+  auto lobby_action = filter_variant<LobbyAction>(action_to_execute);
+  if (!lobby_action) {
+    lobby_action.error().add_context("error in handle_client_cmd() method");
+  }
+  return std::visit(
+      [&](auto&& lobby_action) -> CommandStatus {
+        return execute_action(lobby_action, context);
+      },
+      *lobby_action);
+}
+
+CommandStatus Lobby::execute_action(const AcceptSocket&,
                                     const CommandContext& context) {
   if (!context.message.socket) {
     net_engine().send_message_to(
@@ -168,26 +194,26 @@ CommandStatus Lobby::execute_action(const AcceptSocket& action_type,
   return {cmd_se::CONTINUE};
 }
 
-CommandStatus Lobby::execute_action(const LobbyIdSetter& action_type,
+CommandStatus Lobby::execute_action(const LobbyIdSetter&,
                                     const CommandContext& context) {
   lobby_id_ = std::strtol(context.message.payload.c_str(), nullptr, 10);
   return {cmd_se::CONTINUE};
 }
 
-CommandStatus Server::execute_action(const Quit& action_type,
+CommandStatus Server::execute_action(const Quit&,
                                      const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
-CommandStatus Server::execute_action(const AcceptSocket& action_type,
+CommandStatus Server::execute_action(const AcceptSocket&,
                                      const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
-CommandStatus Server::execute_action(const LobbyIdSetter& action_type,
+CommandStatus Server::execute_action(const LobbyIdSetter&,
                                      const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
 
-CommandStatus Server::execute_action(const NotAllowed& action_type,
+CommandStatus Server::execute_action(const NotAllowed&,
                                      const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }

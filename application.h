@@ -11,12 +11,36 @@
 #include "network_routine.h"
 #include "utility.h"
 #include <unordered_map>
+#include <variant>
 
 #define MAX_EVENTS 10
 
 namespace bsm {
 
-struct CreateLobby;
+template <typename T, typename Variant> struct is_alternative_of;
+
+template <typename T, typename... Args>
+struct is_alternative_of<T, std::variant<Args...>>
+    : std::disjunction<std::is_same<T, Args>...> {};
+
+template <typename T, typename Variant>
+inline constexpr bool is_alternative_of_v =
+    is_alternative_of<T, Variant>::value;
+
+template <typename TargetVariant, typename SourceVariant>
+std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
+  return std::visit(
+      [](auto&& arg) -> std::expected<TargetVariant, Error> {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (is_alternative_of_v<T, TargetVariant>) {
+          return TargetVariant(std::forward<decltype(arg)>(arg));
+        } else {
+          return std::unexpected(
+              Error{{"Command not allowed in this context"}});
+        }
+      },
+      std::forward<SourceVariant>(source));
+}
 
 class Application {
 public:
@@ -40,7 +64,6 @@ public:
   void cleanup_slot(size_t slot);
 
 private:
-  CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus accept_socket_from_parent(const CommandContext& context);
   CommandStatus send_connection_code(const CommandContext& context);
   CommandStatus join_lobby(const CommandContext& context);
@@ -50,9 +73,12 @@ private:
   Ev send_error_reply(const ConnectionView& client, user_error_e error);
   void handle_zombie_pocesses();
 
-  std::expected<LobbyView, Error> request_lobby();
+  using ServerAction = std::variant<CreateLobby, JoinLobby, Quit, ChatMessage,
+                                    NotAllowed, GeneralAction>;
+  CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
+  std::expected<LobbyView, Error> request_lobby();
   CommandStatus execute_action(const JoinLobby& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const Quit& action_type,
@@ -80,13 +106,14 @@ public:
   void run() override;
 
 private:
-  // CommandStatus handle_client_cmd(CommandContext& context);
+  using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter>;
+  CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const AcceptSocket& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const LobbyIdSetter& action_type,
                                const CommandContext& context);
   int64_t lobby_id_{0};
-  ConnectionView parent_view_;
+  ConnectionView parent_view_{std::numeric_limits<std::size_t>::max()};
 };
 
 class Client : public Application {
