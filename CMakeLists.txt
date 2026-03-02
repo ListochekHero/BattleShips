@@ -55,6 +55,8 @@ target_compile_options(common PRIVATE
   $<$<CONFIG:Debug>:-O0 -ggdb>
 )
 
+add_definitions(-DDEBUG_LOGS)
+
 target_compile_definitions(common PRIVATE
   $<$<CONFIG:Debug>:DEBUG_LOGS>
 )

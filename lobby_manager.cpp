@@ -41,5 +41,6 @@ LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
     kill(pid, SIGKILL);
     return std::unexpected(Error{{"Unable to emplace lobby into map"}});
   }
+  return LobbyView{lobby_id, control_connection};
 }
 } // namespace bsm
