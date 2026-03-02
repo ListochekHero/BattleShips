@@ -10,6 +10,7 @@
 #include <exception>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <unistd.h>
 #include <utility>
 
@@ -63,27 +64,6 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
-DeliveryReport NetworkEngine::send_message(const OutgoingMessage& message,
-                                           RecipientFilter filter) {
-  DeliveryReport delivery_report;
-  for (auto& entry : socket_pool_) {
-    if (!entry.handler)
-      continue;
-    ConnectionMeta meta{.slot = entry.slot, .type = entry.type};
-    if (!filter(meta))
-      continue;
-    if (auto result = send_message_impl(entry, message); !result) {
-      delivery_report.failed++;
-      LOG(result.error()
-              .add_context("Unable to send message to specific recipient")
-              .full_report());
-      continue;
-    }
-    delivery_report.delivered++;
-  }
-  return delivery_report;
-}
-
 Ev NetworkEngine::send_message_to(const ConnectionView& conn_view,
                                   const OutgoingMessage& message) {
   return send_message_impl(socket_pool_[conn_view.get_slot()], message);
@@ -93,13 +73,6 @@ Ev NetworkEngine::send_error_message_to(const ConnectionView& conn_view,
                                         user_error_e user_code) {
   return send_error_reply_impl(socket_pool_[conn_view.get_slot()], user_code);
 }
-void NetworkEngine::set_status_to(ConnectionView& conn_view,
-                                  socket_status_e status) {
-  socket_pool_[conn_view.get_slot()].handler->set_socket_status(status);
-}
-
-// ConnectionView NetworkEngine::attach(int socket) { register_client(socket);
-// }
 
 std::expected<ConnectionView, Error>
 NetworkEngine::attach(int socket, end_point_e socket_type) {
@@ -278,17 +251,17 @@ void NetworkEngine::register_clients(std::vector<int>& new_clients) {
 
 void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
-    SlotEntry& slot_entry{socket_pool_[slot]};
-    if (slot_entry.type == end_point_e::SERVER) {
-      process_server_socket(slot_entry);
+    if (socket_pool_[slot].type == end_point_e::SERVER) {
+      process_server_socket(slot);
     } else {
-      process_client_socket(slot_entry);
+      process_client_socket(slot);
     }
   }
 }
 
-void NetworkEngine::process_server_socket(SlotEntry& slot_entry) {
-  drop_result(slot_entry.handler->accept_connections()
+void NetworkEngine::process_server_socket(size_t slot) {
+  drop_result(socket_pool_[slot]
+                  .handler->accept_connections()
                   .and_then([this](auto&& new_clients) -> Ev {
                     register_clients(new_clients);
                     return {};
@@ -300,16 +273,18 @@ void NetworkEngine::process_server_socket(SlotEntry& slot_entry) {
                   }));
 }
 
-void NetworkEngine::process_client_socket(SlotEntry& slot_entry) {
+void NetworkEngine::process_client_socket(size_t slot) {
   CommandStatus cmd_status{cmd_se::CONTINUE};
   while (cmd_status.command_status_v == cmd_se::CONTINUE &&
-         slot_entry.handler->get_socket_status() == socket_status_e::ALIVE) {
-    auto read_result = slot_entry.handler->read_user_input();
+         socket_pool_[slot].handler->get_socket_status() ==
+             socket_status_e::ALIVE) {
+    SlotEntry& entry = socket_pool_[slot];
+    auto read_result = entry.handler->read_user_input();
     if (!read_result) {
       LOG(read_result.error().full_report());
       break;
     }
-    cmd_status = process_message(slot_entry, *read_result);
+    cmd_status = process_message(entry, *read_result);
   }
 }
 
