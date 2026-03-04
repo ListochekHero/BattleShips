@@ -20,7 +20,9 @@ NetworkEngine& Application::net_engine() { return net_engine_; }
 Ev Server::init() {
   net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  return net_engine().init();
+  return net_engine().init(end_point_e::SERVER).transform([](auto&&) {
+    return;
+  });
 }
 
 void Server::run() { net_engine().run(); }
@@ -144,17 +146,7 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
     init_result.error().add_context("Unable to init Lobby with parent socket");
     return std::unexpected(std::move(init_result).error());
   }
-  auto parent_view =
-      net_engine().get_view_by_type([](const ConnectionMeta& meta) {
-        return meta.type == end_point_e::PARENT;
-      });
-  if (!parent_view) {
-    return std::unexpected(
-        std::move(parent_view)
-            .error()
-            .add_context("Unable to get handler of parent socket"));
-  }
-  parent_view_ = *parent_view;
+  parent_view_ = *init_result;
   return {};
 }
 
@@ -197,6 +189,40 @@ CommandStatus Lobby::execute_action(const AcceptSocket&,
 CommandStatus Lobby::execute_action(const LobbyIdSetter&,
                                     const CommandContext& context) {
   lobby_id_ = std::strtol(context.message.payload.c_str(), nullptr, 10);
+  return {cmd_se::CONTINUE};
+}
+
+Ev Client::init(end_point_e socket_type) {
+  net_engine().set_message_handler(
+      [this](CommandContext context) { return handle_client_cmd(context); });
+  auto init_result = net_engine().init(end_point_e::CLIENT);
+  if (!init_result) {
+    init_result.error().add_context(
+        "Unable to init Client and connect to Server");
+    return std::unexpected(std::move(init_result).error());
+  }
+  server_view_ = *init_result;
+  return {};
+}
+
+void Client::run() { net_engine().run(); }
+
+CommandStatus Client::handle_client_cmd(CommandContext& context) {
+  LOG(std::format("Command to handle: {}", context.message.payload));
+  auto action_to_execute = dispatcher().dispatch(context);
+  auto lobby_action = filter_variant<ClientAction>(action_to_execute);
+  if (!lobby_action) {
+    lobby_action.error().add_context("error in handle_client_cmd() method");
+  }
+  return std::visit(
+      [&](auto&& lobby_action) -> CommandStatus {
+        return execute_action(lobby_action, context);
+      },
+      *lobby_action);
+}
+
+CommandStatus Client::execute_action(const Quit&,
+                                     const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
 

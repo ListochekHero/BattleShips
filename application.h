@@ -17,31 +17,6 @@
 
 namespace bsm {
 
-template <typename T, typename Variant> struct is_alternative_of;
-
-template <typename T, typename... Args>
-struct is_alternative_of<T, std::variant<Args...>>
-    : std::disjunction<std::is_same<T, Args>...> {};
-
-template <typename T, typename Variant>
-inline constexpr bool is_alternative_of_v =
-    is_alternative_of<T, Variant>::value;
-
-template <typename TargetVariant, typename SourceVariant>
-std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
-  return std::visit(
-      [](auto&& arg) -> std::expected<TargetVariant, Error> {
-        using T = std::decay_t<decltype(arg)>;
-        if constexpr (is_alternative_of_v<T, TargetVariant>) {
-          return TargetVariant(std::forward<decltype(arg)>(arg));
-        } else {
-          return std::unexpected(
-              Error{{"Command not allowed in this context"}});
-        }
-      },
-      std::forward<SourceVariant>(source));
-}
-
 class Application {
 public:
   virtual void run() = 0;
@@ -118,7 +93,14 @@ private:
 
 class Client : public Application {
 public:
+  Ev init(end_point_e socket_type);
+  void run();
+  CommandStatus handle_client_cmd(CommandContext& context);
+
 private:
+  using ClientAction = std::variant<Quit>;
+  CommandStatus execute_action(const Quit&, const CommandContext& context);
+  ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
 };
 
 } // namespace bsm
