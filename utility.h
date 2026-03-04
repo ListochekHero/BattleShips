@@ -8,6 +8,7 @@
 #include <expected>
 #include <optional>
 #include <string>
+#include <variant>
 
 namespace bsm {
 
@@ -47,6 +48,31 @@ void success_or_terminate(std::expected<T, E>&& r) {
     LOG("Critical error occured, terminating...");
     std::terminate();
   }
+}
+
+template <typename T, typename Variant> struct is_alternative_of;
+
+template <typename T, typename... Args>
+struct is_alternative_of<T, std::variant<Args...>>
+    : std::disjunction<std::is_same<T, Args>...> {};
+
+template <typename T, typename Variant>
+inline constexpr bool is_alternative_of_v =
+    is_alternative_of<T, Variant>::value;
+
+template <typename TargetVariant, typename SourceVariant>
+std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
+  return std::visit(
+      [](auto&& arg) -> std::expected<TargetVariant, Error> {
+        using T = std::decay_t<decltype(arg)>;
+        if constexpr (is_alternative_of_v<T, TargetVariant>) {
+          return TargetVariant(std::forward<decltype(arg)>(arg));
+        } else {
+          return std::unexpected(
+              Error{{"Command not allowed in this context"}});
+        }
+      },
+      std::forward<SourceVariant>(source));
 }
 
 } // namespace bsm
