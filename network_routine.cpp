@@ -16,16 +16,38 @@
 
 namespace bsm {
 
-Ev NetworkEngine::init() {
-  if (auto result = add_to_socket_pool(); !result) {
+std::expected<ConnectionView, Error>
+NetworkEngine::init(end_point_e socket_type) {
+  auto socket_slot = add_to_socket_pool();
+  if (!socket_slot) {
     return std::unexpected(
-        result.error().add_context("Unable to add init socket to pool"));
+        socket_slot.error().add_context("Unable to add init socket to pool"));
   };
-  return this->socket_pool_[0]
-      .handler->setup_listener(Config::instance().get_line("port"))
-      .transform_error(
-          [](auto&& error) { return error.add_context("Cant setup listener"); })
-      .and_then([this]() -> Ev { return init_epoll_wrapper(); });
+  switch (socket_type) {
+  case end_point_e::NONE:
+  case end_point_e::LOBBY:
+  case end_point_e::PARENT:
+    break;
+  case end_point_e::CLIENT:
+    if (auto result = socket_pool_[0].handler->setup_client(); !result) {
+      return std::unexpected(
+          std::move(result).error().add_context("Cant setup client"));
+    }
+    break;
+  case end_point_e::SERVER:
+    if (auto result = socket_pool_[0].handler->setup_listener(
+            Config::instance().get_line("port"));
+        !result) {
+      return std::unexpected(
+          std::move(result).error().add_context("Cant setup listener"));
+    }
+    break;
+  }
+  if (auto result = init_epoll(); !result) {
+    return std::unexpected(
+        std::move(result).error().add_context("Unable to init epoll"));
+  }
+  return *socket_slot;
 }
 
 std::expected<ConnectionView, Error>

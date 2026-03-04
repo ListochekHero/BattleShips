@@ -44,7 +44,7 @@ struct ConnectionMeta {
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
-  Ev init();
+  std::expected<ConnectionView, Error> init(end_point_e socket_type);
   std::expected<ConnectionView, Error>
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
