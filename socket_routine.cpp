@@ -56,6 +56,21 @@ Ev SocketHandler::setup_listener(int port) {
   return {};
 }
 
+Ev SocketHandler::setup_client() {
+  struct sockaddr_in server_addr;
+  if ((socket_ = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+    return std::unexpected(Error{{"Socket creation error"}});
+  }
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_port = htons(8000);
+  server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  if (connect(socket_, (struct sockaddr*)&server_addr, sizeof(server_addr)) <
+      0) {
+    return std::unexpected(Error{{"Connection to the server failed"}});
+  }
+  return {};
+}
+
 int SocketHandler::get_socket() const { return socket_; }
 
 socket_status_e SocketHandler::get_socket_status() const {

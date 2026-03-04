@@ -55,6 +55,7 @@ public:
   SocketHandler(SocketHandler&&);
   SocketHandler& operator=(SocketHandler&&);
   Ev setup_listener(int port);
+  Ev setup_client();
   int get_socket() const;
   socket_status_e get_socket_status() const;
   void set_socket_status(socket_status_e socket_status);
