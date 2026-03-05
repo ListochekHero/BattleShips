@@ -4,9 +4,11 @@
 #include "deferred_actions.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <concepts>
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <type_traits>
 
 namespace bsm {
 
@@ -59,13 +61,14 @@ public:
   CommandStatus transfer(const ConnectionView& dest, const ConnectionView& src);
 
   template <typename Filter>
+    requires std::predicate<Filter, const ConnectionMeta&>
   DeliveryReport send_message(const OutgoingMessage& message, Filter&& filter) {
     DeliveryReport delivery_report;
     for (auto& entry : socket_pool_) {
       if (!entry.handler)
         continue;
-      ConnectionMeta meta{.slot = entry.slot, .type = entry.type};
-      if (!filter(meta))
+      ConnectionMeta meta{entry.slot, entry.type};
+      if (!std::invoke(filter, meta))
         continue;
       if (auto result = send_message_impl(entry, message); !result) {
         delivery_report.failed++;
@@ -80,6 +83,7 @@ public:
   }
 
   template <typename Filter>
+    requires std::predicate<Filter, const ConnectionMeta&>
   std::expected<ConnectionView, Error> get_view_by_type(Filter&& filter) {
     for (SlotEntry& entry : socket_pool_) {
       if (!entry.handler)
@@ -115,6 +119,7 @@ private:
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
   Ev send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
   Ev send_error_reply_impl(const SlotEntry& slot_entry, user_error_e user_code);
+
   class Cleanup_Connection : public DeferredAction {
   public:
     explicit Cleanup_Connection(size_t s) : slot(s) {}
@@ -125,6 +130,7 @@ private:
   private:
     size_t slot;
   };
+
   std::vector<SlotEntry> socket_pool_;
   std::vector<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
