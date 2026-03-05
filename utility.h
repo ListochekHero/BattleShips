@@ -50,22 +50,17 @@ void success_or_terminate(std::expected<T, E>&& r) {
   }
 }
 
-template <typename T, typename Variant> struct is_alternative_of;
-
-template <typename T, typename... Args>
-struct is_alternative_of<T, std::variant<Args...>>
-    : std::disjunction<std::is_same<T, Args>...> {};
-
 template <typename T, typename Variant>
-inline constexpr bool is_alternative_of_v =
-    is_alternative_of<T, Variant>::value;
+concept AlternativeOf = []<typename... Args>(std::variant<Args...>*) {
+  return (std::same_as<T, Args> || ...);
+}(static_cast<Variant*>(nullptr));
 
 template <typename TargetVariant, typename SourceVariant>
 std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
   return std::visit(
       [](auto&& arg) -> std::expected<TargetVariant, Error> {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (is_alternative_of_v<T, TargetVariant>) {
+        if constexpr (AlternativeOf<T, TargetVariant>) {
           return TargetVariant(std::forward<decltype(arg)>(arg));
         } else {
           return std::unexpected(
