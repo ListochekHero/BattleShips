@@ -18,11 +18,8 @@ Dispatcher& Application::dispatcher() { return dispatcher_; }
 NetworkEngine& Application::net_engine() { return net_engine_; }
 
 Ev Server::init() {
-  net_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
-  return net_engine().init(end_point_e::SERVER).transform([](auto&&) {
-    return;
-  });
+  return init_common([&]() { return net_engine().init(end_point_e::SERVER); },
+                     [&](const ConnectionView&) {}, "Unalbe to init Server");
 }
 
 void Server::run() { net_engine().run(); }
@@ -139,15 +136,10 @@ void Server::handle_zombie_pocesses() {
 }
 
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
-  net_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
-  auto init_result = net_engine().init(parrent_socket, socket_type);
-  if (!init_result) {
-    init_result.error().add_context("Unable to init Lobby with parent socket");
-    return std::unexpected(std::move(init_result).error());
-  }
-  parent_view_ = *init_result;
-  return {};
+  return init_common(
+      [&]() { return net_engine().init(parrent_socket, socket_type); },
+      [&](const ConnectionView& view) { parent_view_ = view; },
+      "Unable to init Lobby with parent socket");
 }
 
 void Lobby::run() { net_engine().run(); }
@@ -193,16 +185,9 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
 }
 
 Ev Client::init(end_point_e socket_type) {
-  net_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
-  auto init_result = net_engine().init(end_point_e::CLIENT);
-  if (!init_result) {
-    init_result.error().add_context(
-        "Unable to init Client and connect to Server");
-    return std::unexpected(std::move(init_result).error());
-  }
-  server_view_ = *init_result;
-  return {};
+  return init_common([&]() { return net_engine().init(socket_type); },
+                     [&](const ConnectionView& view) { server_view_ = view; },
+                     "Unable to init Client and connect to Server");
 }
 
 void Client::run() { net_engine().run(); }
