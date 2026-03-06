@@ -1,6 +1,7 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <sys/wait.h>
@@ -11,6 +12,7 @@
 #include "lobby_manager.h"
 #include "network_routine.h"
 #include "utility.h"
+#include <type_traits>
 #include <unordered_map>
 #include <variant>
 
@@ -26,16 +28,53 @@ public:
 protected:
   Dispatcher& dispatcher();
   NetworkEngine& net_engine();
-  virtual CommandStatus handle_client_cmd(CommandContext& context) = 0;
 
+  template < typename Variant, typename Fn>
+  CommandStatus handle_cmd_impl(Fn&& fn, CommandContext& context) {
+    LOG(std::format("Command to handle: {}", context.message.payload));
+    auto action_to_execute = dispatcher().dispatch(context);
+    auto lobby_action = filter_variant<Variant>(action_to_execute);
+    if (!lobby_action) {
+      lobby_action.error().add_context("error in handle_client_cmd() method");
+    }
+    return std::visit(
+        [&](auto&& lobby_action) -> CommandStatus {
+          return std::invoke(fn, lobby_action, context);
+        },
+        *lobby_action);
+  }
+  template <typename Variant, typename InitFn, typename OnReadyFn,
+            typename LambdFn>
+    requires requires(InitFn init) {
+      { init() } -> std::convertible_to<std::expected<ConnectionView, Error>>;
+    } && std::invocable<InitFn> && std::invocable<OnReadyFn, ConnectionView&>
+  Ev init_common2(InitFn&& init_net_engine, OnReadyFn&& post_engine_init,
+                  LambdFn&& lambd_fn, std::string_view error_context) {
+    net_engine_.set_message_handler([&](CommandContext context) {
+      return handle_cmd_impl<Variant>(lambd_fn, context);
+    });
+    auto r = std::invoke(init_net_engine);
+    if (!r) {
+      r.error().add_context(error_context.data());
+      r.error().add_context("Unable to execute init_common()");
+      return std::unexpected(std::move(r).error());
+    }
+    std::invoke(post_engine_init, *r);
+    return {};
+  }
+
+  virtual CommandStatus handle_client_cmd(CommandContext& context) = 0;
   template <typename InitFn, typename OnReadyFn>
+    requires requires(InitFn init) {
+      { init() } -> std::convertible_to<std::expected<ConnectionView, Error>>;
+    } && std::invocable<InitFn> && std::invocable<OnReadyFn, ConnectionView&>
   Ev init_common(InitFn&& init_net_engine, OnReadyFn&& post_engine_init,
                  std::string_view error_context) {
     net_engine_.set_message_handler(
         [this](CommandContext context) { return handle_client_cmd(context); });
     auto r = std::invoke(init_net_engine);
     if (!r) {
-      r.error().add_context(error_context);
+      r.error().add_context(error_context.data());
       r.error().add_context("Unable to execute init_common()");
       return std::unexpected(std::move(r).error());
     }
@@ -56,6 +95,8 @@ public:
   void cleanup_slot(size_t slot);
 
 private:
+  template <typename T>
+  CommandStatus handle_client_cmd2(T t, CommandContext& context);
   CommandStatus accept_socket_from_parent(const CommandContext& context);
   CommandStatus send_connection_code(const CommandContext& context);
   CommandStatus join_lobby(const CommandContext& context);

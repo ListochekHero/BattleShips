@@ -17,9 +17,36 @@ namespace bsm {
 Dispatcher& Application::dispatcher() { return dispatcher_; }
 NetworkEngine& Application::net_engine() { return net_engine_; }
 
+// interesting aproach but need to think how to implement correctly (CRTP maybe
+// or third function template for init_common )
+
+// template <typename VariantAction>
+// CommandStatus Application::handle_cmd_impl(CommandContext& context) {
+//   LOG(std::format("Command to handle: {}", context.message.payload));
+//   auto action_to_execute = dispatcher().dispatch(context);
+//   auto lobby_action = filter_variant<VariantAction>(action_to_execute);
+//   if (!lobby_action) {
+//     lobby_action.error().add_context("error in handle_client_cmd() method");
+//   }
+//   return std::visit(
+//       [&](auto&& lobby_action) -> CommandStatus {
+//         return execute_action(lobby_action, context);
+//       },
+//       *lobby_action);
+// }
+
 Ev Server::init() {
-  return init_common([&]() { return net_engine().init(end_point_e::SERVER); },
-                     [&](const ConnectionView&) {}, "Unalbe to init Server");
+  return init_common2<ServerAction>(
+      [&]() { return net_engine().init(end_point_e::SERVER); },
+      [&](const ConnectionView&) {},
+      [this](auto&& cmd, CommandContext& context) -> CommandStatus {
+        return handle_client_cmd2(std::forward<decltype(cmd)>(cmd), context);
+      },
+      "Unalbe to init Server");
+}
+template <typename T>
+CommandStatus Server::handle_client_cmd2(T t, CommandContext& context) {
+  return execute_action(t, context);
 }
 
 void Server::run() { net_engine().run(); }
