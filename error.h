@@ -23,8 +23,9 @@ struct Error {
   auto&&
   add_context(this Self&& self, std::string msg,
               std::source_location loc = std::source_location::current()) {
-    self.backtrace.push_back(std::format("{}:{} in {}:{}", loc.file_name(),
-                                         loc.line(), loc.function_name(), msg));
+    self.backtrace.push_back(std::format("{}:{}\n\t\tin {}:\n\t\t{}",
+                                         loc.file_name(), loc.line(),
+                                         loc.function_name(), msg));
     return std::forward<Self>(self);
   }
   std::string full_report() const;

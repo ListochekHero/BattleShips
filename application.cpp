@@ -161,7 +161,10 @@ CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
   auto action_to_execute = dispatcher().dispatch(context);
   auto lobby_action = filter_variant<LobbyAction>(action_to_execute);
   if (!lobby_action) {
-    lobby_action.error().add_context("error in handle_client_cmd() method");
+    return {cmd_se::CONTINUE,
+            std::move(lobby_action)
+                .error()
+                .add_context("Command not allowed in this context")};
   }
   return std::visit(
       [&](auto&& lobby_action) -> CommandStatus {

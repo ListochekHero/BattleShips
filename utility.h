@@ -64,7 +64,7 @@ std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
           return TargetVariant(std::forward<decltype(arg)>(arg));
         } else {
           return std::unexpected(
-              Error{{"Command not allowed in this context"}});
+              Error{{"No such command can be found as supported"}});
         }
       },
       std::forward<SourceVariant>(source));
