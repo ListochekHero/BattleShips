@@ -28,24 +28,6 @@ public:
 protected:
   Dispatcher& dispatcher();
   NetworkEngine& net_engine();
-  virtual CommandStatus handle_client_cmd(CommandContext& context) = 0;
-  template <typename InitFn, typename OnReadyFn>
-    requires requires(InitFn init) {
-      { init() } -> std::convertible_to<std::expected<ConnectionView, Error>>;
-    } && std::invocable<InitFn> && std::invocable<OnReadyFn, ConnectionView&>
-  Ev init_common(InitFn&& init_net_engine, OnReadyFn&& post_engine_init,
-                 std::string_view error_context) {
-    net_engine_.set_message_handler(
-        [this](CommandContext context) { return handle_client_cmd(context); });
-    auto r = std::invoke(init_net_engine);
-    if (!r) {
-      r.error().add_context(error_context.data());
-      r.error().add_context("Unable to execute init_common()");
-      return std::unexpected(std::move(r).error());
-    }
-    std::invoke(post_engine_init, *r);
-    return {};
-  }
 
 private:
   NetworkEngine net_engine_;
@@ -71,7 +53,7 @@ private:
 
   using ServerAction = std::variant<CreateLobby, JoinLobby, Quit, ChatMessage,
                                     NotAllowed, GeneralAction>;
-  CommandStatus handle_client_cmd(CommandContext& context) override;
+  CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
   std::expected<LobbyView, Error> request_lobby();
@@ -103,7 +85,7 @@ public:
 
 private:
   using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter>;
-  CommandStatus handle_client_cmd(CommandContext& context) override;
+  CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const AcceptSocket& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const LobbyIdSetter& action_type,
