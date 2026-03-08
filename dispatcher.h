@@ -1,16 +1,13 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
-#include "network_routine.h"
+#include "socket_routine.h"
 #include "utility.h"
-#include <cstdint>
 #include <variant>
 
 namespace bsm {
 struct CreateLobby {};
-struct JoinLobby {
-  int64_t lobby_id;
-};
+struct JoinLobby {};
 struct Quit {};
 struct AcceptSocket {};
 struct LobbyIdSetter {};
@@ -20,22 +17,21 @@ struct GeneralAction {};
 using ParsedCommand =
     std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
                  ChatMessage, NotAllowed, GeneralAction>;
-enum class parsed_command_e {};
-inline end_point_e operator|(end_point_e a, end_point_e b) {
-  return (end_point_e)(uint8_t(a) | uint8_t(b));
-}
-inline bool allows(end_point_e m, end_point_e k) {
-  return (uint8_t(m) & uint8_t(k)) != 0;
-}
+enum class command_scope_e { NONE, LOCAL, NETWORK };
+struct CommandInfo {
+  command_scope_e scope{command_scope_e::NONE};
+  ParsedCommand parsed_cmd;
+};
+
 class Dispatcher {
 public:
-  ParsedCommand dispatch(const CommandContext& context);
+  CommandInfo dispatch(const CommandContext& context);
 
 private:
   struct Command {
     std::vector<std::string_view> text_aliases;
     std::optional<message_type_e> msg_type;
-    end_point_e mask;
+    command_scope_e scope;
 
     using Factory = ParsedCommand (*)();
 
@@ -43,7 +39,7 @@ private:
     Factory make;
   };
 
-  static const std::array<Command, 6> commands;
+  static const std::array<Command, 7> commands;
   bool match_cmd(const Command& cmd, const ReadResult& msg);
 };
 
