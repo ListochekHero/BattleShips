@@ -51,28 +51,18 @@ private:
   Ev send_error_reply(const ConnectionView& client, user_error_e error);
   void handle_zombie_pocesses();
 
-  using ServerAction = std::variant<CreateLobby, JoinLobby, Quit, ChatMessage,
-                                    NotAllowed, GeneralAction>;
+  using ServerAction = std::variant<CreateLobby, JoinLobby, ChatMessage,
+                                     GeneralAction>;
   CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
   std::expected<LobbyView, Error> request_lobby();
   CommandStatus execute_action(const JoinLobby& action_type,
                                const CommandContext& context);
-  CommandStatus execute_action(const Quit& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const AcceptSocket& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const LobbyIdSetter& action_type,
-                               const CommandContext& context);
   CommandStatus execute_action(const ChatMessage& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const NotAllowed& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const GeneralAction& action_type,
                                const CommandContext& context);
-  std::unordered_map<int64_t, LobbyProcess> lobbies;
-  CommandStatus process_message(CommandContext& context);
 
   LobbyManager lobby_manager_;
 };

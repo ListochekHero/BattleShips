@@ -41,12 +41,19 @@ Ev Server::send_error_reply(const ConnectionView& conn_view,
 
 CommandStatus Server::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  auto action_to_exe = dispatcher().dispatch(context);
+  CommandInfo command_info = dispatcher().dispatch(context);
+  auto server_action = filter_variant<ServerAction>(command_info.parsed_cmd);
+  if (!server_action) {
+    return {cmd_se::CONTINUE,
+            std::move(server_action)
+                .error()
+                .add_context("Command not allowed in this context")};
+  }
   return std::visit(
       [&](const auto& action_type) -> CommandStatus {
         return execute_action(action_type, context);
       },
-      action_to_exe);
+      *server_action);
 }
 
 CommandStatus Server::execute_action(const CreateLobby&,
@@ -218,36 +225,21 @@ void Client::run() { net_engine().run(); }
 CommandStatus Client::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
   auto action_to_execute = dispatcher().dispatch(context);
-  auto lobby_action = filter_variant<ClientAction>(action_to_execute);
-  if (!lobby_action) {
-    lobby_action.error().add_context("error in handle_client_cmd() method");
+  auto client_action = filter_variant<ClientAction>(action_to_execute);
+  if (!client_action) {
+    return {cmd_se::CONTINUE,
+            std::move(client_action)
+                .error()
+                .add_context("Command not allowed in this context")};
   }
   return std::visit(
       [&](auto&& lobby_action) -> CommandStatus {
         return execute_action(lobby_action, context);
       },
-      *lobby_action);
+      *client_action);
 }
 
 CommandStatus Client::execute_action(const Quit&,
-                                     const CommandContext& context) {
-  return {cmd_se::CONTINUE};
-}
-
-CommandStatus Server::execute_action(const Quit&,
-                                     const CommandContext& context) {
-  return {cmd_se::CONTINUE};
-}
-CommandStatus Server::execute_action(const AcceptSocket&,
-                                     const CommandContext& context) {
-  return {cmd_se::CONTINUE};
-}
-CommandStatus Server::execute_action(const LobbyIdSetter&,
-                                     const CommandContext& context) {
-  return {cmd_se::CONTINUE};
-}
-
-CommandStatus Server::execute_action(const NotAllowed&,
                                      const CommandContext& context) {
   return {cmd_se::CONTINUE};
 }
