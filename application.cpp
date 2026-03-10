@@ -8,6 +8,9 @@
 #include "socket_routine.h"
 #include "utility.h"
 #include <expected>
+#include <iostream>
+#include <mutex>
+#include <ostream>
 #include <string>
 #include <unistd.h>
 #include <variant>
@@ -41,7 +44,7 @@ Ev Server::send_error_reply(const ConnectionView& conn_view,
 
 CommandStatus Server::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  CommandInfo command_info = dispatcher().dispatch(context);
+  CommandInfo command_info = dispatcher().dispatch(context.message);
   auto server_action = filter_variant<ServerAction>(command_info.parsed_cmd);
   if (!server_action) {
     return {cmd_se::CONTINUE,
@@ -60,18 +63,14 @@ CommandStatus Server::execute_action(const CreateLobby&,
                                      const CommandContext& context) {
   auto lobby_view{request_lobby()};
   if (!lobby_view) {
-    if (auto r = net_engine().send_error_message_to(context.client_view,
-                                                    us_e::CANT_CREATE_LOBBY);
-        !r)
-      LOG(r.error().full_report());
-    return CommandStatus{cmd_se::CONTINUE, std::move(lobby_view).error()};
+    return {cmd_se::CONTINUE, std::move(lobby_view.error()),
+            us_e::CANT_CREATE_LOBBY};
   }
-  if (auto result = net_engine().send_message_to(
-          lobby_view->control_connection,
-          {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
-      !result) {
-    return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
-  }
+  net_engine().send_message_to(
+      lobby_view->control_connection,
+      {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
+
+  // return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
   return net_engine().transfer(lobby_view->control_connection,
                                context.client_view);
 }
@@ -131,8 +130,9 @@ CommandStatus Server::execute_action(const ChatMessage&,
 
 CommandStatus Server::execute_action(const GeneralAction&,
                                      const CommandContext& context) {
-  auto report = net_engine().send_message_to(
-      context.client_view, {{user_message(us_e::UNKNOWN_COMMAND)}});
+  net_engine().send_message_to(
+      context.client_view,
+      {{user_message(us_e::UNKNOWN_COMMAND)}, message_type_e::PRINTABLE});
   return {cmd_se::CONTINUE};
 }
 
@@ -165,8 +165,8 @@ void Lobby::run() { net_engine().run(); }
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  auto action_to_execute = dispatcher().dispatch(context);
-  auto lobby_action = filter_variant<LobbyAction>(action_to_execute);
+  auto action_to_execute = dispatcher().dispatch(context.message);
+  auto lobby_action = filter_variant<LobbyAction>(action_to_execute.parsed_cmd);
   if (!lobby_action) {
     return {cmd_se::CONTINUE,
             std::move(lobby_action)
@@ -196,7 +196,8 @@ CommandStatus Lobby::execute_action(const AcceptSocket&,
   }
   net_engine().send_message_to(
       *client_view, {{"Connected to lobby\n", "Connection code is: \n", "\t",
-                      std::to_string(lobby_id_)}});
+                      std::to_string(lobby_id_)},
+                     message_type_e::PRINTABLE});
   return {cmd_se::CONTINUE};
 }
 
@@ -209,6 +210,8 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
 Ev Client::init(end_point_e socket_type) {
   net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
+  console_handler_.set_input_handler(
+      [this](std::string user_cmd) { return register_user_input(user_cmd); });
   auto init_result = net_engine().init(socket_type);
   if (!init_result) {
     return std::unexpected(
@@ -220,12 +223,26 @@ Ev Client::init(end_point_e socket_type) {
   return {};
 }
 
-void Client::run() { net_engine().run(); }
+void Client::run() {
+  std::thread net_engine_thread([this] { return net_engine().run(); });
+  std::thread console_thread([this] { return console_handler_.run(); });
+  while (true) {
+    std::unique_lock lock{m_};
+    cv_.wait(lock, [this] { return !input_queue_.empty(); });
+    std::string input_line = input_queue_.front();
+    input_queue_.pop();
+    lock.unlock();
+    handle_input(input_line);
+  }
+  console_thread.join();
+  net_engine_thread.join();
+}
 
 CommandStatus Client::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  auto action_to_execute = dispatcher().dispatch(context);
-  auto client_action = filter_variant<ClientAction>(action_to_execute);
+  auto action_to_execute = dispatcher().dispatch(context.message);
+  auto client_action =
+      filter_variant<ClientAction>(action_to_execute.parsed_cmd);
   if (!client_action) {
     return {cmd_se::CONTINUE,
             std::move(client_action)
@@ -241,6 +258,51 @@ CommandStatus Client::handle_client_cmd(CommandContext& context) {
 
 CommandStatus Client::execute_action(const Quit&,
                                      const CommandContext& context) {
+  return {cmd_se::CONTINUE};
+}
+CommandStatus Client::execute_action(const PrintAble&,
+                                     const CommandContext& context) {
+
+  std::cout << context.message.payload;
+  return {cmd_se::CONTINUE};
+}
+void Client::register_user_input(std::string user_input) {
+  std::lock_guard lock{m_};
+  input_queue_.push(std::move(user_input));
+  cv_.notify_one();
+}
+
+void Client::handle_input(std::string input_line) {
+  CommandInfo cmd_info = dispatcher().dispatch({.payload = input_line});
+  switch (cmd_info.scope) {
+  case command_scope_e::NONE:
+    break;
+  case command_scope_e::LOCAL:
+    handle_local_cmd(cmd_info.parsed_cmd);
+    break;
+  case command_scope_e::NETWORK:
+    net_engine().send_message_to(server_view_, {{input_line}});
+    break;
+  }
+}
+
+CommandStatus Client::handle_local_cmd(ParsedCommand command_variant) {
+  auto local_action = filter_variant<LocalClientAction>(command_variant);
+  if (!local_action) {
+    return {cmd_se::CONTINUE,
+            std::move(local_action)
+                .error()
+                .add_context("Command not allowed in this context")};
+  }
+  return std::visit(
+      [&](auto&& local_action) -> CommandStatus {
+        return execute_local_action(local_action);
+      },
+      *local_action);
+}
+
+CommandStatus Client::execute_local_action(const Quit&) {
+  std::cout << "-><-" << std::endl;
   return {cmd_se::CONTINUE};
 }
 

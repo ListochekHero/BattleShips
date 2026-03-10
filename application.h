@@ -1,19 +1,19 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
-#include <concepts>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <queue>
 #include <sys/wait.h>
 
+#include "console_routine.h"
 #include "deferred_actions.h"
 #include "dispatcher.h"
 #include "error.h"
 #include "lobby_manager.h"
 #include "network_routine.h"
 #include "utility.h"
-#include <type_traits>
-#include <unordered_map>
 #include <variant>
 
 #define MAX_EVENTS 10
@@ -51,8 +51,8 @@ private:
   Ev send_error_reply(const ConnectionView& client, user_error_e error);
   void handle_zombie_pocesses();
 
-  using ServerAction = std::variant<CreateLobby, JoinLobby, ChatMessage,
-                                     GeneralAction>;
+  using ServerAction =
+      std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
   CommandStatus handle_client_cmd(CommandContext& context);
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
@@ -91,9 +91,19 @@ public:
   CommandStatus handle_client_cmd(CommandContext& context);
 
 private:
-  using ClientAction = std::variant<Quit>;
+  using ClientAction = std::variant<PrintAble, Quit>;
+  using LocalClientAction = std::variant<Quit>;
   CommandStatus execute_action(const Quit&, const CommandContext& context);
+  CommandStatus execute_action(const PrintAble&, const CommandContext& context);
+  void register_user_input(std::string);
+  void handle_input(std::string);
+  CommandStatus handle_local_cmd(ParsedCommand context);
+  CommandStatus execute_local_action(const Quit&);
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
+  ConsoleHandler console_handler_;
+  std::queue<std::string> input_queue_;
+  std::mutex m_;
+  std::condition_variable cv_;
 };
 
 } // namespace bsm
