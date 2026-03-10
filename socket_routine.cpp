@@ -13,14 +13,16 @@ SocketHandler::~SocketHandler() { close_socket(); }
 
 SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
     : socket_{std::exchange(sock_hndl.socket_, -1)},
-      socket_status_{socket_status_e::ALIVE} {}
+      socket_status_{sock_hndl.socket_status_.load()} {
+  sock_hndl.socket_status_.store(socket_status_e::EMPTY);
+}
 
 SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   if (this != &sock_hndl) {
     close_socket();
     socket_ = std::exchange(sock_hndl.socket_, -1);
-    socket_status_ =
-        std::exchange(sock_hndl.socket_status_, socket_status_e::EMPTY);
+    socket_status_.store(sock_hndl.socket_status_.load());
+    sock_hndl.socket_status_.store(socket_status_e::EMPTY);
   }
   return *this;
 }
@@ -68,6 +70,7 @@ Ev SocketHandler::setup_client() {
       0) {
     return std::unexpected(Error{{"Connection to the server failed"}});
   }
+  socket_status_ = socket_status_e::ALIVE;
   return {};
 }
 

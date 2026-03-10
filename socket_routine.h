@@ -2,6 +2,7 @@
 #define SOCKET_HANDLING_H
 
 #include <arpa/inet.h>
+#include <atomic>
 #include <cstddef>
 #include <fcntl.h>
 #include <optional>
@@ -22,6 +23,7 @@ namespace bsm {
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
 enum class message_type_e : uint8_t {
   DEFAULT,
+  PRINTABLE,
   SOCKET,
   CONN_CODE,
   LOBBY_ID,
@@ -73,7 +75,7 @@ public:
 
 private:
   int socket_{-1};
-  socket_status_e socket_status_{socket_status_e::EMPTY};
+  std::atomic<socket_status_e> socket_status_{socket_status_e::EMPTY};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
   void close_socket();
