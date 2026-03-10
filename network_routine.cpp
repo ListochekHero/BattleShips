@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <exception>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <type_traits>
 #include <unistd.h>
@@ -33,6 +34,7 @@ NetworkEngine::init(end_point_e socket_type) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup client"));
     }
+    socket_pool_[0].type = end_point_e::CLIENT;
     break;
   case end_point_e::SERVER:
     if (auto result = socket_pool_[0].handler->setup_listener(
@@ -86,14 +88,10 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
-Ev NetworkEngine::send_message_to(const ConnectionView& conn_view,
-                                  const OutgoingMessage& message) {
-  return send_message_impl(socket_pool_[conn_view.get_slot()], message);
-}
+void NetworkEngine::send_message_to(const ConnectionView& conn_view,
+                                    const OutgoingMessage& message) {
 
-Ev NetworkEngine::send_error_message_to(const ConnectionView& conn_view,
-                                        user_error_e user_code) {
-  return send_error_reply_impl(socket_pool_[conn_view.get_slot()], user_code);
+  send_message_impl(socket_pool_[conn_view.get_slot()], message);
 }
 
 std::expected<ConnectionView, Error>
@@ -254,10 +252,9 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
       .transform([&]() { return new_client_entry.slot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.full_report());
-        if (auto r = send_error_reply_impl(new_client_entry, us_e::GENERIC);
-            !r) {
-          LOG(r.error().full_report());
-        }
+        send_message_impl(new_client_entry, {{user_message(us_e::GENERIC)},
+                                             message_type_e::PRINTABLE});
+
         success_or_terminate(free_slot_entry(new_client_entry));
         return std::unexpected(Error{{"Unable to add new client to epoll"}});
       });
@@ -323,35 +320,31 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
     break;
   }
   ConnectionView connection{slot_entry.slot};
-  CommandContext context{connection, message, slot_entry.type};
+  CommandContext context{connection, message};
   CommandStatus cmd_status = on_message_callback_(
       context); //<-CallBack to Server, process user message
   if (cmd_status.error) {
-    LOG(cmd_status.error->full_report());
     LOG("Unable to handle client command: " + context.message.payload);
-    if (auto result = send_error_reply_impl(slot_entry, us_e::GENERIC); !result)
-      LOG(result.error().full_report());
+    LOG(cmd_status.error->full_report());
+    send_message_impl(slot_entry, {{user_message(*cmd_status.user_code)},
+                                   message_type_e::PRINTABLE});
   }
   return cmd_status;
 }
-Ev NetworkEngine::send_message_impl(SlotEntry& slot_entry,
-                                    const OutgoingMessage& message) {
-  return slot_entry.handler->write_to_user(message).transform_error(
-      [](auto&& error) {
-        return error.add_context("Unable to send message to socket");
-      });
-}
 
-Ev NetworkEngine::send_error_reply_impl(const SlotEntry& slot_entry,
-                                        user_error_e user_code) {
-  return slot_entry.handler->write_to_user({{user_message(user_code)}})
-      .or_else([](auto&& error) -> Ev {
-        return std::unexpected(
-            error.add_context("Unable to send an answer to user"));
-      });
+void NetworkEngine::send_message_impl(SlotEntry& slot_entry,
+                                      const OutgoingMessage& message) {
+  if (auto write_result = slot_entry.handler->write_to_user(message);
+      !write_result) {
+    LOG("Unable to write message into socket");
+    LOG(write_result.error().full_report());
+    deferred_actions_.schedule(
+        std::make_unique<Cleanup_Connection>(slot_entry.slot), *this);
+  }
 }
 
 void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
+  std::lock_guard lock(engine.m_);
   SlotEntry& entry{engine.socket_pool_[slot]};
   entry.generation++;
   entry.type = end_point_e::NONE;
@@ -359,6 +352,7 @@ void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
 }
 
 void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {
+  std::lock_guard lock(engine.m_);
   engine.release_client(engine.socket_pool_[slot]);
 }
 

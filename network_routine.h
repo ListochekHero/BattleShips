@@ -5,9 +5,11 @@
 #include "socket_routine.h"
 #include "utility.h"
 #include <concepts>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <type_traits>
 
 namespace bsm {
@@ -40,7 +42,7 @@ private:
 struct ConnectionMeta {
   size_t slot{std::numeric_limits<std::size_t>::max()};
   end_point_e type{end_point_e::NONE};
-  std::string name{""};
+  std::string name{};
 };
 
 class NetworkEngine {
@@ -51,10 +53,8 @@ public:
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
-  Ev send_message_to(const ConnectionView& conn_view,
-                     const OutgoingMessage& message);
-  Ev send_error_message_to(const ConnectionView& conn_view,
-                           user_error_e user_code);
+  void send_message_to(const ConnectionView& conn_view,
+                       const OutgoingMessage& message);
   void cleanup_slot(size_t slot);
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
@@ -117,8 +117,9 @@ private:
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
-  Ev send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
-  Ev send_error_reply_impl(const SlotEntry& slot_entry, user_error_e user_code);
+  void send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
+  void send_error_reply_impl(const SlotEntry& slot_entry,
+                             user_error_e user_code);
 
   class Cleanup_Connection : public DeferredAction {
   public:
@@ -136,6 +137,9 @@ private:
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
   DeferredActions deferred_actions_;
+
+  std::mutex m_;
+  std::condition_variable cv_;
 };
 
 } // namespace bsm
