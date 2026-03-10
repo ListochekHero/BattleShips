@@ -1,4 +1,5 @@
 #include "dispatcher.h"
+#include "socket_routine.h"
 #include "utility.h"
 
 namespace bsm {
@@ -12,16 +13,16 @@ bool Dispatcher::match_cmd(const Command& cmd, const ReadResult& msg) {
   return false;
 }
 
-CommandInfo Dispatcher::dispatch(const CommandContext& context) {
+CommandInfo Dispatcher::dispatch(const ReadResult& message) {
   for (const auto& cmd : commands) {
-    if (match_cmd(cmd, context.message))
+    if (match_cmd(cmd, message))
       return {.scope = cmd.scope, .parsed_cmd = cmd.make()};
   }
   return {.scope = command_scope_e::NONE,
           .parsed_cmd = Command::make_action<GeneralAction>()};
 }
 
-const std::array<Dispatcher::Command, 7> Dispatcher::commands = {
+const std::array<Dispatcher::Command, 8> Dispatcher::commands = {
     {{.text_aliases = {"\\create"},
       .msg_type = std::nullopt,
       .scope = command_scope_e::NETWORK,
@@ -48,6 +49,9 @@ const std::array<Dispatcher::Command, 7> Dispatcher::commands = {
      {.text_aliases = {"\\msg"},
       .msg_type = std::nullopt,
       .scope = command_scope_e::NETWORK,
-      .make = Command::make_action<ChatMessage>}}};
+      .make = Command::make_action<ChatMessage>},
+     {.msg_type = message_type_e::PRINTABLE,
+      .scope = command_scope_e::NETWORK,
+      .make = Command::make_action<PrintAble>}}};
 
 } // namespace bsm

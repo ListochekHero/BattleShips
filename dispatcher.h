@@ -12,11 +12,12 @@ struct Quit {};
 struct AcceptSocket {};
 struct LobbyIdSetter {};
 struct ChatMessage {};
+struct PrintAble {};
 struct NotAllowed {};
 struct GeneralAction {};
 using ParsedCommand =
     std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
-                 ChatMessage, NotAllowed, GeneralAction>;
+                 ChatMessage, PrintAble, NotAllowed, GeneralAction>;
 enum class command_scope_e { NONE, LOCAL, NETWORK };
 struct CommandInfo {
   command_scope_e scope{command_scope_e::NONE};
@@ -25,7 +26,7 @@ struct CommandInfo {
 
 class Dispatcher {
 public:
-  CommandInfo dispatch(const CommandContext& context);
+  CommandInfo dispatch(const ReadResult& message);
 
 private:
   struct Command {
@@ -39,7 +40,7 @@ private:
     Factory make;
   };
 
-  static const std::array<Command, 7> commands;
+  static const std::array<Command, 8> commands;
   bool match_cmd(const Command& cmd, const ReadResult& msg);
 };
 
