@@ -87,6 +87,7 @@ public:
   ~EpollHandler();
   Ev init();
   Ev add_socket(SocketHandler& socket_handler, size_t slot);
+  Ev rearm_socket(SocketHandler& socket_handler, size_t slot);
   Ev remove_socket(SocketHandler& socket_handler);
   std::expected<std::vector<size_t>, Error>
   wait_for_events(size_t max_events) const;

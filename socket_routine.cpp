@@ -1,6 +1,7 @@
 #include "socket_routine.h"
 #include "logger.h"
 #include <cstddef>
+#include <sys/epoll.h>
 #include <unistd.h>
 #include <utility>
 
@@ -215,10 +216,20 @@ Ev EpollHandler::add_socket(SocketHandler& socket_handler, size_t slot) {
   struct epoll_event event;
   event.data.u64 = slot;
   // event.data.ptr = static_cast<void*>(socket_handler);
-  event.events = EPOLLIN | EPOLLET;
+  event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
   if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==
       -1)
     return std::unexpected(make_error_c("Error adding socket to epoll"));
+  return {};
+}
+
+Ev EpollHandler::rearm_socket(SocketHandler& socket_handler, size_t slot) {
+  struct epoll_event event;
+  event.data.u64 = slot;
+  event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
+  if (epoll_ctl(epollfd_, EPOLL_CTL_MOD, socket_handler.get_socket(), &event) ==
+      -1)
+    return std::unexpected(make_error_c("Error rearming socket in epoll"));
   return {};
 }
 
