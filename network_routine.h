@@ -53,7 +53,7 @@ public:
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
-  void send_message_to(const ConnectionView& conn_view,
+  bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
   void cleanup_slot(size_t slot);
   std::expected<ConnectionView, Error> attach(int socket,
@@ -70,11 +70,8 @@ public:
       ConnectionMeta meta{entry.slot, entry.type};
       if (!std::invoke(filter, meta))
         continue;
-      if (auto result = send_message_impl(entry, message); !result) {
+      if (send_message_impl(entry, message)) {
         delivery_report.failed++;
-        LOG(result.error()
-                .add_context("Unable to send message to specific recipient")
-                .full_report());
         continue;
       }
       delivery_report.delivered++;
@@ -117,9 +114,7 @@ private:
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
   CommandStatus process_message(SlotEntry& slot_entry, ReadResult& message);
-  void send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
-  void send_error_reply_impl(const SlotEntry& slot_entry,
-                             user_error_e user_code);
+  bool send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message);
 
   class Cleanup_Connection : public DeferredAction {
   public:

@@ -88,10 +88,10 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
-void NetworkEngine::send_message_to(const ConnectionView& conn_view,
+bool NetworkEngine::send_message_to(const ConnectionView& conn_view,
                                     const OutgoingMessage& message) {
 
-  send_message_impl(socket_pool_[conn_view.get_slot()], message);
+  return send_message_impl(socket_pool_[conn_view.get_slot()], message);
 }
 
 std::expected<ConnectionView, Error>
@@ -214,7 +214,7 @@ NetworkEngine::find_spot_for_new_client(int client_socket,
               .error()
               .add_context("Unable to find spot for new client"));
     }
-    return new_entry_slot.value();
+    return new_entry_slot;
   }
 }
 
@@ -254,7 +254,6 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
         LOG(error.full_report());
         send_message_impl(new_client_entry, {{user_message(us_e::GENERIC)},
                                              message_type_e::PRINTABLE});
-
         success_or_terminate(free_slot_entry(new_client_entry));
         return std::unexpected(Error{{"Unable to add new client to epoll"}});
       });
@@ -273,6 +272,9 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
     if (socket_pool_[slot].type == end_point_e::SERVER) {
       process_server_socket(slot);
     } else {
+
+      // push_to_clients_queue(slot);
+
       process_client_socket(slot);
     }
   }
@@ -332,7 +334,7 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
   return cmd_status;
 }
 
-void NetworkEngine::send_message_impl(SlotEntry& slot_entry,
+bool NetworkEngine::send_message_impl(SlotEntry& slot_entry,
                                       const OutgoingMessage& message) {
   if (auto write_result = slot_entry.handler->write_to_user(message);
       !write_result) {
@@ -340,7 +342,9 @@ void NetworkEngine::send_message_impl(SlotEntry& slot_entry,
     LOG(write_result.error().full_report());
     deferred_actions_.schedule(
         std::make_unique<Cleanup_Connection>(slot_entry.slot), *this);
+    return false;
   }
+  return true;
 }
 
 void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
