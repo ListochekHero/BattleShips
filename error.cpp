@@ -5,7 +5,7 @@ namespace bsm {
 std::string Error::full_report() const {
   std::string report{"Error Trace:\n"};
   for (auto it = backtrace.rbegin(); it != backtrace.rend(); ++it) {
-    report += "  ->" + *it + "\n";
+    report += "\t->" + *it + "\n";
   }
   return report;
 }
@@ -13,7 +13,7 @@ std::string Error::full_report() const {
 std::string c_error_string() { return std::system_category().message(errno); }
 
 Error make_error_c(std::string message) {
-  return {.backtrace = {message, c_error_string()}};
+  return {.backtrace = {message, c_error_string()}, .loc_errno = errno};
 }
 
 std::string_view user_message(user_error_e user) {

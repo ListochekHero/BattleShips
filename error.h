@@ -19,6 +19,7 @@ using us_e = user_error_e;
 
 struct Error {
   std::vector<std::string> backtrace;
+  int loc_errno;
   template <typename Self>
   auto&&
   add_context(this Self&& self, std::string msg,
