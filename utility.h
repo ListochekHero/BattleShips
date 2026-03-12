@@ -28,7 +28,6 @@ struct CommandStatus {
 struct CommandContext {
   ConnectionView& client_view;
   ReadResult& message;
-  end_point_e peer;
 };
 
 struct DeliveryReport {

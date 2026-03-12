@@ -19,6 +19,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 add_library(common OBJECT
 application.cpp
 config.cpp
+console_routine.cpp
 data_storage.cpp
 deferred_actions.cpp
 dispatcher.cpp
@@ -29,7 +30,6 @@ logger.cpp
 network_routine.cpp
 socket_routine.cpp
 utility.cpp
-
 )
 
 # add_library(sanitizers INTERFACE)

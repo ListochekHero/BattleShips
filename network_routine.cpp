@@ -272,10 +272,9 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
     if (socket_pool_[slot].type == end_point_e::SERVER) {
       process_server_socket(slot);
     } else {
-
-      // push_to_clients_queue(slot);
-
-      process_client_socket(slot);
+      push_to_clients_queue(
+          slot); // <- callback to add pending client to queue for processing
+      // process_client_socket(slot);
     }
   }
 }

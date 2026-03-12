@@ -48,6 +48,7 @@ struct ConnectionMeta {
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
+  using QueueHandler = std::function<bool(size_t)>;
   std::expected<ConnectionView, Error> init(end_point_e socket_type);
   std::expected<ConnectionView, Error>
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
@@ -131,6 +132,7 @@ private:
   std::vector<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
+  QueueHandler push_to_clients_queue;
   DeferredActions deferred_actions_;
 
   std::mutex m_;
