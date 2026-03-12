@@ -39,17 +39,10 @@ public:
   Server() = default;
   Ev init();
   void run() override;
-  void cleanup_slot(size_t slot);
 
 private:
-  CommandStatus accept_socket_from_parent(const CommandContext& context);
-  CommandStatus send_connection_code(const CommandContext& context);
-  CommandStatus join_lobby(const CommandContext& context);
-  CommandStatus general_command(const CommandContext& context);
-  std::expected<LobbyProcess*, Error> found_lobby(int64_t child_id);
-  CommandStatus chat_message(const CommandContext& context);
-  Ev send_error_reply(const ConnectionView& client, user_error_e error);
   void handle_zombie_pocesses();
+  bool push_to_clients_queue(size_t slot);
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
@@ -64,7 +57,11 @@ private:
   CommandStatus execute_action(const GeneralAction& action_type,
                                const CommandContext& context);
 
+  std::queue<size_t> clients_queue_;
   LobbyManager lobby_manager_;
+
+  std::mutex m_;
+  std::condition_variable cv_;
 };
 
 class Lobby : public Application {

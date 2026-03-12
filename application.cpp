@@ -32,14 +32,20 @@ Ev Server::init() {
 
 void Server::run() { net_engine().run(); }
 
-Ev Server::send_error_reply(const ConnectionView& conn_view,
-                            user_error_e error) {
-  return net_engine()
-      .send_error_message_to(conn_view, error)
-      .or_else([](auto&& error) -> Ev {
-        return std::unexpected(
-            error.add_context("Unable to send an answer to user"));
-      });
+void Server::handle_zombie_pocesses() {
+  int status;
+  pid_t pid;
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    if (WIFEXITED(status)) {
+      LOG(std::format("Child process exited: pid={}, status={}", pid,
+                      WEXITSTATUS(status)));
+    }
+  }
+}
+
+bool Server::push_to_clients_queue(size_t slot) {
+  std::lock_guard lock(m_);
+  clients_queue_.emplace(slot);
 }
 
 CommandStatus Server::handle_client_cmd(CommandContext& context) {
@@ -134,17 +140,6 @@ CommandStatus Server::execute_action(const GeneralAction&,
       context.client_view,
       {{user_message(us_e::UNKNOWN_COMMAND)}, message_type_e::PRINTABLE});
   return {cmd_se::CONTINUE};
-}
-
-void Server::handle_zombie_pocesses() {
-  int status;
-  pid_t pid;
-  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-    if (WIFEXITED(status)) {
-      LOG(std::format("Child process exited: pid={}, status={}", pid,
-                      WEXITSTATUS(status)));
-    }
-  }
 }
 
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
