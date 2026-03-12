@@ -1,5 +1,7 @@
 #include "client.h"
+#include "application.h"
 #include "logger.h"
+#include "network_routine.h"
 #include "socket_routine.h"
 #include <cstdio>
 #include <iostream>
@@ -7,12 +9,20 @@
 #define SERVER_PORT 8000
 
 int main(int argc, char* argv[]) {
+  char* program_name = strrchr(argv[0], '/');
+  program_name++;
+  if (auto result = bsm::Logger::instance().init(program_name); !result) {
+    std::cout << "Unable to init Logger";
+    return EXIT_FAILURE;
+  }
+  bsm::Client client{};
+  client.init(bsm::end_point_e::CLIENT);
+  client.run();
+
   int sockfd;
   struct sockaddr_in server_addr;
   char buffer[BUFF_SIZE];
-  char* program_name = strrchr(argv[0], '/');
-  program_name++;
-  bsm::Logger::instance().init(program_name);
+
   bsm::LOG("Creating socket");
   if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
     perror("Socket creation error");
