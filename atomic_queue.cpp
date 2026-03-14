@@ -9,16 +9,19 @@ size_t AtomicQueue::pop() {
   if (queue[last_busy_index] == 0)
     return 0;
   if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
-    queue[last_busy_index].wait(0);
-    size_t slot = queue[last_busy_index].load();
-    queue[last_busy_index] = 0;
-    return slot;
+    size_t slot{0};
+    while (!slot) {
+      queue[last_busy_index].wait(0);
+      slot = queue[last_busy_index].load();
+      queue[last_busy_index] = 0;
+      return slot;
+    }
   }
   return 0;
 }
 
 bool AtomicQueue::push(size_t slot) {
-  while (true) {
+  for (short i = 0; i < 10; i++) {
     uint8_t last_free_index = tail.load();
     if ((last_free_index + 1) == head)
       return false;
@@ -29,6 +32,7 @@ bool AtomicQueue::push(size_t slot) {
     }
     continue;
   }
+  return false;
 }
 
 } // namespace bsm
