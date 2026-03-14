@@ -18,6 +18,7 @@ message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
 add_library(common OBJECT
 application.cpp
+atomic_queue.cpp
 config.cpp
 console_routine.cpp
 data_storage.cpp
