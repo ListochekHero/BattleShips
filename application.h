@@ -1,12 +1,14 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+#include <atomic>
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <queue>
 #include <sys/wait.h>
 
+#include "atomic_queue.h"
 #include "console_routine.h"
 #include "deferred_actions.h"
 #include "dispatcher.h"
@@ -43,6 +45,7 @@ public:
 private:
   void handle_zombie_pocesses();
   bool push_to_clients_queue(size_t slot);
+  void worker_loop();
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
@@ -59,6 +62,8 @@ private:
 
   std::queue<size_t> clients_queue_;
   LobbyManager lobby_manager_;
+  AtomicQueue atomic_queue_;
+  std::atomic_size_t pending_clients_counter_{0};
 
   std::mutex m_;
   std::condition_variable cv_;
@@ -69,6 +74,10 @@ public:
   Lobby() = default;
   Ev init(int parrent_socket, end_point_e socket_type);
   void run() override;
+  bool push_to_clients_queue(size_t slot);
+  void worker_loop();
+  AtomicQueue atomic_queue_;
+  std::atomic_size_t pending_clients_counter_{0};
 
 private:
   using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter>;
@@ -86,6 +95,10 @@ public:
   Ev init(end_point_e socket_type);
   void run();
   CommandStatus handle_client_cmd(CommandContext& context);
+  bool push_to_clients_queue(size_t slot);
+  void worker_loop();
+  AtomicQueue atomic_queue_;
+  std::atomic_size_t pending_clients_counter_{0};
 
 private:
   using ClientAction = std::variant<PrintAble, Quit>;

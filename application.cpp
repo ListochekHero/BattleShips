@@ -7,11 +7,13 @@
 #include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <cstddef>
 #include <expected>
 #include <iostream>
 #include <mutex>
 #include <ostream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <variant>
 
@@ -23,6 +25,9 @@ NetworkEngine& Application::net_engine() { return net_engine_; }
 Ev Server::init() {
   net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
+  net_engine().push_to_clients_queue = [this](size_t slot) {
+    return push_to_clients_queue(slot);
+  };
   if (auto init_result = net_engine().init(end_point_e::SERVER); !init_result) {
     return std::unexpected(
         std::move(init_result).error().add_context("Unalbe to init Server"));
@@ -30,7 +35,10 @@ Ev Server::init() {
   return {};
 }
 
-void Server::run() { net_engine().run(); }
+void Server::run() {
+  std::thread net_engine_thread([this] { return net_engine().run(); });
+  worker_loop();
+}
 
 void Server::handle_zombie_pocesses() {
   int status;
@@ -44,8 +52,26 @@ void Server::handle_zombie_pocesses() {
 }
 
 bool Server::push_to_clients_queue(size_t slot) {
-  std::lock_guard lock(m_);
-  clients_queue_.emplace(slot);
+  bool added = atomic_queue_.push(slot);
+  pending_clients_counter_.fetch_add(1);
+  pending_clients_counter_.notify_one();
+  return added;
+}
+
+void Server::worker_loop() {
+  while (true) {
+    while (true) {
+      pending_clients_counter_.wait(0);
+      if (pending_clients_counter_ == 0)
+        continue;
+      pending_clients_counter_.fetch_sub(1);
+      break;
+    }
+    size_t slot = atomic_queue_.pop();
+    if (!slot)
+      continue;
+    net_engine().process_client(slot);
+  }
 }
 
 CommandStatus Server::handle_client_cmd(CommandContext& context) {
@@ -142,9 +168,35 @@ CommandStatus Server::execute_action(const GeneralAction&,
   return {cmd_se::CONTINUE};
 }
 
+bool Lobby::push_to_clients_queue(size_t slot) {
+  bool added = atomic_queue_.push(slot);
+  pending_clients_counter_.fetch_add(1);
+  pending_clients_counter_.notify_one();
+  return added;
+}
+
+void Lobby::worker_loop() {
+  while (true) {
+    while (true) {
+      pending_clients_counter_.wait(0);
+      if (pending_clients_counter_ == 0)
+        continue;
+      pending_clients_counter_.fetch_sub(1);
+      break;
+    }
+    size_t slot = atomic_queue_.pop();
+    if (!slot)
+      continue;
+    net_engine().process_client(slot);
+  }
+}
+
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
   net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
+  net_engine().push_to_clients_queue = [this](size_t slot) {
+    return push_to_clients_queue(slot);
+  };
   auto init_result = net_engine().init(parrent_socket, socket_type);
   if (!init_result) {
     return std::unexpected(
@@ -156,7 +208,10 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
   return {};
 }
 
-void Lobby::run() { net_engine().run(); }
+void Lobby::run() {
+  std::thread net_engine_thread([this] { return net_engine().run(); });
+  worker_loop();
+}
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
@@ -201,12 +256,37 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
   lobby_id_ = std::strtol(context.message.payload.c_str(), nullptr, 10);
   return {cmd_se::CONTINUE};
 }
+bool Client::push_to_clients_queue(size_t slot) {
+  bool added = atomic_queue_.push(slot);
+  pending_clients_counter_.fetch_add(1);
+  pending_clients_counter_.notify_one();
+  return added;
+}
+
+void Client::worker_loop() {
+  while (true) {
+    while (true) {
+      pending_clients_counter_.wait(0);
+      if (pending_clients_counter_ == 0)
+        continue;
+      pending_clients_counter_.fetch_sub(1);
+      break;
+    }
+    size_t slot = atomic_queue_.pop();
+    if (!slot)
+      continue;
+    net_engine().process_client(slot);
+  }
+}
 
 Ev Client::init(end_point_e socket_type) {
   net_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
   console_handler_.set_input_handler(
       [this](std::string user_cmd) { return register_user_input(user_cmd); });
+  net_engine().push_to_clients_queue = [this](size_t slot) {
+    return push_to_clients_queue(slot);
+  };
   auto init_result = net_engine().init(socket_type);
   if (!init_result) {
     return std::unexpected(
@@ -221,6 +301,7 @@ Ev Client::init(end_point_e socket_type) {
 void Client::run() {
   std::thread net_engine_thread([this] { return net_engine().run(); });
   std::thread console_thread([this] { return console_handler_.run(); });
+  std::thread work_thread([this] { return worker_loop(); });
   while (true) {
     std::unique_lock lock{m_};
     cv_.wait(lock, [this] { return !input_queue_.empty(); });
@@ -258,7 +339,7 @@ CommandStatus Client::execute_action(const Quit&,
 CommandStatus Client::execute_action(const PrintAble&,
                                      const CommandContext& context) {
 
-  std::cout << context.message.payload;
+  std::cout << context.message.payload << std::endl;
   return {cmd_se::CONTINUE};
 }
 void Client::register_user_input(std::string user_input) {
