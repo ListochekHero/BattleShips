@@ -29,12 +29,12 @@ NetworkEngine::init(end_point_e socket_type) {
   case end_point_e::LOBBY:
   case end_point_e::PARENT:
     break;
-  case end_point_e::CLIENT:
+  case end_point_e::FROM_SERVER:
     if (auto result = socket_pool_[0].handler->setup_client(); !result) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup client"));
     }
-    socket_pool_[0].type = end_point_e::CLIENT;
+    socket_pool_[0].type = end_point_e::FROM_SERVER;
     break;
   case end_point_e::SERVER:
     if (auto result = socket_pool_[0].handler->setup_listener(
@@ -43,6 +43,8 @@ NetworkEngine::init(end_point_e socket_type) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup listener"));
     }
+    break;
+  case end_point_e::CLIENT:
     break;
   }
   if (auto result = init_epoll(); !result) {
@@ -130,6 +132,11 @@ CommandStatus NetworkEngine::transfer(const ConnectionView& dest_view,
   deferred_actions_.schedule(
       std::make_unique<Cleanup_Connection>(src_entry.slot), *this);
   return CommandStatus{cmd_se::TERMINATE};
+}
+
+void NetworkEngine::process_client(size_t slot) {
+  process_client_socket(slot);
+  return;
 }
 
 void NetworkEngine::cleanup_slot(size_t slot) {
@@ -271,8 +278,12 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
     if (socket_pool_[slot].type == end_point_e::SERVER) {
       process_server_socket(slot);
+    } else if (socket_pool_[slot].type == end_point_e::PARENT) {
+      process_client_socket(slot);
+    } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
+      process_client_socket(slot);
     } else {
-      push_to_clients_queue(
+      bool push_success = push_to_clients_queue(
           slot); // <- callback to add pending client to queue for processing
       // process_client_socket(slot);
     }

@@ -20,6 +20,7 @@ enum class end_point_e : uint8_t {
   LOBBY = 1 << 1,
   PARENT = 1 << 2,
   SERVER = 1 << 3,
+  FROM_SERVER = 1 << 4
 };
 
 struct SlotEntry {
@@ -49,6 +50,7 @@ class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
   using QueueHandler = std::function<bool(size_t)>;
+  QueueHandler push_to_clients_queue;
   std::expected<ConnectionView, Error> init(end_point_e socket_type);
   std::expected<ConnectionView, Error>
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
@@ -60,6 +62,7 @@ public:
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
   CommandStatus transfer(const ConnectionView& dest, const ConnectionView& src);
+  void process_client(size_t slot);
 
   template <typename Filter>
     requires std::predicate<Filter, const ConnectionMeta&>
@@ -132,7 +135,6 @@ private:
   std::vector<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
-  QueueHandler push_to_clients_queue;
   DeferredActions deferred_actions_;
 
   std::mutex m_;
