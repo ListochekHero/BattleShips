@@ -67,10 +67,10 @@ void Server::worker_loop() {
       pending_clients_counter_.fetch_sub(1);
       break;
     }
-    size_t slot = atomic_queue_.pop();
+    auto slot = atomic_queue_.pop();
     if (!slot)
       continue;
-    net_engine().process_client(slot);
+    net_engine().process_client(*slot);
   }
 }
 
@@ -184,10 +184,10 @@ void Lobby::worker_loop() {
       pending_clients_counter_.fetch_sub(1);
       break;
     }
-    size_t slot = atomic_queue_.pop();
+    auto slot = atomic_queue_.pop();
     if (!slot)
       continue;
-    net_engine().process_client(slot);
+    net_engine().process_client(*slot);
   }
 }
 
@@ -272,10 +272,10 @@ void Client::worker_loop() {
       pending_clients_counter_.fetch_sub(1);
       break;
     }
-    size_t slot = atomic_queue_.pop();
+    auto slot = atomic_queue_.pop();
     if (!slot)
       continue;
-    net_engine().process_client(slot);
+    net_engine().process_client(*slot);
   }
 }
 
