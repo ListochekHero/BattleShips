@@ -6,6 +6,7 @@
 #include "logger.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <coroutine>
 #include <cstddef>
 #include <exception>
 #include <memory>
@@ -86,6 +87,29 @@ void NetworkEngine::run() {
                     LOG(error.full_report());
                     return {};
                   });
+  }
+  deferred_actions_.flush(*this);
+}
+
+Handler NetworkEngine::run_co() {
+  while (true) {
+    auto ready_slots = epoll_handler_.wait_for_events(MAX_EVENTS);
+    if (!ready_slots) {
+      LOG("Cant get events");
+      LOG(ready_slots.error().full_report());
+      continue;
+    }
+    for (size_t slot : *ready_slots) {
+      if (socket_pool_[slot].type == end_point_e::SERVER) {
+        process_server_socket(slot);
+      } else if (socket_pool_[slot].type == end_point_e::PARENT) {
+        process_client_socket(slot);
+      } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
+        process_client_socket(slot);
+      } else {
+        co_yield slot;
+      }
+    }
   }
   deferred_actions_.flush(*this);
 }

@@ -6,11 +6,35 @@
 #include "utility.h"
 #include <concepts>
 #include <condition_variable>
+#include <coroutine>
 #include <cstddef>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <mutex>
-#include <type_traits>
+
+struct network_promise;
+using handle_type = std::coroutine_handle<network_promise>;
+
+struct Handler{
+  handle_type h_;
+};
+
+struct network_promise {
+  size_t latest_slot{std::numeric_limits<size_t>::max()};
+  Handler get_return_object() { return {handle_type::from_promise(*this)}; }
+  std::suspend_always initial_suspend() noexcept { return {}; }
+  std::suspend_always final_suspend() noexcept { return {}; }
+  std::suspend_always yield_value(size_t slot) {
+    latest_slot = slot;
+    return {};
+  }
+  void unhandled_exception() {}
+};
+
+template <> struct std::coroutine_traits<Handler, bsm::NetworkEngine&> {
+  using promise_type = network_promise;
+};
 
 namespace bsm {
 
@@ -56,6 +80,7 @@ public:
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
+  Handler run_co();
   bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
   void cleanup_slot(size_t slot);
