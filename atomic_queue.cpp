@@ -7,6 +7,17 @@
 
 namespace bsm {
 
+std::optional<unsigned int> AtomicQueue::single_thread_pop() {
+  if (head == tail)
+    return std::nullopt;
+  AtomicSlot data{};
+  queue[head].wait(data);
+  data = queue[head].load();
+  queue[head].compare_exchange_strong(data, {});
+  head++;
+  return data.slot;
+}
+
 std::optional<unsigned int> AtomicQueue::pop() {
   for (short i = 0; i < 2; i++) {
     uint8_t last_busy_index = head.load();
@@ -24,6 +35,16 @@ std::optional<unsigned int> AtomicQueue::pop() {
     }
   }
   return std::nullopt;
+}
+
+bool AtomicQueue::single_thread_push(unsigned int slot) {
+  if ((tail + 1) == head)
+    return false;
+  AtomicSlot data{.ready = true, .slot = slot};
+  queue[tail].exchange(data);
+  queue[tail].notify_one();
+  tail++;
+  return true;
 }
 
 bool AtomicQueue::push(unsigned int slot) {

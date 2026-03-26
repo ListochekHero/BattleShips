@@ -16,7 +16,9 @@ struct AtomicSlot {
 
 class AtomicQueue {
 public:
+  std::optional<unsigned int> single_thread_pop();
   std::optional<unsigned int> pop();
+  bool single_thread_push(unsigned int slot);
   bool push(unsigned int slot);
 
 private:
