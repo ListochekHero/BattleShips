@@ -14,15 +14,17 @@
 #include <mutex>
 
 struct network_promise;
-using handle_type = std::coroutine_handle<network_promise>;
+using co_handle_type = std::coroutine_handle<network_promise>;
 
-struct Handler{
-  handle_type h_;
+struct CoroutineHandler {
+  co_handle_type handle_;
 };
 
 struct network_promise {
   size_t latest_slot{std::numeric_limits<size_t>::max()};
-  Handler get_return_object() { return {handle_type::from_promise(*this)}; }
+  co_handle_type get_return_object() {
+    return co_handle_type::from_promise(*this);
+  }
   std::suspend_always initial_suspend() noexcept { return {}; }
   std::suspend_always final_suspend() noexcept { return {}; }
   std::suspend_always yield_value(size_t slot) {
@@ -32,7 +34,8 @@ struct network_promise {
   void unhandled_exception() {}
 };
 
-template <> struct std::coroutine_traits<Handler, bsm::NetworkEngine&> {
+template <>
+struct std::coroutine_traits<co_handle_type, bsm::NetworkEngine&> {
   using promise_type = network_promise;
 };
 
@@ -80,7 +83,7 @@ public:
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
   void set_message_handler(MessageHandler h);
   void run();
-  Handler run_co();
+  co_handle_type run_co();
   bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
   void cleanup_slot(size_t slot);

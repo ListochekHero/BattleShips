@@ -91,7 +91,7 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
-Handler NetworkEngine::run_co() {
+co_handle_type NetworkEngine::run_co() {
   while (true) {
     auto ready_slots = epoll_handler_.wait_for_events(MAX_EVENTS);
     if (!ready_slots) {
