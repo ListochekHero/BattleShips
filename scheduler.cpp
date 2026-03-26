@@ -1,3 +1,6 @@
 #include "scheduler.h"
 
-namespace bsm {}
+namespace bsm {
+
+
+} // namespace bsm
