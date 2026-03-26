@@ -7,9 +7,11 @@
 #include "network_routine.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <coroutine>
 #include <cstddef>
 #include <expected>
 #include <iostream>
+#include <limits>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -36,8 +38,15 @@ Ev Server::init() {
 }
 
 void Server::run() {
-  std::thread net_engine_thread([this] { return net_engine().run(); });
-  worker_loop();
+  size_t slot =
+      scheduler_.add_co_task([this]() { return net_engine().run_co(); });
+  scheduler_.execute_co_task(slot, [this](std::coroutine_handle<> te_handle) {
+    co_handle_type co_handle =
+        co_handle_type::from_address(te_handle.address());
+    co_handle.resume();
+    this->scheduler_.queue.single_thread_push(co_handle.promise().latest_slot);
+  });
+  scheduler_.execute_common_task([this]() { return worker_loop(); });
 }
 
 void Server::handle_zombie_pocesses() {

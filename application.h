@@ -15,6 +15,7 @@
 #include "error.h"
 #include "lobby_manager.h"
 #include "network_routine.h"
+#include "scheduler.h"
 #include "utility.h"
 #include <variant>
 
@@ -64,7 +65,7 @@ private:
   LobbyManager lobby_manager_;
   AtomicQueue atomic_queue_;
   std::atomic_size_t pending_clients_counter_{0};
-
+  Scheduler scheduler_;
   std::mutex m_;
   std::condition_variable cv_;
 };
