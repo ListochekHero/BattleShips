@@ -3,6 +3,7 @@
 
 #include "atomic_queue.h"
 #include "network_routine.h"
+#include <any>
 #include <coroutine>
 #include <cstddef>
 #include <thread>
@@ -10,10 +11,21 @@
 
 namespace bsm {
 
+enum class task_status_e{EMPTY, READY, INPROGRESS};
+
 struct Task {
+  task_status_e task_status_v{task_status_e::EMPTY};
+  std::any context{};
+};
+
+struct CoTask {
   std::thread executor{};
-  std::optional<std::coroutine_handle<>> co_handle;
+  std::optional<std::coroutine_handle<>> te_co_handle;
   bool running{false};
+};
+
+class ThreadPool {
+  std::vector<std::thread> thread_pool_{4};
 };
 
 class Scheduler {
@@ -26,8 +38,8 @@ public:
       while (counter) {
         auto slot{queue.single_thread_pop()};
         if (slot) {
-          tasks.push_back({});
-          tasks.back().executor(net_engine().process_client, *slot);
+          co_tasks_.push_back({});
+          co_tasks_.back().executor(net_engine().process_client, *slot);
         }
       }
     }
@@ -35,22 +47,19 @@ public:
 
   template <typename F> size_t add_co_task(F&& f) {
     auto co_handle = std::invoke(f);
-    tasks.push_back(Task{.handle = co_handle});
-    return tasks.size() - 1;
+    co_tasks_.push_back(CoTask{.handle = co_handle});
+    return co_tasks_.size() - 1;
   }
-  template <typename F> void execute_co_task(size_t slot, F&& f) {
-    tasks[slot].executor(f, *(tasks[slot].co_handle));
+  template <typename F> void schedule_co_task(size_t slot, F&& f) {
+    co_tasks_[slot].executor(f, *(co_tasks_[slot].te_co_handle));
     return;
   }
-  template <typename F> void execute_common_task(F&& f) {
-    tasks.push_back(Task{});
-    tasks.back().executor(f);
-  }
   std::atomic_size_t pending_clients_counter_{0};
-  AtomicQueue queue;
 
 private:
-  std::vector<Task> tasks;
+  std::vector<CoTask> co_tasks_;
+  std::vector<Task> tasks_;
+
 };
 
 } // namespace bsm
