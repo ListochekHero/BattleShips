@@ -40,11 +40,14 @@ Ev Server::init() {
 void Server::run() {
   size_t slot =
       scheduler_.add_co_task([this]() { return net_engine().run_co(); });
-  scheduler_.execute_co_task(slot, [this](std::coroutine_handle<> te_handle) {
+  scheduler_.schedule_co_task(slot, [this](std::coroutine_handle<> te_handle) {
     co_handle_type co_handle =
         co_handle_type::from_address(te_handle.address());
-    co_handle.resume();
-    this->scheduler_.queue.single_thread_push(co_handle.promise().latest_slot);
+    while (true) {
+      co_handle.resume();
+      atomic_queue_.single_thread_push(
+          co_handle.promise().latest_slot);
+    }
   });
   scheduler_.execute_common_task([this]() { return worker_loop(); });
 }
@@ -70,7 +73,7 @@ bool Server::push_to_clients_queue(size_t slot) {
 void Server::worker_loop() {
   while (true) {
     while (true) {
-      pending_clients_counter_.wait(0);
+      task_ready.wait(0);
       if (pending_clients_counter_ == 0)
         continue;
       pending_clients_counter_.fetch_sub(1);
