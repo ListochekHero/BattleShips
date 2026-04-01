@@ -4,22 +4,28 @@
 #include "atomic_queue.h"
 #include "network_routine.h"
 #include <any>
+#include <atomic>
 #include <coroutine>
 #include <cstddef>
+#include <map>
+#include <memory>
+#include <semaphore>
 #include <thread>
 #include <vector>
 
 namespace bsm {
 
-enum class task_status_e{EMPTY, READY, INPROGRESS};
+struct TaskContext {
+  virtual ~TaskContext() = default;
+};
 
 struct Task {
-  task_status_e task_status_v{task_status_e::EMPTY};
-  std::any context{};
+  std::string task_tag{};
+  std::unique_ptr<TaskContext> context{};
 };
 
 struct CoTask {
-  std::thread executor{};
+  std::thread co_executor{};
   std::optional<std::coroutine_handle<>> te_co_handle;
   bool running{false};
 };
@@ -51,15 +57,32 @@ public:
     return co_tasks_.size() - 1;
   }
   template <typename F> void schedule_co_task(size_t slot, F&& f) {
-    co_tasks_[slot].executor(f, *(co_tasks_[slot].te_co_handle));
+    co_tasks_[slot].co_executor(f, *(co_tasks_[slot].te_co_handle));
     return;
   }
   std::atomic_size_t pending_clients_counter_{0};
 
+  auto& get_executor_by_tag(std::string task_tag) {
+    return tasks_executors[task_tag];
+  }
+  void push_task(std::string task_tag, std::unique_ptr<TaskContext> context) {
+    Task* task = new Task(task_tag, std::move(context));
+    atomic_tasks_.push(task);
+    c_semaphore_.release();
+  }
+
+  Task* try_get_task() {
+    c_semaphore_.acquire();
+    Task* task = atomic_tasks_.pop();
+      return task;
+  }
+
 private:
   std::vector<CoTask> co_tasks_;
-  std::vector<Task> tasks_;
-
+  AtomicQueue<Task> atomic_tasks_;
+  std::counting_semaphore<std::numeric_limits<uint8_t>::max()> c_semaphore_;
+  using TaskExecutor = void (*)(std::unique_ptr<TaskContext> task_context);
+  std::map<std::string, TaskExecutor> tasks_executors;
 };
 
 } // namespace bsm
