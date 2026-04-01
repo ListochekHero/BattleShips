@@ -5,6 +5,7 @@
 #include "lobby_manager.h"
 #include "logger.h"
 #include "network_routine.h"
+#include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <coroutine>
@@ -12,6 +13,7 @@
 #include <expected>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -45,8 +47,9 @@ void Server::run() {
         co_handle_type::from_address(te_handle.address());
     while (true) {
       co_handle.resume();
-      atomic_queue_.single_thread_push(
-          co_handle.promise().latest_slot);
+      scheduler_.push_task();
+
+      atomic_queue_.single_thread_push(co_handle.promise().latest_slot);
     }
   });
   scheduler_.execute_common_task([this]() { return worker_loop(); });
@@ -63,26 +66,13 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-bool Server::push_to_clients_queue(size_t slot) {
-  bool added = atomic_queue_.push(slot);
-  pending_clients_counter_.fetch_add(1);
-  pending_clients_counter_.notify_one();
-  return added;
-}
-
 void Server::worker_loop() {
   while (true) {
-    while (true) {
-      task_ready.wait(0);
-      if (pending_clients_counter_ == 0)
-        continue;
-      pending_clients_counter_.fetch_sub(1);
-      break;
+    std::unique_ptr<Task> task_to_exe{scheduler_.try_get_task()};
+    if (task_to_exe) {
+      auto& executor{scheduler_.get_executor_by_tag(task_to_exe->task_tag)};
+      executor(std::move(task_to_exe->context));
     }
-    auto slot = atomic_queue_.pop();
-    if (!slot)
-      continue;
-    net_engine().process_client(*slot);
   }
 }
 
