@@ -5,7 +5,6 @@
 #include <atomic>
 #include <cstdint>
 #include <limits>
-#include <optional>
 
 namespace bsm {
 
@@ -14,18 +13,50 @@ struct AtomicSlot {
   unsigned int slot{std::numeric_limits<int>::max()};
 };
 
-class AtomicQueue {
+template <typename T> class AtomicQueue {
 public:
-  std::optional<unsigned int> single_thread_pop();
-  std::optional<unsigned int> pop();
-  bool single_thread_push(unsigned int slot);
-  bool push(unsigned int slot);
+  AtomicQueue() { queue.fill(nullptr); }
+
+  T* pop() {
+    uint8_t last_busy_index = head.load();
+    if (last_busy_index == tail)
+      return nullptr;
+    if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
+      T* data{nullptr};
+      while (data == nullptr) {
+        queue[last_busy_index].wait(data);
+        data = queue[last_busy_index].exchange(nullptr);
+      }
+      queue[last_busy_index].notify_one();
+      return data;
+    }
+    return nullptr;
+  }
+
+  bool push(T* ptr) {
+    while (true) {
+      uint8_t last_free_index = tail.load();
+      if ((last_free_index + 1) == head)
+        return false;
+      if (tail.compare_exchange_strong(last_free_index, last_free_index + 1)) {
+        while (true) {
+          T* data{queue[last_free_index].load()};
+          if (data == nullptr) {
+            queue[last_free_index].store(ptr);
+            queue[last_free_index].notify_one();
+            return true;
+          }
+          queue[last_free_index].wait(data);
+        }
+      }
+      continue;
+    }
+  }
 
 private:
   std::atomic_uint8_t head{0};
   std::atomic_uint8_t tail{0};
-  std::array<std::atomic<AtomicSlot>, std::numeric_limits<uint8_t>::max()>
-      queue{};
+  std::array<std::atomic<T*>, std::numeric_limits<uint8_t>::max()> queue{};
 };
 
 } // namespace bsm
