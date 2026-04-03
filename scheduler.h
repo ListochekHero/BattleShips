@@ -4,19 +4,26 @@
 #include "atomic_queue.h"
 #include "network_routine.h"
 #include <any>
+#include <array>
 #include <atomic>
 #include <coroutine>
 #include <cstddef>
 #include <map>
 #include <memory>
 #include <semaphore>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace bsm {
 
 struct TaskContext {
   virtual ~TaskContext() = default;
+};
+struct NetworkTaskContext : TaskContext {
+  NetworkTaskContext(size_t s) : slot(s) {};
+  size_t slot;
 };
 
 struct Task {
@@ -30,27 +37,19 @@ struct CoTask {
   bool running{false};
 };
 
-class ThreadPool {
-  std::vector<std::thread> thread_pool_{4};
-};
-
 class Scheduler {
 public:
-  void run() {
-    size_t counter{0};
-    while (!counter) {
-      pending_clients_counter_.wait(0);
-      counter = pending_clients_counter_.load();
-      while (counter) {
-        auto slot{queue.single_thread_pop()};
-        if (slot) {
-          co_tasks_.push_back({});
-          co_tasks_.back().executor(net_engine().process_client, *slot);
-        }
-      }
-    }
-  }
+  using TaskExecutor = std::function<void(std::unique_ptr<TaskContext>)>;
 
+  void push_task(std::string task_tag, std::unique_ptr<TaskContext> context);
+  Task* try_get_task();
+  auto& get_executor_by_tag(std::string task_tag);
+  void worker_loop();
+  void run();
+  bool add_executor(std::string tag, TaskExecutor executor) {
+    auto [it, inserted] = tasks_executors_.try_emplace(tag, executor);
+    return inserted;
+  }
   template <typename F> size_t add_co_task(F&& f) {
     auto co_handle = std::invoke(f);
     co_tasks_.push_back(CoTask{.handle = co_handle});
@@ -60,29 +59,16 @@ public:
     co_tasks_[slot].co_executor(f, *(co_tasks_[slot].te_co_handle));
     return;
   }
-  std::atomic_size_t pending_clients_counter_{0};
-
-  auto& get_executor_by_tag(std::string task_tag) {
-    return tasks_executors[task_tag];
-  }
-  void push_task(std::string task_tag, std::unique_ptr<TaskContext> context) {
-    Task* task = new Task(task_tag, std::move(context));
-    atomic_tasks_.push(task);
-    c_semaphore_.release();
-  }
-
-  Task* try_get_task() {
-    c_semaphore_.acquire();
-    Task* task = atomic_tasks_.pop();
-      return task;
-  }
 
 private:
   std::vector<CoTask> co_tasks_;
   AtomicQueue<Task> atomic_tasks_;
-  std::counting_semaphore<std::numeric_limits<uint8_t>::max()> c_semaphore_;
-  using TaskExecutor = void (*)(std::unique_ptr<TaskContext> task_context);
-  std::map<std::string, TaskExecutor> tasks_executors;
+  std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency()};
+  std::counting_semaphore<std::numeric_limits<uint16_t>::max()> pop_c_semaphore_{
+      0};
+  std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
+      push_c_semaphore_{std::numeric_limits<uint16_t>::max() - 1};
+  std::unordered_map<std::string, TaskExecutor> tasks_executors_;
 };
 
 } // namespace bsm
