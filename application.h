@@ -8,12 +8,12 @@
 #include <queue>
 #include <sys/wait.h>
 
-#include "atomic_queue.h"
 #include "console_routine.h"
 #include "deferred_actions.h"
 #include "dispatcher.h"
 #include "error.h"
 #include "lobby_manager.h"
+#include "modules.h"
 #include "network_routine.h"
 #include "scheduler.h"
 #include "utility.h"
@@ -29,12 +29,14 @@ public:
   virtual ~Application() = default;
 
 protected:
+  NetworkModule& network_module();
   Dispatcher& dispatcher();
-  NetworkEngine& net_engine();
+  Scheduler& scheduler();
 
 private:
-  NetworkEngine net_engine_;
+  NetworkModule network_module_;
   Dispatcher dispatcher_;
+  Scheduler scheduler_;
 };
 
 class Server : public Application {
@@ -45,7 +47,6 @@ public:
 
 private:
   void handle_zombie_pocesses();
-  void worker_loop();
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
@@ -61,7 +62,6 @@ private:
                                const CommandContext& context);
 
   LobbyManager lobby_manager_;
-  Scheduler scheduler_;
 };
 
 class Lobby : public Application {
@@ -69,9 +69,6 @@ public:
   Lobby() = default;
   Ev init(int parrent_socket, end_point_e socket_type);
   void run() override;
-  bool push_to_clients_queue(size_t slot);
-  void worker_loop();
-  AtomicQueue atomic_queue_;
   std::atomic_size_t pending_clients_counter_{0};
 
 private:
@@ -90,9 +87,6 @@ public:
   Ev init(end_point_e socket_type);
   void run();
   CommandStatus handle_client_cmd(CommandContext& context);
-  bool push_to_clients_queue(size_t slot);
-  void worker_loop();
-  AtomicQueue atomic_queue_;
   std::atomic_size_t pending_clients_counter_{0};
 
 private:

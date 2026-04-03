@@ -23,16 +23,15 @@
 
 namespace bsm {
 
+  NetworkModule& Application::network_module() { return network_module_; }
 Dispatcher& Application::dispatcher() { return dispatcher_; }
-NetworkEngine& Application::net_engine() { return net_engine_; }
+Scheduler& Application::scheduler() { return scheduler_; }
+
 
 Ev Server::init() {
-  net_engine().set_message_handler(
+  network_module().net_engine_.set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  net_engine().push_to_clients_queue = [this](size_t slot) {
-    return push_to_clients_queue(slot);
-  };
-  if (auto init_result = net_engine().init(end_point_e::SERVER); !init_result) {
+  if (auto init_result = network_module().net_engine_.init(end_point_e::SERVER); !init_result) {
     return std::unexpected(
         std::move(init_result).error().add_context("Unalbe to init Server"));
   }
@@ -40,19 +39,7 @@ Ev Server::init() {
 }
 
 void Server::run() {
-  size_t slot =
-      scheduler_.add_co_task([this]() { return net_engine().run_co(); });
-  scheduler_.schedule_co_task(slot, [this](std::coroutine_handle<> te_handle) {
-    co_handle_type co_handle =
-        co_handle_type::from_address(te_handle.address());
-    while (true) {
-      co_handle.resume();
-      scheduler_.push_task();
 
-      atomic_queue_.single_thread_push(co_handle.promise().latest_slot);
-    }
-  });
-  scheduler_.execute_common_task([this]() { return worker_loop(); });
 }
 
 void Server::handle_zombie_pocesses() {
@@ -62,16 +49,6 @@ void Server::handle_zombie_pocesses() {
     if (WIFEXITED(status)) {
       LOG(std::format("Child process exited: pid={}, status={}", pid,
                       WEXITSTATUS(status)));
-    }
-  }
-}
-
-void Server::worker_loop() {
-  while (true) {
-    std::unique_ptr<Task> task_to_exe{scheduler_.try_get_task()};
-    if (task_to_exe) {
-      auto& executor{scheduler_.get_executor_by_tag(task_to_exe->task_tag)};
-      executor(std::move(task_to_exe->context));
     }
   }
 }
@@ -100,12 +77,12 @@ CommandStatus Server::execute_action(const CreateLobby&,
     return {cmd_se::CONTINUE, std::move(lobby_view.error()),
             us_e::CANT_CREATE_LOBBY};
   }
-  net_engine().send_message_to(
+  network_module().net_engine_.send_message_to(
       lobby_view->control_connection,
       {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
 
   // return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
-  return net_engine().transfer(lobby_view->control_connection,
+  return network_module().net_engine_.transfer(lobby_view->control_connection,
                                context.client_view);
 }
 
@@ -116,7 +93,7 @@ std::expected<LobbyView, Error> Server::request_lobby() {
     error = proc.error();
   }
   auto lobby_ipc =
-      net_engine().attach(proc->control_socket, end_point_e::LOBBY);
+      network_module().net_engine_.attach(proc->control_socket, end_point_e::LOBBY);
   if (!lobby_ipc) {
     error = lobby_ipc.error();
   }
@@ -145,7 +122,7 @@ CommandStatus Server::execute_action(const JoinLobby&,
     return CommandStatus{cmd_se::CONTINUE, std::move(lobby_view).error(),
                          us_e::CANT_JOIN_LOBBY};
   }
-  return net_engine().transfer(lobby_view->control_connection,
+  return network_module().net_engine_.transfer(lobby_view->control_connection,
                                context.client_view);
 }
 
@@ -156,7 +133,7 @@ CommandStatus Server::execute_action(const ChatMessage&,
     parse_result.error().add_context("Unable to parse client chat message");
     return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
   }
-  net_engine().send_message({{*parse_result}}, [](const auto& meta) {
+  network_module().net_engine_.send_message({{*parse_result}}, [](const auto& meta) {
     return meta.type == end_point_e::CLIENT;
   });
   return {cmd_se::CONTINUE};
@@ -164,42 +141,16 @@ CommandStatus Server::execute_action(const ChatMessage&,
 
 CommandStatus Server::execute_action(const GeneralAction&,
                                      const CommandContext& context) {
-  net_engine().send_message_to(
+  network_module().net_engine_.send_message_to(
       context.client_view,
       {{user_message(us_e::UNKNOWN_COMMAND)}, message_type_e::PRINTABLE});
   return {cmd_se::CONTINUE};
 }
 
-bool Lobby::push_to_clients_queue(size_t slot) {
-  bool added = atomic_queue_.push(slot);
-  pending_clients_counter_.fetch_add(1);
-  pending_clients_counter_.notify_one();
-  return added;
-}
-
-void Lobby::worker_loop() {
-  while (true) {
-    while (true) {
-      pending_clients_counter_.wait(0);
-      if (pending_clients_counter_ == 0)
-        continue;
-      pending_clients_counter_.fetch_sub(1);
-      break;
-    }
-    auto slot = atomic_queue_.pop();
-    if (!slot)
-      continue;
-    net_engine().process_client(*slot);
-  }
-}
-
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
-  net_engine().set_message_handler(
+  network_module().net_engine_.set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  net_engine().push_to_clients_queue = [this](size_t slot) {
-    return push_to_clients_queue(slot);
-  };
-  auto init_result = net_engine().init(parrent_socket, socket_type);
+  auto init_result = network_module().net_engine_.init(parrent_socket, socket_type);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -211,8 +162,7 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
 }
 
 void Lobby::run() {
-  std::thread net_engine_thread([this] { return net_engine().run(); });
-  worker_loop();
+  std::thread net_engine_thread([this] { return network_module().net_engine_.run(); });
 }
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
@@ -235,18 +185,18 @@ CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
 CommandStatus Lobby::execute_action(const AcceptSocket&,
                                     const CommandContext& context) {
   if (!context.message.socket) {
-    net_engine().send_message_to(
+    network_module().net_engine_.send_message_to(
         parent_view_, {{"No socket found in message"}, message_type_e::ERROR});
     return CommandStatus{cmd_se::CONTINUE};
   }
   auto client_view =
-      net_engine().attach(*context.message.socket, end_point_e::CLIENT);
+      network_module().net_engine_.attach(*context.message.socket, end_point_e::CLIENT);
   if (!client_view) {
     client_view.error().add_context(
         "Unable to accept client socket from parent");
     return CommandStatus{cmd_se::CONTINUE, std::move(client_view).error()};
   }
-  net_engine().send_message_to(
+  network_module().net_engine_.send_message_to(
       *client_view, {{"Connected to lobby\n", "Connection code is: \n", "\t",
                       std::to_string(lobby_id_)},
                      message_type_e::PRINTABLE});
@@ -258,38 +208,13 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
   lobby_id_ = std::strtol(context.message.payload.c_str(), nullptr, 10);
   return {cmd_se::CONTINUE};
 }
-bool Client::push_to_clients_queue(size_t slot) {
-  bool added = atomic_queue_.push(slot);
-  pending_clients_counter_.fetch_add(1);
-  pending_clients_counter_.notify_one();
-  return added;
-}
-
-void Client::worker_loop() {
-  while (true) {
-    while (true) {
-      pending_clients_counter_.wait(0);
-      if (pending_clients_counter_ == 0)
-        continue;
-      pending_clients_counter_.fetch_sub(1);
-      break;
-    }
-    auto slot = atomic_queue_.pop();
-    if (!slot)
-      continue;
-    net_engine().process_client(*slot);
-  }
-}
 
 Ev Client::init(end_point_e socket_type) {
-  net_engine().set_message_handler(
+  network_module().net_engine_.set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
   console_handler_.set_input_handler(
       [this](std::string user_cmd) { return register_user_input(user_cmd); });
-  net_engine().push_to_clients_queue = [this](size_t slot) {
-    return push_to_clients_queue(slot);
-  };
-  auto init_result = net_engine().init(socket_type);
+  auto init_result = network_module().net_engine_.init(socket_type);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -301,9 +226,8 @@ Ev Client::init(end_point_e socket_type) {
 }
 
 void Client::run() {
-  std::thread net_engine_thread([this] { return net_engine().run(); });
+  std::thread net_engine_thread([this] { return network_module().net_engine_.run(); });
   std::thread console_thread([this] { return console_handler_.run(); });
-  std::thread work_thread([this] { return worker_loop(); });
   while (true) {
     std::unique_lock lock{m_};
     cv_.wait(lock, [this] { return !input_queue_.empty(); });
@@ -359,7 +283,7 @@ void Client::handle_input(std::string input_line) {
     handle_local_cmd(cmd_info.parsed_cmd);
     break;
   case command_scope_e::NETWORK:
-    net_engine().send_message_to(server_view_, {{input_line}});
+    network_module().net_engine_.send_message_to(server_view_, {{input_line}});
     break;
   }
 }
