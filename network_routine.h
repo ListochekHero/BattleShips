@@ -1,6 +1,7 @@
 #ifndef NETWORK_ROUTINE_H
 #define NETWORK_ROUTINE_H
 
+#include "atomic_queue.h"
 #include "deferred_actions.h"
 #include "socket_routine.h"
 #include "utility.h"
@@ -76,8 +77,6 @@ struct ConnectionMeta {
 class NetworkEngine {
 public:
   using MessageHandler = std::function<CommandStatus(CommandContext&)>;
-  using QueueHandler = std::function<bool(size_t)>;
-  QueueHandler push_to_clients_queue;
   std::expected<ConnectionView, Error> init(end_point_e socket_type);
   std::expected<ConnectionView, Error>
   init(int parrent_socket, end_point_e socket_type); // init() for Lobby
@@ -86,7 +85,6 @@ public:
   co_handle_type run_co();
   bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
-  void cleanup_slot(size_t slot);
   std::expected<ConnectionView, Error> attach(int socket,
                                               end_point_e socket_type);
   CommandStatus transfer(const ConnectionView& dest, const ConnectionView& src);
@@ -160,7 +158,7 @@ private:
   };
 
   std::vector<SlotEntry> socket_pool_;
-  std::vector<size_t> avaiable_slots_;
+  AtomicQueue<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
   DeferredActions deferred_actions_;

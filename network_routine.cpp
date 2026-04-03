@@ -163,10 +163,6 @@ void NetworkEngine::process_client(size_t slot) {
   return;
 }
 
-void NetworkEngine::cleanup_slot(size_t slot) {
-  release_client(socket_pool_[slot]);
-}
-
 Ev NetworkEngine::init_epoll() {
   return this->epoll_handler_.init()
       .transform_error([](auto&& error) {
@@ -218,8 +214,9 @@ NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type) {
 
 Ev NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
   try {
-    avaiable_slots_.emplace_back(slot_entry.slot);
     slot_entry.handler->reset_to_empty();
+    size_t* new_slot = new size_t(slot_entry.slot);
+    avaiable_slots_.push(new_slot);
   } catch (const std::exception& e) {
     return std::unexpected(
         Error{{e.what(), "Exception caught during freeing slot entry"}});
@@ -230,13 +227,12 @@ Ev NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
 std::expected<size_t, Error>
 NetworkEngine::find_spot_for_new_client(int client_socket,
                                         end_point_e socket_type) {
-  if (!avaiable_slots_.empty()) {
-    size_t slot = avaiable_slots_.back();
-    avaiable_slots_.pop_back();
-    SlotEntry* entry{&socket_pool_[slot]};
+  size_t* slot = avaiable_slots_.pop();
+  if (slot) {
+    SlotEntry* entry{&socket_pool_[*slot]};
     entry->handler->reset_with_new(client_socket);
     entry->type = socket_type;
-    return slot;
+    return *slot;
   } else {
     auto new_entry_slot = add_to_socket_pool(client_socket, socket_type);
     if (!new_entry_slot) {
@@ -278,7 +274,7 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
                                .error()
                                .add_context("Unable to register new client"));
   }
-  SlotEntry& new_client_entry{socket_pool_[new_client_slot.value()]};
+  SlotEntry& new_client_entry{socket_pool_[*new_client_slot]};
   return subscribe_to_events(new_client_entry)
       .transform([&]() { return new_client_entry.slot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
