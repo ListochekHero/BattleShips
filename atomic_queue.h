@@ -56,7 +56,7 @@ public:
 private:
   std::atomic_uint8_t head{0};
   std::atomic_uint8_t tail{0};
-  std::array<std::atomic<T*>, std::numeric_limits<uint8_t>::max()> queue{};
+  std::array<std::atomic<T*>, std::numeric_limits<uint16_t>::max()> queue{};
 };
 
 } // namespace bsm
