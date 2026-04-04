@@ -4,6 +4,7 @@
 #include "deferred_actions.h"
 #include "error.h"
 #include "logger.h"
+#include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <coroutine>
@@ -18,8 +19,28 @@
 
 namespace bsm {
 
+void NetworkEngine::attach_to_scheduler(Scheduler& scheduler) {
+  scheduler.add_executor("network_task",
+                         [this](std::unique_ptr<TaskContext> context) {
+                           NetworkTaskContext* network_context =
+                               static_cast<NetworkTaskContext*>(context.get());
+                           process_client(network_context->slot);
+                         });
+  size_t slot = scheduler.add_co_task([this]() { return run_co(); });
+  scheduler.schedule_co_task(slot, [&scheduler](
+                                       std::coroutine_handle<> te_handle) {
+    network_co_handle co_handle =
+        network_co_handle::from_address(te_handle.address());
+    while (true) {
+      co_handle.resume();
+      scheduler.push_task("network_task", std::make_unique<NetworkTaskContext>(
+                                              co_handle.promise().latest_slot));
+    }
+  });
+}
+
 std::expected<ConnectionView, Error>
-NetworkEngine::init(end_point_e socket_type) {
+NetworkEngine::init_engine(end_point_e socket_type) {
   auto socket_slot = add_to_socket_pool();
   if (!socket_slot) {
     return std::unexpected(
@@ -56,7 +77,7 @@ NetworkEngine::init(end_point_e socket_type) {
 }
 
 std::expected<ConnectionView, Error>
-NetworkEngine::init(int parrent_socket, end_point_e socket_type) {
+NetworkEngine::init_engine(int parrent_socket, end_point_e socket_type) {
   auto result = add_to_socket_pool(parrent_socket, socket_type);
   if (!result) {
     return std::unexpected(
@@ -91,7 +112,7 @@ void NetworkEngine::run() {
   deferred_actions_.flush(*this);
 }
 
-co_handle_type NetworkEngine::run_co() {
+network_co_handle NetworkEngine::run_co() {
   while (true) {
     auto ready_slots = epoll_handler_.wait_for_events(MAX_EVENTS);
     if (!ready_slots) {
@@ -121,7 +142,7 @@ bool NetworkEngine::send_message_to(const ConnectionView& conn_view,
 }
 
 std::expected<ConnectionView, Error>
-NetworkEngine::attach(int socket, end_point_e socket_type) {
+NetworkEngine::attach_socket(int socket, end_point_e socket_type) {
   auto slot_index = register_client(socket, socket_type);
   if (!slot_index) {
     return std::unexpected(slot_index.error().add_context(

@@ -3,6 +3,8 @@
 
 #include "atomic_queue.h"
 #include "deferred_actions.h"
+#include "modules.h"
+#include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
 #include <concepts>
@@ -14,17 +16,15 @@
 #include <memory>
 #include <mutex>
 
-struct network_promise;
-using co_handle_type = std::coroutine_handle<network_promise>;
+namespace bsm {
 
-struct CoroutineHandler {
-  co_handle_type handle_;
-};
+struct network_promise;
+using network_co_handle = std::coroutine_handle<network_promise>;
 
 struct network_promise {
   size_t latest_slot{std::numeric_limits<size_t>::max()};
-  co_handle_type get_return_object() {
-    return co_handle_type::from_promise(*this);
+  network_co_handle get_return_object() {
+    return network_co_handle::from_promise(*this);
   }
   std::suspend_always initial_suspend() noexcept { return {}; }
   std::suspend_always final_suspend() noexcept { return {}; }
@@ -34,13 +34,6 @@ struct network_promise {
   }
   void unhandled_exception() {}
 };
-
-template <>
-struct std::coroutine_traits<co_handle_type, bsm::NetworkEngine&> {
-  using promise_type = network_promise;
-};
-
-namespace bsm {
 
 enum class end_point_e : uint8_t {
   NONE = 0,
@@ -60,7 +53,7 @@ struct SlotEntry {
 
 class ConnectionView {
 public:
-  // ConnectionView() = default;
+  // ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
   ConnectionView(size_t slot);
   size_t get_slot() const;
 
@@ -74,19 +67,21 @@ struct ConnectionMeta {
   std::string name{};
 };
 
-class NetworkEngine {
+class NetworkEngine : public Module {
 public:
-  using MessageHandler = std::function<CommandStatus(CommandContext&)>;
-  std::expected<ConnectionView, Error> init(end_point_e socket_type);
+  void attach_to_scheduler(Scheduler& scheduler) override;
+  std::expected<ConnectionView, Error> init_engine(end_point_e socket_type);
   std::expected<ConnectionView, Error>
-  init(int parrent_socket, end_point_e socket_type); // init() for Lobby
+  init_engine(int parrent_socket,
+              end_point_e socket_type); // init() for Lobby
+  using MessageHandler = std::function<CommandStatus(CommandContext&)>;
   void set_message_handler(MessageHandler h);
   void run();
-  co_handle_type run_co();
+  network_co_handle run_co();
   bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
-  std::expected<ConnectionView, Error> attach(int socket,
-                                              end_point_e socket_type);
+  std::expected<ConnectionView, Error> attach_socket(int socket,
+                                                     end_point_e socket_type);
   CommandStatus transfer(const ConnectionView& dest, const ConnectionView& src);
   void process_client(size_t slot);
 
@@ -126,6 +121,7 @@ public:
 private:
   Ev init_epoll();
   Ev init_epoll_wrapper();
+  void init_with_scheduler(Scheduler& scheduler);
   template <typename... Args>
   std::expected<size_t, Error> emplace_new_entry_to_pool(Args&&...);
   std::expected<size_t, Error> add_to_socket_pool();
@@ -168,4 +164,9 @@ private:
 };
 
 } // namespace bsm
+
+template <>
+struct std::coroutine_traits<bsm::network_co_handle, bsm::NetworkEngine&> {
+  using promise_type = bsm::network_promise;
+};
 #endif
