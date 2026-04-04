@@ -8,12 +8,8 @@
 #include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
-#include <coroutine>
-#include <cstddef>
 #include <expected>
 #include <iostream>
-#include <limits>
-#include <memory>
 #include <mutex>
 #include <ostream>
 #include <string>
@@ -23,24 +19,23 @@
 
 namespace bsm {
 
-  NetworkModule& Application::network_module() { return network_module_; }
+NetworkEngine& Application::network_engine() { return network_engine_; }
 Dispatcher& Application::dispatcher() { return dispatcher_; }
 Scheduler& Application::scheduler() { return scheduler_; }
 
-
 Ev Server::init() {
-  network_module().net_engine_.set_message_handler(
+  network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  if (auto init_result = network_module().net_engine_.init(end_point_e::SERVER); !init_result) {
+  if (auto init_result = network_engine().init_engine(end_point_e::SERVER);
+      !init_result) {
     return std::unexpected(
         std::move(init_result).error().add_context("Unalbe to init Server"));
   }
+  network_engine().attach_to_scheduler(scheduler());
   return {};
 }
 
-void Server::run() {
-
-}
+void Server::run() { scheduler().run(); }
 
 void Server::handle_zombie_pocesses() {
   int status;
@@ -77,13 +72,13 @@ CommandStatus Server::execute_action(const CreateLobby&,
     return {cmd_se::CONTINUE, std::move(lobby_view.error()),
             us_e::CANT_CREATE_LOBBY};
   }
-  network_module().net_engine_.send_message_to(
+  network_engine().send_message_to(
       lobby_view->control_connection,
       {{std::to_string(lobby_view->lobby_id)}, message_type_e::LOBBY_ID});
 
   // return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
-  return network_module().net_engine_.transfer(lobby_view->control_connection,
-                               context.client_view);
+  return network_engine().transfer(lobby_view->control_connection,
+                                   context.client_view);
 }
 
 std::expected<LobbyView, Error> Server::request_lobby() {
@@ -93,7 +88,7 @@ std::expected<LobbyView, Error> Server::request_lobby() {
     error = proc.error();
   }
   auto lobby_ipc =
-      network_module().net_engine_.attach(proc->control_socket, end_point_e::LOBBY);
+      network_engine().attach_socket(proc->control_socket, end_point_e::LOBBY);
   if (!lobby_ipc) {
     error = lobby_ipc.error();
   }
@@ -122,8 +117,8 @@ CommandStatus Server::execute_action(const JoinLobby&,
     return CommandStatus{cmd_se::CONTINUE, std::move(lobby_view).error(),
                          us_e::CANT_JOIN_LOBBY};
   }
-  return network_module().net_engine_.transfer(lobby_view->control_connection,
-                               context.client_view);
+  return network_engine().transfer(lobby_view->control_connection,
+                                   context.client_view);
 }
 
 CommandStatus Server::execute_action(const ChatMessage&,
@@ -133,7 +128,7 @@ CommandStatus Server::execute_action(const ChatMessage&,
     parse_result.error().add_context("Unable to parse client chat message");
     return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
   }
-  network_module().net_engine_.send_message({{*parse_result}}, [](const auto& meta) {
+  network_engine().send_message({{*parse_result}}, [](const auto& meta) {
     return meta.type == end_point_e::CLIENT;
   });
   return {cmd_se::CONTINUE};
@@ -141,16 +136,16 @@ CommandStatus Server::execute_action(const ChatMessage&,
 
 CommandStatus Server::execute_action(const GeneralAction&,
                                      const CommandContext& context) {
-  network_module().net_engine_.send_message_to(
+  network_engine().send_message_to(
       context.client_view,
       {{user_message(us_e::UNKNOWN_COMMAND)}, message_type_e::PRINTABLE});
   return {cmd_se::CONTINUE};
 }
 
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
-  network_module().net_engine_.set_message_handler(
+  network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  auto init_result = network_module().net_engine_.init(parrent_socket, socket_type);
+  auto init_result = network_engine().init_engine(parrent_socket, socket_type);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -158,12 +153,11 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
             .add_context("Unable to init Lobby with parent socket"));
   }
   parent_view_ = *init_result;
+  network_engine().attach_to_scheduler(scheduler());
   return {};
 }
 
-void Lobby::run() {
-  std::thread net_engine_thread([this] { return network_module().net_engine_.run(); });
-}
+void Lobby::run() { scheduler().run(); }
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
@@ -185,18 +179,18 @@ CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
 CommandStatus Lobby::execute_action(const AcceptSocket&,
                                     const CommandContext& context) {
   if (!context.message.socket) {
-    network_module().net_engine_.send_message_to(
+    network_engine().send_message_to(
         parent_view_, {{"No socket found in message"}, message_type_e::ERROR});
     return CommandStatus{cmd_se::CONTINUE};
   }
-  auto client_view =
-      network_module().net_engine_.attach(*context.message.socket, end_point_e::CLIENT);
+  auto client_view = network_engine().attach_socket(*context.message.socket,
+                                                    end_point_e::CLIENT);
   if (!client_view) {
     client_view.error().add_context(
         "Unable to accept client socket from parent");
     return CommandStatus{cmd_se::CONTINUE, std::move(client_view).error()};
   }
-  network_module().net_engine_.send_message_to(
+  network_engine().send_message_to(
       *client_view, {{"Connected to lobby\n", "Connection code is: \n", "\t",
                       std::to_string(lobby_id_)},
                      message_type_e::PRINTABLE});
@@ -210,11 +204,11 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
 }
 
 Ev Client::init(end_point_e socket_type) {
-  network_module().net_engine_.set_message_handler(
+  network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
   console_handler_.set_input_handler(
       [this](std::string user_cmd) { return register_user_input(user_cmd); });
-  auto init_result = network_module().net_engine_.init(socket_type);
+  auto init_result = network_engine().init_engine(socket_type);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -222,11 +216,18 @@ Ev Client::init(end_point_e socket_type) {
             .add_context("Unable to init Client and connect to Server"));
   }
   server_view_ = *init_result;
+  scheduler().add_executor(
+      "console_task", [this](std::unique_ptr<TaskContext> context) {
+        ConsoleTaskContext* console_context =
+            static_cast<ConsoleTaskContext*>(context.get());
+        handle_input(console_context->user_input);
+      });
+  network_engine().attach_to_scheduler(scheduler());
   return {};
 }
 
 void Client::run() {
-  std::thread net_engine_thread([this] { return network_module().net_engine_.run(); });
+  std::thread net_engine_thread([this] { return network_engine().run(); });
   std::thread console_thread([this] { return console_handler_.run(); });
   while (true) {
     std::unique_lock lock{m_};
@@ -242,7 +243,7 @@ void Client::run() {
 
 CommandStatus Client::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  auto action_to_execute = dispatcher().dispatch(context.message);
+  CommandInfo action_to_execute = dispatcher().dispatch(context.message);
   auto client_action =
       filter_variant<ClientAction>(action_to_execute.parsed_cmd);
   if (!client_action) {
@@ -260,6 +261,7 @@ CommandStatus Client::handle_client_cmd(CommandContext& context) {
 
 CommandStatus Client::execute_action(const Quit&,
                                      const CommandContext& context) {
+  std::cout << "-><-" << std::endl;
   return {cmd_se::CONTINUE};
 }
 CommandStatus Client::execute_action(const PrintAble&,
@@ -281,9 +283,10 @@ void Client::handle_input(std::string input_line) {
     break;
   case command_scope_e::LOCAL:
     handle_local_cmd(cmd_info.parsed_cmd);
+    handle_client_cmd({ConnectionView{},{.message.payload=input_line}});
     break;
   case command_scope_e::NETWORK:
-    network_module().net_engine_.send_message_to(server_view_, {{input_line}});
+    network_engine().send_message_to(server_view_, {{input_line}});
     break;
   }
 }

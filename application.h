@@ -13,7 +13,6 @@
 #include "dispatcher.h"
 #include "error.h"
 #include "lobby_manager.h"
-#include "modules.h"
 #include "network_routine.h"
 #include "scheduler.h"
 #include "utility.h"
@@ -29,12 +28,12 @@ public:
   virtual ~Application() = default;
 
 protected:
-  NetworkModule& network_module();
+  NetworkEngine& network_engine();
   Dispatcher& dispatcher();
   Scheduler& scheduler();
 
 private:
-  NetworkModule network_module_;
+  NetworkEngine network_engine_;
   Dispatcher dispatcher_;
   Scheduler scheduler_;
 };
