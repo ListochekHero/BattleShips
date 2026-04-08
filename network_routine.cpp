@@ -324,8 +324,7 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
     } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
       process_client_socket(slot);
     } else {
-      bool push_success = push_to_clients_queue(
-          slot); // <- callback to add pending client to queue for processing
+      // bool push_success = push_to_clients_queue(slot); // <- callback to add pending client to queue for processing
       // process_client_socket(slot);
     }
   }

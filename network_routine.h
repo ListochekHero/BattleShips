@@ -53,8 +53,8 @@ struct SlotEntry {
 
 class ConnectionView {
 public:
-  // ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
-  ConnectionView(size_t slot);
+  explicit ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
+  explicit ConnectionView(size_t slot);
   size_t get_slot() const;
 
 private:
@@ -74,7 +74,7 @@ public:
   std::expected<ConnectionView, Error>
   init_engine(int parrent_socket,
               end_point_e socket_type); // init() for Lobby
-  using MessageHandler = std::function<CommandStatus(CommandContext&)>;
+  using MessageHandler = std::function<CommandStatus(const CommandContext&)>;
   void set_message_handler(MessageHandler h);
   void run();
   network_co_handle run_co();
