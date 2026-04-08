@@ -85,7 +85,8 @@ class Client : public Application {
 public:
   Ev init(end_point_e socket_type);
   void run();
-  CommandStatus handle_client_cmd(CommandContext& context);
+  CommandStatus handle_client_cmd(const CommandContext& context);
+  CommandStatus handle_input(const CommandContext& context);
   std::atomic_size_t pending_clients_counter_{0};
 
 private:

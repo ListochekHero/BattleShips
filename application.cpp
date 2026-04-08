@@ -8,9 +8,12 @@
 #include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <cstddef>
 #include <expected>
 #include <iostream>
+#include <limits>
 #include <mutex>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <thread>
@@ -205,7 +208,7 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
 
 Ev Client::init(end_point_e socket_type) {
   network_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
+      [this](const CommandContext& context) { return handle_input(context); });
   console_handler_.set_input_handler(
       [this](std::string user_cmd) { return register_user_input(user_cmd); });
   auto init_result = network_engine().init_engine(socket_type);
@@ -235,13 +238,36 @@ void Client::run() {
     std::string input_line = input_queue_.front();
     input_queue_.pop();
     lock.unlock();
-    handle_input(input_line);
+    handle_input({ConnectionView{}, {.payload = input_line}});
   }
   console_thread.join();
   net_engine_thread.join();
 }
 
-CommandStatus Client::handle_client_cmd(CommandContext& context) {
+CommandStatus Client::handle_input(const CommandContext& context) {
+  CommandInfo cmd_info = dispatcher().dispatch(context.message);
+  switch (cmd_info.scope) {
+  case command_scope_e::NONE:
+  case command_scope_e::LOCAL:
+  case command_scope_e::NETWORK:
+    network_engine().send_message_to(server_view_, {{context.message.payload}});
+    break;
+  }
+  auto client_action = filter_variant<ClientAction>(cmd_info.parsed_cmd);
+  if (!client_action) {
+    return {cmd_se::CONTINUE,
+            std::move(client_action)
+                .error()
+                .add_context("Command not allowed in this context")};
+  }
+  return std::visit(
+      [&](auto&& lobby_action) -> CommandStatus {
+        return execute_action(lobby_action, context);
+      },
+      *client_action);
+}
+
+CommandStatus Client::handle_client_cmd(const CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
   CommandInfo action_to_execute = dispatcher().dispatch(context.message);
   auto client_action =
@@ -283,7 +309,7 @@ void Client::handle_input(std::string input_line) {
     break;
   case command_scope_e::LOCAL:
     handle_local_cmd(cmd_info.parsed_cmd);
-    handle_client_cmd({ConnectionView{},{.message.payload=input_line}});
+
     break;
   case command_scope_e::NETWORK:
     network_engine().send_message_to(server_view_, {{input_line}});
