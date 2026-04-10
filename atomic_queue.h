@@ -15,7 +15,7 @@ struct AtomicSlot {
 
 template <typename T> class AtomicQueue {
 public:
-  AtomicQueue() { queue.fill(nullptr); }
+  // AtomicQueue() { queue.fill(nullptr); }
 
   T* pop() {
     uint8_t last_busy_index = head.load();

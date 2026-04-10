@@ -1,4 +1,6 @@
 #include "scheduler.h"
+#include <iostream>
+#include <ostream>
 
 namespace bsm {
 
@@ -34,6 +36,7 @@ void Scheduler::worker_loop() {
     if (task_to_exe) {
       auto& executor{get_executor_by_tag(task_to_exe->task_tag)};
       executor(std::move(task_to_exe->context));
+      std::cout << "Task complited!" << std::endl;
     }
   }
 }

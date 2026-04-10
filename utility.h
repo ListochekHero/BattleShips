@@ -26,8 +26,8 @@ struct CommandStatus {
 };
 
 struct CommandContext {
-  ConnectionView& client_view;
-  ReadResult& message;
+  const ConnectionView& client_view;
+  const ReadResult& message;
 };
 
 struct DeliveryReport {

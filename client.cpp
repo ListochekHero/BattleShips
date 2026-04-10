@@ -18,6 +18,7 @@ int main(int argc, char* argv[]) {
   bsm::Client client{};
   client.init(bsm::end_point_e::FROM_SERVER);
   client.run();
+  exit(EXIT_SUCCESS);
 
   int sockfd;
   struct sockaddr_in server_addr;
