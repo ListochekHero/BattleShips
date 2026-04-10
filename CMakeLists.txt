@@ -28,7 +28,9 @@ error.cpp
 interfaces.cpp
 lobby_manager.cpp
 logger.cpp
+modules.cpp
 network_routine.cpp
+scheduler.cpp
 socket_routine.cpp
 utility.cpp
 )
