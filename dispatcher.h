@@ -18,7 +18,7 @@ struct GeneralAction {};
 using ParsedCommand =
     std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
                  ChatMessage, PrintAble, NotAllowed, GeneralAction>;
-enum class command_scope_e { NONE, LOCAL, NETWORK };
+enum class command_scope_e { NONE, LOCAL, BROADCAST, NETWORK };
 struct CommandInfo {
   command_scope_e scope{command_scope_e::NONE};
   ParsedCommand parsed_cmd;

@@ -25,7 +25,7 @@ CommandInfo Dispatcher::dispatch(const ReadResult& message) {
 const std::array<Dispatcher::Command, 8> Dispatcher::commands = {
     {{.text_aliases = {"\\create"},
       .msg_type = std::nullopt,
-      .scope = command_scope_e::NETWORK,
+      .scope = command_scope_e::BROADCAST,
       .make = Command::make_action<CreateLobby>},
      {.text_aliases = {"\\close"},
       .msg_type = std::nullopt,
@@ -44,14 +44,14 @@ const std::array<Dispatcher::Command, 8> Dispatcher::commands = {
       .make = Command::make_action<LobbyIdSetter>},
      {.text_aliases = {"\\join"},
       .msg_type = message_type_e::CONN_CODE,
-      .scope = command_scope_e::NETWORK,
+      .scope = command_scope_e::BROADCAST,
       .make = Command::make_action<JoinLobby>},
      {.text_aliases = {"\\msg"},
       .msg_type = std::nullopt,
-      .scope = command_scope_e::NETWORK,
+      .scope = command_scope_e::BROADCAST,
       .make = Command::make_action<ChatMessage>},
      {.msg_type = message_type_e::PRINTABLE,
-      .scope = command_scope_e::NETWORK,
+      .scope = command_scope_e::LOCAL,
       .make = Command::make_action<PrintAble>}}};
 
 } // namespace bsm
