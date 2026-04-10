@@ -33,7 +33,7 @@ struct Task {
 
 struct CoTask {
   std::thread co_executor{};
-  std::optional<std::coroutine_handle<>> te_co_handle;
+  std::coroutine_handle<> te_co_handle;
   bool running{false};
 };
 
@@ -49,18 +49,20 @@ public:
 
   template <typename F> size_t add_co_task(F&& f) {
     auto co_handle = std::invoke(f);
-    co_tasks_.push_back(CoTask{.handle = co_handle});
+    co_tasks_.push_back(CoTask{.te_co_handle = co_handle});
     return co_tasks_.size() - 1;
   }
   template <typename F> void schedule_co_task(size_t slot, F&& f) {
-    co_tasks_[slot].co_executor(f, *(co_tasks_[slot].te_co_handle));
+    co_tasks_[slot].co_executor = std::thread(f, co_tasks_[slot].te_co_handle);
     return;
   }
 
 private:
   std::vector<CoTask> co_tasks_;
   AtomicQueue<Task> tasks_queue_;
-  std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency()/2};
+  // std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /
+  //                                       2};
+  std::vector<std::thread> thread_pool_{1};
   std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
       pop_c_semaphore_{0};
   std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
