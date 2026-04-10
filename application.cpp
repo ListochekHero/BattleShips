@@ -8,6 +8,7 @@
 #include "scheduler.h"
 #include "socket_routine.h"
 #include "utility.h"
+#include <chrono>
 #include <cstddef>
 #include <expected>
 #include <iostream>
@@ -38,7 +39,10 @@ Ev Server::init() {
   return {};
 }
 
-void Server::run() { scheduler().run(); }
+void Server::run() {
+  scheduler().run();
+  std::this_thread::sleep_for(std::chrono::seconds(1000));
+}
 
 void Server::handle_zombie_pocesses() {
   int status;
@@ -131,7 +135,7 @@ CommandStatus Server::execute_action(const ChatMessage&,
     parse_result.error().add_context("Unable to parse client chat message");
     return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
   }
-  network_engine().send_message({{*parse_result}}, [](const auto& meta) {
+  network_engine().send_message({{*parse_result}, message_type_e::PRINTABLE}, [](const auto& meta) {
     return meta.type == end_point_e::CLIENT;
   });
   return {cmd_se::CONTINUE};
@@ -160,7 +164,10 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
   return {};
 }
 
-void Lobby::run() { scheduler().run(); }
+void Lobby::run() {
+  scheduler().run();
+  std::this_thread::sleep_for(std::chrono::seconds(1000));
+}
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
@@ -223,35 +230,24 @@ Ev Client::init(end_point_e socket_type) {
       "console_task", [this](std::unique_ptr<TaskContext> context) {
         ConsoleTaskContext* console_context =
             static_cast<ConsoleTaskContext*>(context.get());
-        handle_input(console_context->user_input);
+        handle_input({ConnectionView{},{.payload = console_context->user_input}});
       });
   network_engine().attach_to_scheduler(scheduler());
+  console_handler_.attach_to_scheduler(scheduler());
   return {};
 }
 
 void Client::run() {
-  std::thread net_engine_thread([this] { return network_engine().run(); });
-  std::thread console_thread([this] { return console_handler_.run(); });
-  while (true) {
-    std::unique_lock lock{m_};
-    cv_.wait(lock, [this] { return !input_queue_.empty(); });
-    std::string input_line = input_queue_.front();
-    input_queue_.pop();
-    lock.unlock();
-    handle_input({ConnectionView{}, {.payload = input_line}});
-  }
-  console_thread.join();
-  net_engine_thread.join();
+  scheduler().run();
+  std::this_thread::sleep_for(std::chrono::seconds(1000));
 }
 
 CommandStatus Client::handle_input(const CommandContext& context) {
   CommandInfo cmd_info = dispatcher().dispatch(context.message);
   switch (cmd_info.scope) {
-  case command_scope_e::NONE:
-  case command_scope_e::LOCAL:
-  case command_scope_e::NETWORK:
+  case command_scope_e::BROADCAST:
     network_engine().send_message_to(server_view_, {{context.message.payload}});
-    break;
+    return {};
   }
   auto client_action = filter_variant<ClientAction>(cmd_info.parsed_cmd);
   if (!client_action) {
@@ -298,23 +294,8 @@ CommandStatus Client::execute_action(const PrintAble&,
 }
 void Client::register_user_input(std::string user_input) {
   std::lock_guard lock{m_};
-  input_queue_.push(std::move(user_input));
+  // input_queue_.push(std::move(user_input));
   cv_.notify_one();
-}
-
-void Client::handle_input(std::string input_line) {
-  CommandInfo cmd_info = dispatcher().dispatch({.payload = input_line});
-  switch (cmd_info.scope) {
-  case command_scope_e::NONE:
-    break;
-  case command_scope_e::LOCAL:
-    handle_local_cmd(cmd_info.parsed_cmd);
-
-    break;
-  case command_scope_e::NETWORK:
-    network_engine().send_message_to(server_view_, {{input_line}});
-    break;
-  }
 }
 
 CommandStatus Client::handle_local_cmd(ParsedCommand command_variant) {

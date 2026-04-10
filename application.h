@@ -5,7 +5,6 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <queue>
 #include <sys/wait.h>
 
 #include "console_routine.h"
@@ -95,12 +94,10 @@ private:
   CommandStatus execute_action(const Quit&, const CommandContext& context);
   CommandStatus execute_action(const PrintAble&, const CommandContext& context);
   void register_user_input(std::string);
-  void handle_input(std::string);
   CommandStatus handle_local_cmd(ParsedCommand context);
   CommandStatus execute_local_action(const Quit&);
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;
-  std::queue<std::string> input_queue_;
   std::mutex m_;
   std::condition_variable cv_;
 };
