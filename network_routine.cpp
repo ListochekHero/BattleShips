@@ -28,9 +28,9 @@ void NetworkEngine::attach_to_scheduler(Scheduler& scheduler) {
                          });
   size_t slot = scheduler.add_co_task([this]() { return run_co(); });
   scheduler.schedule_co_task(slot, [&scheduler](
-                                       std::coroutine_handle<> te_handle) {
+                                       std::coroutine_handle<> te_co_handle) {
     network_co_handle co_handle =
-        network_co_handle::from_address(te_handle.address());
+        network_co_handle::from_address(te_co_handle.address());
     while (true) {
       co_handle.resume();
       scheduler.push_task("network_task", std::make_unique<NetworkTaskContext>(
@@ -73,7 +73,7 @@ NetworkEngine::init_engine(end_point_e socket_type) {
     return std::unexpected(
         std::move(result).error().add_context("Unable to init epoll"));
   }
-  return *socket_slot;
+  return ConnectionView{*socket_slot};
 }
 
 std::expected<ConnectionView, Error>
@@ -324,8 +324,8 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
     } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
       process_client_socket(slot);
     } else {
-      // bool push_success = push_to_clients_queue(slot); // <- callback to add pending client to queue for processing
-      // process_client_socket(slot);
+      // bool push_success = push_to_clients_queue(slot); // <- callback to add
+      // pending client to queue for processing process_client_socket(slot);
     }
   }
 }
@@ -342,6 +342,8 @@ void NetworkEngine::process_server_socket(size_t slot) {
                     LOG("Cant accept new connections");
                     return {};
                   }));
+  epoll_handler_.rearm_socket(*(socket_pool_[slot].handler),
+                              socket_pool_[slot].slot);
 }
 
 void NetworkEngine::process_client_socket(size_t slot) {
@@ -364,6 +366,7 @@ CommandStatus NetworkEngine::process_message(SlotEntry& slot_entry,
   switch (message.status) {
   case bsm::message_status_e::EMPTY:
   case bsm::message_status_e::WOULDBLOCK:
+    epoll_handler_.rearm_socket(*(slot_entry.handler), slot_entry.slot);
     return CommandStatus{cmd_se::TERMINATE};
   case message_status_e::DISCONNECTED:
     release_client(slot_entry);

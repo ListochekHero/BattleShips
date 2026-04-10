@@ -95,7 +95,7 @@ public:
       ConnectionMeta meta{entry.slot, entry.type};
       if (!std::invoke(filter, meta))
         continue;
-      if (send_message_impl(entry, message)) {
+      if (!send_message_impl(entry, message)) {
         delivery_report.failed++;
         continue;
       }
