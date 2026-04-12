@@ -16,87 +16,26 @@ endif()
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-add_library(common OBJECT
-application.cpp
-atomic_queue.cpp
-config.cpp
-console_routine.cpp
-data_storage.cpp
-deferred_actions.cpp
-dispatcher.cpp
-error.cpp
-interfaces.cpp
-lobby_manager.cpp
-logger.cpp
-modules.cpp
-network_routine.cpp
-scheduler.cpp
-socket_routine.cpp
-utility.cpp
-)
+option(ENABLE_SANITIZERS "Enable address/undefined sanitizers" ON)
 
-# add_library(sanitizers INTERFACE)
+add_library(project_options INTERFACE)
 
-# target_compile_options(sanitizers INTERFACE
-#   $<$<CONFIG:Debug>:-fsanitize=address,undefined>
-# )
-
-# target_link_options(sanitizers INTERFACE
-#   $<$<CONFIG:Debug>:-fsanitize=address,undefined>
-# )
-
-target_compile_options(common PRIVATE
--Wall
--Wextra
--Wpedantic
--Wconversion
--Wsign-conversion
--Weffc++
-)
-
-target_compile_options(common PRIVATE
+target_compile_options(project_options INTERFACE
+  -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Weffc++
   $<$<CONFIG:Debug>:-O0 -ggdb>
 )
 
-add_definitions(-DDEBUG_LOGS)
-
-target_compile_definitions(common PRIVATE
+target_compile_definitions(project_options INTERFACE
   $<$<CONFIG:Debug>:DEBUG_LOGS>
 )
 
-option(ENABLE_SANITIZERS "Enable address/undefined sanitizers" ON)
-
 if(ENABLE_SANITIZERS)
-  target_compile_options(common PRIVATE
+  target_compile_options(project_options INTERFACE
     $<$<CONFIG:Debug>:-fsanitize=address,undefined>
   )
-  target_link_options(common PRIVATE
+  target_link_options(project_options INTERFACE
     $<$<CONFIG:Debug>:-fsanitize=address,undefined>
   )
 endif()
 
-#Create an executable for the Server
-add_executable(server
-  main.cpp
-  $<TARGET_OBJECTS:common>
-)
-
-#Create an executable for the Lobby
-add_executable(lobby
-  lobby.cpp
-  $<TARGET_OBJECTS:common>
-)
-
-#Create an executable for the Client
-add_executable(client
-  client.cpp
-  $<TARGET_OBJECTS:common>
-)
-
-target_link_options(server PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
-target_link_options(lobby PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
-target_link_options(client PRIVATE   $<$<CONFIG:Debug>:-fsanitize=address,undefined>)
-
-target_link_libraries(server PUBLIC atomic)
-target_link_libraries(lobby PUBLIC atomic)
-target_link_libraries(client PUBLIC atomic)
+add_subdirectory(src)

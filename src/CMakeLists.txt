@@ -1,0 +1,7 @@
+add_subdirectory(utility)
+add_subdirectory(core)
+add_subdirectory(interfaces)
+add_subdirectory(io)
+add_subdirectory(net)
+add_subdirectory(application)
+add_subdirectory(main)
