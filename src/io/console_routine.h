@@ -1,8 +1,8 @@
 #ifndef CONSOLE_ROUTINE_H
 #define CONSOLE_ROUTINE_H
 
-#include "modules.h"
-#include "scheduler.h"
+#include "interfaces/modules.h"
+#include "core/scheduler.h"
 #include <coroutine>
 #include <functional>
 #include <string>

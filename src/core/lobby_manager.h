@@ -1,8 +1,8 @@
 #ifndef LOBBY_MANAGER_H
 #define LOBBY_MANAGER_H
 
-#include "network_routine.h"
-#include "utility.h"
+#include "net/network_routine.h"
+#include "utility/utility.h"
 #include <cstdint>
 #include <expected>
 #include <unordered_map>

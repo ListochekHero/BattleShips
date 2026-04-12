@@ -1,12 +1,12 @@
 #ifndef NETWORK_ROUTINE_H
 #define NETWORK_ROUTINE_H
 
-#include "atomic_queue.h"
+#include "core/atomic_queue.h"
 #include "deferred_actions.h"
-#include "modules.h"
-#include "scheduler.h"
+#include "interfaces/modules.h"
+#include "core/scheduler.h"
 #include "socket_routine.h"
-#include "utility.h"
+#include "utility/utility.h"
 #include <concepts>
 #include <condition_variable>
 #include <coroutine>

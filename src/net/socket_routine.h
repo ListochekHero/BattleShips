@@ -14,7 +14,7 @@
 #include <expected>
 #include <vector>
 
-#include "utility.h"
+#include "utility/utility.h"
 
 #define BACKLOG 10
 #define BUFF_SIZE 1024 //  add this magic number to config

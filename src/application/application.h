@@ -7,14 +7,14 @@
 #include <cstdint>
 #include <sys/wait.h>
 
-#include "console_routine.h"
-#include "deferred_actions.h"
-#include "dispatcher.h"
-#include "error.h"
-#include "lobby_manager.h"
-#include "network_routine.h"
-#include "scheduler.h"
-#include "utility.h"
+#include "io/console_routine.h"
+#include "net/deferred_actions.h"
+#include "core/dispatcher.h"
+#include "utility/error.h"
+#include "core/lobby_manager.h"
+#include "net/network_routine.h"
+#include "core/scheduler.h"
+#include "utility/utility.h"
 #include <variant>
 
 #define MAX_EVENTS 10

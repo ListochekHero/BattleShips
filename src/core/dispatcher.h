@@ -1,8 +1,8 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
-#include "socket_routine.h"
-#include "utility.h"
+#include "net/socket_routine.h"
+#include "utility/utility.h"
 #include <variant>
 
 namespace bsm {

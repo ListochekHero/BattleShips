@@ -1,8 +1,8 @@
 #include "main.h"
-#include "application.h"
-#include "config.h"
-#include "logger.h"
-#include "network_routine.h"
+#include "application/application.h"
+#include "net/network_routine.h"
+#include "utility/config.h"
+#include "utility/logger.h"
 #include <cstdlib>
 #include <iostream>
 #include <memory>

@@ -1,13 +1,13 @@
-#include "application/application.h"
-#include "data_storage.h"
-#include "dispatcher.h"
+#include "application.h"
+#include "core/dispatcher.h"
+#include "core/lobby_manager.h"
+#include "core/scheduler.h"
+#include "net/network_routine.h"
+#include "net/socket_routine.h"
+#include "utility/data_storage.h"
 #include "utility/error.h"
-#include "lobby_manager.h"
-#include "logger.h"
-#include "network_routine.h"
-#include "scheduler.h"
-#include "socket_routine.h"
-#include "utility.h"
+#include "utility/logger.h"
+#include "utility/utility.h"
 #include <chrono>
 #include <cstddef>
 #include <expected>
@@ -135,9 +135,9 @@ CommandStatus Server::execute_action(const ChatMessage&,
     parse_result.error().add_context("Unable to parse client chat message");
     return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
   }
-  network_engine().send_message({{*parse_result}, message_type_e::PRINTABLE}, [](const auto& meta) {
-    return meta.type == end_point_e::CLIENT;
-  });
+  network_engine().send_message(
+      {{*parse_result}, message_type_e::PRINTABLE},
+      [](const auto& meta) { return meta.type == end_point_e::CLIENT; });
   return {cmd_se::CONTINUE};
 }
 
@@ -230,7 +230,8 @@ Ev Client::init(end_point_e socket_type) {
       "console_task", [this](std::unique_ptr<TaskContext> context) {
         ConsoleTaskContext* console_context =
             static_cast<ConsoleTaskContext*>(context.get());
-        handle_input({ConnectionView{},{.payload = console_context->user_input}});
+        handle_input(
+            {ConnectionView{}, {.payload = console_context->user_input}});
       });
   network_engine().attach_to_scheduler(scheduler());
   console_handler_.attach_to_scheduler(scheduler());

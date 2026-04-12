@@ -1,5 +1,5 @@
 #include "lobby_manager.h"
-#include "network_routine.h"
+#include "net/network_routine.h"
 #include <cstdlib>
 #include <signal.h>
 

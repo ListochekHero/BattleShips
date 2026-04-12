@@ -1,7 +1,7 @@
 #ifndef MODULES_H
 #define MODULES_H
 
-#include "scheduler.h"
+#include "core/scheduler.h"
 
 namespace bsm {
 
