@@ -5,7 +5,6 @@
 #include <atomic>
 #include <cstddef>
 #include <fcntl.h>
-#include <optional>
 #include <stdlib.h>
 #include <sys/epoll.h>
 #include <unistd.h>
@@ -14,40 +13,15 @@
 #include <expected>
 #include <vector>
 
+#include "protocol/message_types.h"
 #include "utility/utility.h"
 
 #define BACKLOG 10
 #define BUFF_SIZE 1024 //  add this magic number to config
+
 namespace bsm {
 
 enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
-enum class message_type_e : uint8_t {
-  DEFAULT,
-  PRINTABLE,
-  SOCKET,
-  CONN_CODE,
-  LOBBY_ID,
-  ERROR
-};
-enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
-
-struct MsgHeader {
-  message_type_e msg_type{message_type_e::DEFAULT};
-  uint64_t payload_count{0};
-};
-
-struct OutgoingMessage {
-  std::vector<std::string_view> payloads;
-  message_type_e msg_type{message_type_e::DEFAULT};
-  std::optional<int> socket{std::nullopt};
-};
-
-struct ReadResult {
-  message_status_e status{message_status_e::EMPTY};
-  message_type_e msg_type{message_type_e::DEFAULT};
-  std::string payload{std::string(1024, '\0')};
-  std::optional<int> socket{std::nullopt};
-};
 
 class SocketHandler {
 public:

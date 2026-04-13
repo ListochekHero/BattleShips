@@ -1,9 +1,12 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
-#include "net/socket_routine.h"
-#include "utility/utility.h"
+#include "protocol/message_defs.h"
+#include "protocol/message_types.h"
+
+#include <optional>
 #include <variant>
+#include <vector>
 
 namespace bsm {
 struct CreateLobby {};

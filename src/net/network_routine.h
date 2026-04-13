@@ -2,11 +2,14 @@
 #define NETWORK_ROUTINE_H
 
 #include "core/atomic_queue.h"
+#include "core/scheduler.h"
 #include "deferred_actions.h"
 #include "interfaces/modules.h"
-#include "core/scheduler.h"
+#include "protocol/network_defs.h"
+#include "protocol/network_types.h"
 #include "socket_routine.h"
 #include "utility/utility.h"
+
 #include <concepts>
 #include <condition_variable>
 #include <coroutine>
@@ -15,6 +18,8 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+
+#define MAX_EVENTS 10
 
 namespace bsm {
 
@@ -35,30 +40,11 @@ struct network_promise {
   void unhandled_exception() {}
 };
 
-enum class end_point_e : uint8_t {
-  NONE = 0,
-  CLIENT = 1 << 0,
-  LOBBY = 1 << 1,
-  PARENT = 1 << 2,
-  SERVER = 1 << 3,
-  FROM_SERVER = 1 << 4
-};
-
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
   end_point_e type;
   size_t slot;
   size_t generation{std::numeric_limits<std::size_t>::max()};
-};
-
-class ConnectionView {
-public:
-  explicit ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
-  explicit ConnectionView(size_t slot);
-  size_t get_slot() const;
-
-private:
-  size_t slot{std::numeric_limits<std::size_t>::max()};
 };
 
 struct ConnectionMeta {

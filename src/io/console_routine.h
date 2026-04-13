@@ -1,8 +1,9 @@
 #ifndef CONSOLE_ROUTINE_H
 #define CONSOLE_ROUTINE_H
 
-#include "interfaces/modules.h"
 #include "core/scheduler.h"
+#include "interfaces/modules.h"
+
 #include <coroutine>
 #include <functional>
 #include <string>
@@ -27,7 +28,7 @@ struct console_promise {
 };
 
 class ConsoleHandler : public Module {
-  public:
+public:
   void attach_to_scheduler(Scheduler& scheduler) override;
   void run();
   console_co_handle run_co();

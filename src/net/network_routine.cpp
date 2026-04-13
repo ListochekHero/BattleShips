@@ -1,12 +1,9 @@
 #include "network_routine.h"
-#include "application/application.h"
-#include "core/scheduler.h"
-#include "deferred_actions.h"
-#include "socket_routine.h"
+
 #include "utility/config.h"
 #include "utility/error.h"
 #include "utility/logger.h"
-#include "utility/utility.h"
+
 #include <coroutine>
 #include <cstddef>
 #include <exception>

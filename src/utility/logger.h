@@ -2,13 +2,13 @@
 #define LOGGER_H
 
 #include "error.h"
-#include <unistd.h>
 
 #include <expected>
 #include <format>
 #include <fstream>
 #include <mutex>
 #include <string>
+#include <unistd.h>
 
 namespace bsm {
 

@@ -1,6 +1,6 @@
 #include "lobby.h"
+
 #include "application/application.h"
-#include "net/network_routine.h"
 #include "utility/logger.h"
 
 using bsm::LOG;

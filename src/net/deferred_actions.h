@@ -7,7 +7,6 @@
 namespace bsm {
 
 class NetworkEngine;
-class ConnectionView;
 
 struct DeferredAction {
   virtual ~DeferredAction() = default;

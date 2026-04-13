@@ -2,29 +2,17 @@
 #define SCHEDULER_H
 
 #include "atomic_queue.h"
+#include "protocol/task_types.h"
+
 #include <coroutine>
 #include <cstddef>
 #include <functional>
-#include <memory>
 #include <semaphore>
 #include <string>
 #include <thread>
 #include <vector>
 
 namespace bsm {
-
-struct TaskContext {
-  virtual ~TaskContext() = default;
-};
-struct NetworkTaskContext : TaskContext {
-  NetworkTaskContext(size_t s) : slot(s) {};
-  size_t slot;
-};
-
-struct ConsoleTaskContext : TaskContext {
-  ConsoleTaskContext(std::string&& s) : user_input(s) {};
-  std::string user_input;
-};
 
 struct Task {
   std::string task_tag{};

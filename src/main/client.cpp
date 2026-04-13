@@ -1,8 +1,9 @@
 #include "client.h"
+
 #include "application/application.h"
-#include "net/network_routine.h"
 #include "net/socket_routine.h"
 #include "utility/logger.h"
+
 #include <cstdio>
 #include <iostream>
 
