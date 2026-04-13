@@ -1,10 +1,13 @@
 #ifndef LOBBY_MANAGER_H
 #define LOBBY_MANAGER_H
 
-#include "net/network_routine.h"
-#include "utility/utility.h"
+#include "protocol/lobby_types.h"
+#include "protocol/network_types.h"
+#include "utility/error.h"
+
 #include <cstdint>
 #include <expected>
+#include <sys/types.h>
 #include <unordered_map>
 
 namespace bsm {
@@ -16,11 +19,6 @@ struct LobbyProcess {
 
 struct LobbyEntry {
   pid_t pid;
-  ConnectionView control_connection;
-};
-
-struct LobbyView {
-  int64_t lobby_id;
   ConnectionView control_connection;
 };
 
