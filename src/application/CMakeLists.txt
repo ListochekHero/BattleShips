@@ -1,7 +1,8 @@
-add_library(application
-    application.cpp
-)
+add_library(application application.cpp)
 
 target_include_directories(application PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
-target_link_libraries(application PUBLIC project_options core interfaces net io )
+target_link_libraries(
+    application
+    PUBLIC project_options utility core interfaces io net
+)

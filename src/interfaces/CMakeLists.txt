@@ -1,7 +1,4 @@
-add_library(interfaces
-    interfaces.cpp
-    modules.cpp
-)
+add_library(interfaces interfaces.cpp modules.cpp)
 
 target_include_directories(interfaces PUBLIC ${CMAKE_SOURCE_DIR}/src)
 

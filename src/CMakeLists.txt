@@ -1,4 +1,6 @@
+add_subdirectory(protocol)
 add_subdirectory(utility)
+add_subdirectory(services)
 add_subdirectory(core)
 add_subdirectory(interfaces)
 add_subdirectory(io)

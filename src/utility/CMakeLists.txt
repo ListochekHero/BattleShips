@@ -1,4 +1,5 @@
-add_library(utility
+add_library(
+    utility
     config.cpp
     data_storage.cpp
     error.cpp
@@ -8,3 +9,5 @@ add_library(utility
 )
 
 target_include_directories(utility PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+target_link_libraries(utility PUBLIC project_options)
