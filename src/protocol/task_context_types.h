@@ -1,5 +1,5 @@
-#ifndef TASK_TYPES_H
-#define TASK_TYPES_H
+#ifndef TASK_CONTEXT_TYPES_H
+#define TASK_CONTEXT_TYPES_H
 
 #include <cstddef>
 #include <string>
