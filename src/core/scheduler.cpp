@@ -5,7 +5,7 @@
 
 namespace bsm {
 
-void Scheduler::push_task(std::string task_tag,
+void Scheduler::push_task(task_tag_e task_tag,
                           std::unique_ptr<TaskContext> context) {
   push_c_semaphore_.acquire();
   Task* task = new Task(task_tag, std::move(context));
@@ -18,16 +18,18 @@ Task* Scheduler::try_get_task() {
   Task* task = tasks_queue_.pop();
   if (task) {
     push_c_semaphore_.release();
+  }else{
+    pop_c_semaphore_.release();
   }
   return task;
 }
 
-bool Scheduler::add_executor(std::string tag, TaskExecutor executor) {
+bool Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) {
   auto [it, inserted] = tasks_executors_.try_emplace(tag, executor);
   return inserted;
 }
 
-auto& Scheduler::get_executor_by_tag(std::string task_tag) {
+auto& Scheduler::get_executor_by_tag(task_tag_e task_tag) {
   return tasks_executors_[task_tag];
 }
 
