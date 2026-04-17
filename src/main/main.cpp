@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
   if (argc > 1) {
     bsm::LOG("Starting Lobby!");
     auto lobby{std::make_unique<bsm::Lobby>()};
-    init_result = lobby->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
+    init_result = lobby->init(std::stoi(argv[1]), bsm::end_point_e::PARENT);
     app = std::move(lobby);
   } else {
     bsm::LOG("Starting Server!");
