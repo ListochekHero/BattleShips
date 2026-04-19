@@ -1,11 +1,19 @@
 #include "application.h"
 
+#include "core/atomic_queue.h"
+#include "core/scheduler.h"
+#include "io/console_routine.h"
+#include "net/network_routine.h"
+#include "protocol/coroutine_promise.h"
+#include "protocol/task_context_types.h"
 #include "utility/data_storage.h"
 #include "utility/logger.h"
 
 #include <chrono>
+#include <cstddef>
 #include <expected>
 #include <iostream>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <ostream>
@@ -95,7 +103,7 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-CommandStatus Server::handle_client_cmd(CommandContext& context) {
+CommandStatus Server::handle_client_cmd(const CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
   CommandInfo command_info = dispatcher().dispatch(context.message);
   auto server_action = filter_variant<ServerAction>(command_info.parsed_cmd);
@@ -198,7 +206,7 @@ Ev Lobby::init(end_point_e socket_type, int parrent_socket) {
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
   network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  auto init_result = network_engine().init_engine(parrent_socket, socket_type);
+  auto init_result = network_engine().init_engine(socket_type, parrent_socket);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -216,7 +224,7 @@ void Lobby::run() {
   scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
 
-CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
+CommandStatus Lobby::handle_client_cmd(const CommandContext& context) {
   LOG(std::format("Command to handle: {}", context.message.payload));
   auto action_to_execute = dispatcher().dispatch(context.message);
   auto lobby_action = filter_variant<LobbyAction>(action_to_execute.parsed_cmd);
@@ -296,7 +304,7 @@ Ev Client::init(end_point_e socket_type) {
       [this](const CommandContext& context) { return handle_input(context); });
   console_handler_.set_input_handler(
       [this](std::string user_cmd) { return register_user_input(user_cmd); });
-  auto init_result = network_engine().init_engine(socket_type);
+  auto init_result = network_engine().init_engine(socket_type, 0);
   if (!init_result) {
     return std::unexpected(
         std::move(init_result)
@@ -305,7 +313,7 @@ Ev Client::init(end_point_e socket_type) {
   }
   server_view_ = *init_result;
   scheduler().add_executor(
-      "console_task", [this](std::unique_ptr<TaskContext> context) {
+      task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) {
         ConsoleTaskContext* console_context =
             static_cast<ConsoleTaskContext*>(context.get());
         handle_input(

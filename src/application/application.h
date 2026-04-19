@@ -3,15 +3,20 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <coroutine>
 #include <cstddef>
 #include <cstdint>
+#include <expected>
 #include <sys/wait.h>
 #include <variant>
 
+#include "core/atomic_queue.h"
 #include "core/dispatcher.h"
 #include "core/scheduler.h"
 #include "io/console_routine.h"
 #include "net/network_routine.h"
+#include "protocol/coroutine_promise.h"
+#include "protocol/network_types.h"
 #include "services/lobby_manager.h"
 #include "utility/error.h"
 #include "utility/utility.h"
@@ -20,6 +25,12 @@ namespace bsm {
 
 class Application {
 public:
+  bool await_ready() { return false; }
+  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) {
+    return scheduler_.get_co_by_tag(task_tag_e::SCHEDULER);
+  };
+  void await_resume() {}
+
   virtual void run() = 0;
   virtual ~Application();
   Application();
@@ -54,7 +65,7 @@ private:
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
-  CommandStatus handle_client_cmd(CommandContext& context);
+  CommandStatus handle_client_cmd(const CommandContext& context) override;
   CommandStatus execute_action(const CreateLobby& action_type,
                                const CommandContext& context);
   std::expected<LobbyView, Error> request_lobby();
@@ -78,7 +89,7 @@ public:
 
 private:
   using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter>;
-  CommandStatus handle_client_cmd(CommandContext& context);
+  CommandStatus handle_client_cmd(const CommandContext& context) override;
   CommandStatus execute_action(const AcceptSocket& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const LobbyIdSetter& action_type,
@@ -93,8 +104,8 @@ public:
   Client();
   Ev init(end_point_e socket_type, int parrent_socket);
   Ev init(end_point_e socket_type);
-  void run();
-  CommandStatus handle_client_cmd(const CommandContext& context);
+  void run() override;
+  CommandStatus handle_client_cmd(const CommandContext& context) override;
   CommandStatus handle_input(const CommandContext& context);
   std::atomic_size_t pending_clients_counter_{0};
 
@@ -106,6 +117,7 @@ private:
   void register_user_input(std::string);
   CommandStatus handle_local_cmd(ParsedCommand context);
   CommandStatus execute_local_action(const Quit&);
+
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;
   AtomicQueue<std::string> console_raw_tasks_;
@@ -115,4 +127,5 @@ private:
 };
 
 } // namespace bsm
+
 #endif
