@@ -79,8 +79,9 @@ Ev Server::init() {
 }
 
 void Server::run() {
-  scheduler().run();
-  std::this_thread::sleep_for(std::chrono::seconds(1000));
+  scheduler().add_and_run_producer([this]() { network_engine().run(); });
+  scheduler().run_workers();
+  scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
 
 void Server::handle_zombie_pocesses() {
@@ -188,6 +189,12 @@ CommandStatus Server::execute_action(const GeneralAction&,
   return {cmd_se::CONTINUE};
 }
 
+Ev Lobby::init(end_point_e socket_type, int parrent_socket) {
+  auto init_result = Application::init(socket_type, parrent_socket);
+  parent_view_ = *init_result;
+  return {};
+}
+
 Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
   network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
@@ -204,8 +211,9 @@ Ev Lobby::init(int parrent_socket, end_point_e socket_type) {
 }
 
 void Lobby::run() {
-  scheduler().run();
-  std::this_thread::sleep_for(std::chrono::seconds(1000));
+  scheduler().add_and_run_producer([this]() { network_engine().run(); });
+  scheduler().run_workers();
+  scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
 
 CommandStatus Lobby::handle_client_cmd(CommandContext& context) {
@@ -278,8 +286,10 @@ Ev Client::init(end_point_e socket_type) {
 }
 
 void Client::run() {
-  scheduler().run();
-  std::this_thread::sleep_for(std::chrono::seconds(1000));
+  scheduler().add_and_run_producer([this]() { network_engine().run(); });
+  scheduler().add_and_run_producer([this]() { console_handler_.run(); });
+  scheduler().run_workers();
+  scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
 
 CommandStatus Client::handle_input(const CommandContext& context) {
