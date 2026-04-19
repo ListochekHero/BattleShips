@@ -118,11 +118,11 @@ network_co_handle NetworkEngine::run_co() {
       continue;
     }
     for (size_t slot : *ready_slots) {
-      if (socket_pool_[slot].type == end_point_e::SERVER) {
+      if (socket_pool_[slot].type == end_point_e::LISTENER) {
         process_server_socket(slot);
-      } else if (socket_pool_[slot].type == end_point_e::PARENT) {
+      } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
         process_client_socket(slot);
-      } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
+      } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
         process_client_socket(slot);
       } else {
         co_yield slot;
@@ -314,9 +314,9 @@ void NetworkEngine::register_clients(std::vector<int>& new_clients) {
 
 void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
-    if (socket_pool_[slot].type == end_point_e::SERVER) {
+    if (socket_pool_[slot].type == end_point_e::LISTENER) {
       process_server_socket(slot);
-    } else if (socket_pool_[slot].type == end_point_e::PARENT) {
+    } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
       process_client_socket(slot);
     } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
       process_client_socket(slot);

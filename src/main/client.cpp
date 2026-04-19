@@ -17,7 +17,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   bsm::Client client{};
-  client.init(bsm::end_point_e::SERVER);
+  client.init(bsm::end_point_e::TO_SERVER, 0);
   client.run();
   exit(EXIT_SUCCESS);
 

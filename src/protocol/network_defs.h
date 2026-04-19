@@ -7,11 +7,11 @@ namespace bsm {
 
 enum class end_point_e : uint8_t {
   NONE = 0,
-  CLIENT = 1 << 0,
-  LOBBY = 1 << 1,
-  PARENT = 1 << 2,
+  TO_CLIENT = 1 << 0,
+  TO_LOBBY = 1 << 1,
+  TO_PARENT = 1 << 2,
   LISTENER = 1 << 3,
-  SERVER = 1 << 4
+  TO_SERVER = 1 << 4
 };
 
 } // namespace bsm

@@ -23,7 +23,7 @@ Scheduler& Application::scheduler() { return scheduler_; }
 Ev Server::init() {
   network_engine().set_message_handler(
       [this](CommandContext context) { return handle_client_cmd(context); });
-  if (auto init_result = network_engine().init_engine(end_point_e::SERVER);
+  if (auto init_result = network_engine().init_engine(end_point_e::LISTENER, 0);
       !init_result) {
     return std::unexpected(
         std::move(init_result).error().add_context("Unalbe to init Server"));
@@ -88,7 +88,7 @@ std::expected<LobbyView, Error> Server::request_lobby() {
     error = proc.error();
   }
   auto lobby_ipc =
-      network_engine().attach_socket(proc->control_socket, end_point_e::LOBBY);
+      network_engine().attach_socket(proc->control_socket, end_point_e::TO_LOBBY);
   if (!lobby_ipc) {
     error = lobby_ipc.error();
   }
@@ -130,7 +130,7 @@ CommandStatus Server::execute_action(const ChatMessage&,
   }
   network_engine().send_message(
       {{*parse_result}, message_type_e::PRINTABLE},
-      [](const auto& meta) { return meta.type == end_point_e::CLIENT; });
+      [](const auto& meta) { return meta.type == end_point_e::TO_CLIENT; });
   return {cmd_se::CONTINUE};
 }
 
@@ -187,7 +187,7 @@ CommandStatus Lobby::execute_action(const AcceptSocket&,
     return CommandStatus{cmd_se::CONTINUE};
   }
   auto client_view = network_engine().attach_socket(*context.message.socket,
-                                                    end_point_e::CLIENT);
+                                                    end_point_e::TO_CLIENT);
   if (!client_view) {
     client_view.error().add_context(
         "Unable to accept client socket from parent");

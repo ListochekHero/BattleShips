@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
   bsm::SocketHandler sock{std::stoi(argv[1])};
   std::unique_ptr<bsm::Lobby> lobby{std::make_unique<bsm::Lobby>()};
   bsm::LOG("starting lobby!");
-  lobby->init(std::stoi(argv[1]), bsm::end_point_e::LOBBY);
+  lobby->init(std::stoi(argv[1]), bsm::end_point_e::TO_PARENT);
   lobby->run();
 #ifdef DEBUG_LOGS
 #endif
