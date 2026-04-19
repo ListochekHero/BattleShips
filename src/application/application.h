@@ -21,17 +21,25 @@ namespace bsm {
 class Application {
 public:
   virtual void run() = 0;
-  virtual ~Application() = default;
+  virtual ~Application();
+  Application();
+  std::expected<ConnectionView, Error> init(end_point_e socket_type,
+                                            int parrent_socket);
+  virtual CommandStatus handle_client_cmd(const CommandContext& context) = 0;
+  bsm_co_handle network_co();
 
 protected:
   NetworkEngine& network_engine();
   Dispatcher& dispatcher();
   Scheduler& scheduler();
+  AtomicQueue<task_tag_e>& available_task_tags();
 
 private:
   NetworkEngine network_engine_;
+  AtomicQueue<size_t> network_raw_tasks_;
   Dispatcher dispatcher_;
   Scheduler scheduler_;
+  AtomicQueue<task_tag_e> available_task_tags_;
 };
 
 class Server : public Application {
