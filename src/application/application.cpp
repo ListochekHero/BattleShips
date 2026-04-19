@@ -260,6 +260,37 @@ CommandStatus Lobby::execute_action(const LobbyIdSetter&,
   return {cmd_se::CONTINUE};
 }
 
+bsm_co_handle Client::console_co() {
+  while (true) {
+    std::string* user_input{console_raw_tasks_.try_pop()};
+    std::unique_ptr<ConsoleTaskContext> task_context(
+        new ConsoleTaskContext(std::move(*user_input)));
+    delete user_input;
+    scheduler().push_task(task_tag_e::CONSOLE, std::move(task_context));
+    co_await *this;
+  }
+}
+
+Client::Client()
+    : console_handler_(console_raw_tasks_, available_task_tags()) {}
+
+Ev Client::init(end_point_e socket_type, int parrent_socket) {
+  auto init_result = Application::init(socket_type, parrent_socket);
+  console_handler_.set_input_handler(
+      [this](std::string user_cmd) { return register_user_input(user_cmd); });
+  server_view_ = *init_result;
+  scheduler().add_executor(
+      task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) {
+        ConsoleTaskContext* console_context =
+            static_cast<ConsoleTaskContext*>(context.get());
+        handle_input(
+            {ConnectionView{}, {.payload = console_context->user_input}});
+      });
+  scheduler().add_co_task([this]() { return console_co(); },
+                          task_tag_e::CONSOLE);
+  return {};
+}
+
 Ev Client::init(end_point_e socket_type) {
   network_engine().set_message_handler(
       [this](const CommandContext& context) { return handle_input(context); });

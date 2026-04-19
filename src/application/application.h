@@ -47,6 +47,7 @@ public:
   Server() = default;
   Ev init();
   void run() override;
+  Ev init(end_point_e socket_type, int parrent_socket);
 
 private:
   void handle_zombie_pocesses();
@@ -71,6 +72,7 @@ class Lobby : public Application {
 public:
   Lobby() = default;
   Ev init(int parrent_socket, end_point_e socket_type);
+  Ev init(end_point_e socket_type, int parrent_socket);
   void run() override;
   std::atomic_size_t pending_clients_counter_{0};
 
@@ -87,6 +89,9 @@ private:
 
 class Client : public Application {
 public:
+  bsm_co_handle console_co();
+  Client();
+  Ev init(end_point_e socket_type, int parrent_socket);
   Ev init(end_point_e socket_type);
   void run();
   CommandStatus handle_client_cmd(const CommandContext& context);
@@ -103,6 +108,8 @@ private:
   CommandStatus execute_local_action(const Quit&);
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;
+  AtomicQueue<std::string> console_raw_tasks_;
+
   std::mutex m_;
   std::condition_variable cv_;
 };
