@@ -17,7 +17,7 @@ template <typename T> class AtomicQueue {
 public:
   // AtomicQueue() { queue.fill(nullptr); }
 
-  T* pop() {
+  T* try_pop() {
     uint8_t last_busy_index = head.load();
     if (last_busy_index == tail)
       return nullptr;
@@ -50,6 +50,27 @@ public:
         }
       }
       continue;
+    }
+  }
+
+  T* pop() {
+    uint8_t last_busy_index = head.load();
+    T* data{nullptr};
+    while (data == nullptr) {
+      queue[last_busy_index].wait(data);
+      data = queue[last_busy_index].exchange(nullptr);
+    }
+    head.compare_exchange_strong(last_busy_index, last_busy_index + 1);
+    queue[last_busy_index].notify_one();
+    return data;
+  }
+
+  void wait_for_data() {
+    uint8_t last_busy_index = head.load();
+    T* data{nullptr};
+    while (data == nullptr) {
+      queue[last_busy_index].wait(data);
+      if(queue[last_busy_index]!=nullptr)break;
     }
   }
 
