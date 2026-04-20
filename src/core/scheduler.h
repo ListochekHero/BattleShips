@@ -49,7 +49,8 @@ public:
   }
 
 private:
-  std::vector<CoTask> co_tasks_;
+  std::unordered_map<task_tag_e, std::coroutine_handle<>>
+      co_handlers_map_;
   AtomicQueue<Task> tasks_queue_;
   // std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /
   //                                       2};
