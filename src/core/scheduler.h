@@ -14,8 +14,11 @@
 
 namespace bsm {
 
-enum class task_tag_e {NETWORK, CONSOLE};
+enum class task_tag_e { SCHEDULER, NETWORK, CONSOLE };
 
+struct Producer {
+  std::thread producer_thread;
+};
 
 struct Task {
   task_tag_e task_tag{};
@@ -35,20 +38,20 @@ public:
   using TaskExecutor = std::function<void(std::unique_ptr<TaskContext>)>;
   bool add_executor(task_tag_e tag, TaskExecutor executor);
   auto& get_executor_by_tag(task_tag_e task_tag);
+  std::coroutine_handle<> get_co_by_tag(task_tag_e task_tag);
   void worker_loop();
-  void run();
-
-  template <typename F> size_t add_co_task(F&& f) {
-    auto co_handle = std::invoke(f);
-    co_tasks_.push_back(CoTask{.te_co_handle = co_handle});
-    return co_tasks_.size() - 1;
+  void run_workers();
+  bsm_co_handle co_run();
+  template <typename F> void add_and_run_producer(F&& f) {
+    producers_.emplace_back(std::thread(f));
   }
-  template <typename F> void schedule_co_task(size_t slot, F&& f) {
-    co_tasks_[slot].co_executor = std::thread(f, co_tasks_[slot].te_co_handle);
-    return;
+  template <typename F> void add_co_task(F&& f, task_tag_e task_tag) {
+    auto co_handle = std::invoke(f);
+    co_handlers_map_.try_emplace(task_tag, co_handle);
   }
 
 private:
+  std::vector<Producer> producers_;
   std::unordered_map<task_tag_e, std::coroutine_handle<>>
       co_handlers_map_;
   AtomicQueue<Task> tasks_queue_;
