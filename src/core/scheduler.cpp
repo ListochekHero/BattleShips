@@ -19,17 +19,17 @@ void Scheduler::push_task(task_tag_e task_tag,
 
 Task* Scheduler::try_get_task() {
   pop_c_semaphore_.acquire();
-  Task* task = tasks_queue_.pop();
+  Task* task = tasks_queue_.try_pop();
   if (task) {
     push_c_semaphore_.release();
-  }else{
+  } else {
     pop_c_semaphore_.release();
   }
   return task;
 }
 
 bool Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) {
-  auto [it, inserted] = tasks_executors_.try_emplace(tag, executor);
+  auto [it, inserted] = task_executors_.try_emplace(tag, executor);
   return inserted;
 }
 
@@ -52,7 +52,7 @@ void Scheduler::worker_loop() {
   }
 }
 
-void Scheduler::run() {
+void Scheduler::run_workers() {
   for (auto& thread : thread_pool_) {
     thread = std::thread([this]() { return worker_loop(); });
   }
