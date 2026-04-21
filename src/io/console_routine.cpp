@@ -1,4 +1,5 @@
 #include "console_routine.h"
+#include "core/scheduler.h"
 
 #include <iostream>
 #include <string>
@@ -23,8 +24,11 @@ void ConsoleHandler::attach_to_scheduler(Scheduler& scheduler) {
 void ConsoleHandler::run() {
   std::string user_cmd;
   while (std::getline(std::cin, user_cmd)) {
-    on_input_callback(std::move(user_cmd));
-    if (user_cmd == "\\quit")
+    // on_input_callback(std::move(user_cmd));
+    auto ptr{new std::string(std::move(user_cmd))};
+    console_raw_tasks_.push(ptr);
+    available_task_tags_.push(new task_tag_e(task_tag_e::CONSOLE));
+    if (*ptr == "\\quit")
       break;
   }
 }

@@ -29,13 +29,19 @@ struct console_promise {
 
 class ConsoleHandler : public Module {
 public:
-  void attach_to_scheduler(Scheduler& scheduler) override;
+  ConsoleHandler(AtomicQueue<std::string>& console_q_,
+                 AtomicQueue<task_tag_e>& available_q_)
+      : console_raw_tasks_(console_q_), available_task_tags_(available_q_) {};
+
+  // void attach_to_scheduler(Scheduler& scheduler) override;
   void run();
   console_co_handle run_co();
   using InputHandler = std::function<void(std::string)>;
   void set_input_handler(InputHandler h);
 
 private:
+  AtomicQueue<std::string>& console_raw_tasks_;
+  AtomicQueue<task_tag_e>& available_task_tags_;
   InputHandler on_input_callback;
 };
 
