@@ -3,7 +3,9 @@
 #include "utility/logger.h"
 
 #include <cstddef>
+#include <fcntl.h>
 #include <sys/epoll.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include <utility>
 
@@ -73,6 +75,8 @@ Ev SocketHandler::setup_client() {
       0) {
     return std::unexpected(Error{{"Connection to the server failed"}});
   }
+  int flags = fcntl(socket_, F_GETFL, 0);
+  fcntl(socket_, F_SETFL, flags | O_NONBLOCK);
   socket_status_ = socket_status_e::ALIVE;
   return {};
 }
