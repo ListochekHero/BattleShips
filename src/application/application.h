@@ -88,11 +88,13 @@ public:
   std::atomic_size_t pending_clients_counter_{0};
 
 private:
-  using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter>;
+  using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter, ChatMessage>;
   CommandStatus handle_client_cmd(const CommandContext& context) override;
   CommandStatus execute_action(const AcceptSocket& action_type,
                                const CommandContext& context);
   CommandStatus execute_action(const LobbyIdSetter& action_type,
+                               const CommandContext& context);
+  CommandStatus execute_action(const ChatMessage&,
                                const CommandContext& context);
   int64_t lobby_id_{0};
   ConnectionView parent_view_{std::numeric_limits<std::size_t>::max()};
@@ -114,6 +116,7 @@ private:
   using LocalClientAction = std::variant<Quit>;
   CommandStatus execute_action(const Quit&, const CommandContext& context);
   CommandStatus execute_action(const PrintAble&, const CommandContext& context);
+
   void register_user_input(std::string);
   CommandStatus handle_local_cmd(ParsedCommand context);
   CommandStatus execute_local_action(const Quit&);

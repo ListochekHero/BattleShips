@@ -279,13 +279,24 @@ bsm_co_handle Client::console_co() {
   }
 }
 
+CommandStatus Lobby::execute_action(const ChatMessage&,
+                                     const CommandContext& context) {
+  auto parse_result = parse(context.message.payload);
+  if (!parse_result) {
+    parse_result.error().add_context("Unable to parse client chat message");
+    return CommandStatus{cmd_se::CONTINUE, std::move(parse_result).error()};
+  }
+  network_engine().send_message(
+      {{*parse_result}, message_type_e::PRINTABLE},
+      [](const auto& meta) { return meta.type == end_point_e::TO_CLIENT; });
+  return {cmd_se::CONTINUE};
+}
+
 Client::Client()
     : console_handler_(console_raw_tasks_, available_task_tags()) {}
 
 Ev Client::init(end_point_e socket_type, int parrent_socket) {
   auto init_result = Application::init(socket_type, parrent_socket);
-  console_handler_.set_input_handler(
-      [this](std::string user_cmd) { return register_user_input(user_cmd); });
   server_view_ = *init_result;
   scheduler().add_executor(
       task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) {
@@ -302,8 +313,6 @@ Ev Client::init(end_point_e socket_type, int parrent_socket) {
 Ev Client::init(end_point_e socket_type) {
   network_engine().set_message_handler(
       [this](const CommandContext& context) { return handle_input(context); });
-  console_handler_.set_input_handler(
-      [this](std::string user_cmd) { return register_user_input(user_cmd); });
   auto init_result = network_engine().init_engine(socket_type, 0);
   if (!init_result) {
     return std::unexpected(
@@ -372,7 +381,7 @@ CommandStatus Client::handle_client_cmd(const CommandContext& context) {
 
 CommandStatus Client::execute_action(const Quit&,
                                      const CommandContext& context) {
-  std::cout << "-><-" << std::endl;
+  std::cout << "->_<-" << std::endl;
   return {cmd_se::CONTINUE};
 }
 CommandStatus Client::execute_action(const PrintAble&,
@@ -381,6 +390,7 @@ CommandStatus Client::execute_action(const PrintAble&,
   std::cout << context.message.payload << std::endl;
   return {cmd_se::CONTINUE};
 }
+
 void Client::register_user_input(std::string user_input) {
   std::lock_guard lock{m_};
   // input_queue_.push(std::move(user_input));
