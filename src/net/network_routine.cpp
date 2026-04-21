@@ -37,33 +37,41 @@ void NetworkEngine::attach_to_scheduler(Scheduler& scheduler) {
 }
 
 std::expected<ConnectionView, Error>
-NetworkEngine::init_engine(end_point_e socket_type) {
-  auto socket_slot = add_to_socket_pool();
+NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket) {
+  std::expected<size_t, Error> socket_slot{};
+  if (parrent_socket) {
+    socket_slot = add_to_socket_pool(parrent_socket, socket_type);
+  } else {
+    socket_slot = add_to_socket_pool();
+  }
   if (!socket_slot) {
-    return std::unexpected(
-        socket_slot.error().add_context("Unable to add init socket to pool"));
-  };
+    return std::unexpected(std::move(socket_slot)
+                               .error()
+                               .add_context("Unable to add socket to pool"));
+  }
   switch (socket_type) {
   case end_point_e::NONE:
-  case end_point_e::LOBBY:
-  case end_point_e::PARENT:
+  case end_point_e::TO_CLIENT:
+  case end_point_e::TO_LOBBY:
     break;
-  case end_point_e::FROM_SERVER:
-    if (auto result = socket_pool_[0].handler->setup_client(); !result) {
-      return std::unexpected(
-          std::move(result).error().add_context("Cant setup client"));
-    }
-    socket_pool_[0].type = end_point_e::FROM_SERVER;
+  case end_point_e::TO_PARENT:
+    socket_pool_[0].type = end_point_e::TO_PARENT;
     break;
-  case end_point_e::SERVER:
+  case end_point_e::LISTENER:
     if (auto result = socket_pool_[0].handler->setup_listener(
             Config::instance().get_line("port"));
         !result) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup listener"));
     }
+    socket_pool_[0].type = end_point_e::LISTENER;
     break;
-  case end_point_e::CLIENT:
+  case end_point_e::TO_SERVER:
+    if (auto result = socket_pool_[0].handler->setup_client(); !result) {
+      return std::unexpected(
+          std::move(result).error().add_context("Cant setup client"));
+    }
+    socket_pool_[0].type = end_point_e::TO_SERVER;
     break;
   }
   if (auto result = init_epoll(); !result) {
