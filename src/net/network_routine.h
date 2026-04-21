@@ -42,8 +42,8 @@ struct network_promise {
 
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
-  end_point_e type;
-  size_t slot;
+  end_point_e type{end_point_e::NONE};
+  size_t slot{std::numeric_limits<std::size_t>::max()};
   size_t generation{std::numeric_limits<std::size_t>::max()};
 };
 
@@ -55,11 +55,15 @@ struct ConnectionMeta {
 
 class NetworkEngine : public Module {
 public:
-  void attach_to_scheduler(Scheduler& scheduler) override;
-  std::expected<ConnectionView, Error> init_engine(end_point_e socket_type);
-  std::expected<ConnectionView, Error>
-  init_engine(int parrent_socket,
-              end_point_e socket_type); // init() for Lobby
+  // void attach_to_scheduler(Scheduler& scheduler) override;
+  NetworkEngine(AtomicQueue<size_t>& network_q,
+                AtomicQueue<task_tag_e>& available_q)
+      : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
+  std::expected<ConnectionView, Error> init_engine(end_point_e socket_type,
+                                                   int parrent_socket);
+  // std::expected<ConnectionView, Error>
+  // init_engine(int parrent_socket,
+  //             end_point_e socket_type); // init() for Lobby
   using MessageHandler = std::function<CommandStatus(const CommandContext&)>;
   void set_message_handler(MessageHandler h);
   void run();
@@ -144,6 +148,9 @@ private:
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
   DeferredActions deferred_actions_;
+
+  AtomicQueue<size_t>& network_raw_tasks_;
+  AtomicQueue<task_tag_e>& available_task_tags_;
 
   std::mutex m_;
   std::condition_variable cv_;

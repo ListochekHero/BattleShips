@@ -1,5 +1,7 @@
 #include "network_routine.h"
 
+#include "core/scheduler.h"
+#include "protocol/network_defs.h"
 #include "utility/config.h"
 #include "utility/error.h"
 #include "utility/logger.h"
@@ -7,6 +9,7 @@
 #include <coroutine>
 #include <cstddef>
 #include <exception>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -222,7 +225,7 @@ NetworkEngine::emplace_new_entry_to_pool(Args&&... args) {
 
 std::expected<size_t, Error> NetworkEngine::add_to_socket_pool() {
   return emplace_new_entry_to_pool(std::make_unique<SocketHandler>(),
-                                   end_point_e::SERVER)
+                                   end_point_e::NONE)
       .transform_error([](auto&& error) {
         return error.add_context("Unable to increase socket pool size");
       });
@@ -253,7 +256,7 @@ Ev NetworkEngine::free_slot_entry(SlotEntry& slot_entry) {
 std::expected<size_t, Error>
 NetworkEngine::find_spot_for_new_client(int client_socket,
                                         end_point_e socket_type) {
-  size_t* slot = avaiable_slots_.pop();
+  size_t* slot = avaiable_slots_.try_pop();
   if (slot) {
     SlotEntry* entry{&socket_pool_[*slot]};
     entry->handler->reset_with_new(client_socket);
@@ -314,7 +317,7 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
 
 void NetworkEngine::register_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
-    if (auto result = register_client(client, end_point_e::CLIENT); !result) {
+    if (auto result = register_client(client, end_point_e::TO_CLIENT); !result) {
       LOG(result.error().full_report());
     }
   }
@@ -326,9 +329,11 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
       process_server_socket(slot);
     } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
       process_client_socket(slot);
-    } else if (socket_pool_[slot].type == end_point_e::FROM_SERVER) {
-      process_client_socket(slot);
+    // } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
+    //   process_client_socket(slot);
     } else {
+      network_raw_tasks_.push(new size_t(slot));
+      available_task_tags_.push(new task_tag_e(task_tag_e::NETWORK));
       // bool push_success = push_to_clients_queue(slot); // <- callback to add
       // pending client to queue for processing process_client_socket(slot);
     }
