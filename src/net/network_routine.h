@@ -12,7 +12,6 @@
 
 #include <concepts>
 #include <condition_variable>
-#include <coroutine>
 #include <cstddef>
 #include <functional>
 #include <limits>
@@ -22,23 +21,6 @@
 #define MAX_EVENTS 10
 
 namespace bsm {
-
-struct network_promise;
-using network_co_handle = std::coroutine_handle<network_promise>;
-
-struct network_promise {
-  size_t latest_slot{std::numeric_limits<size_t>::max()};
-  network_co_handle get_return_object() {
-    return network_co_handle::from_promise(*this);
-  }
-  std::suspend_always initial_suspend() noexcept { return {}; }
-  std::suspend_always final_suspend() noexcept { return {}; }
-  std::suspend_always yield_value(size_t slot) {
-    latest_slot = slot;
-    return {};
-  }
-  void unhandled_exception() {}
-};
 
 struct SlotEntry {
   std::unique_ptr<SocketHandler> handler;
@@ -55,19 +37,14 @@ struct ConnectionMeta {
 
 class NetworkEngine : public Module {
 public:
-  // void attach_to_scheduler(Scheduler& scheduler) override;
   NetworkEngine(AtomicQueue<size_t>& network_q,
                 AtomicQueue<task_tag_e>& available_q)
       : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
   std::expected<ConnectionView, Error> init_engine(end_point_e socket_type,
                                                    int parrent_socket);
-  // std::expected<ConnectionView, Error>
-  // init_engine(int parrent_socket,
-  //             end_point_e socket_type); // init() for Lobby
   using MessageHandler = std::function<CommandStatus(const CommandContext&)>;
   void set_message_handler(MessageHandler h);
   void run();
-  network_co_handle run_co();
   bool send_message_to(const ConnectionView& conn_view,
                        const OutgoingMessage& message);
   std::expected<ConnectionView, Error> attach_socket(int socket,
@@ -158,8 +135,4 @@ private:
 
 } // namespace bsm
 
-template <>
-struct std::coroutine_traits<bsm::network_co_handle, bsm::NetworkEngine&> {
-  using promise_type = bsm::network_promise;
-};
 #endif

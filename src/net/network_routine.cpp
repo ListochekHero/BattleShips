@@ -6,7 +6,6 @@
 #include "utility/error.h"
 #include "utility/logger.h"
 
-#include <coroutine>
 #include <cstddef>
 #include <exception>
 #include <expected>
@@ -18,26 +17,6 @@
 #include <utility>
 
 namespace bsm {
-
-void NetworkEngine::attach_to_scheduler(Scheduler& scheduler) {
-  scheduler.add_executor("network_task",
-                         [this](std::unique_ptr<TaskContext> context) {
-                           NetworkTaskContext* network_context =
-                               static_cast<NetworkTaskContext*>(context.get());
-                           process_client(network_context->slot);
-                         });
-  size_t slot = scheduler.add_co_task([this]() { return run_co(); });
-  scheduler.schedule_co_task(slot, [&scheduler](
-                                       std::coroutine_handle<> te_co_handle) {
-    network_co_handle co_handle =
-        network_co_handle::from_address(te_co_handle.address());
-    while (true) {
-      co_handle.resume();
-      scheduler.push_task("network_task", std::make_unique<NetworkTaskContext>(
-                                              co_handle.promise().latest_slot));
-    }
-  });
-}
 
 std::expected<ConnectionView, Error>
 NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket) {
@@ -84,21 +63,6 @@ NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket) {
   return ConnectionView{*socket_slot};
 }
 
-std::expected<ConnectionView, Error>
-NetworkEngine::init_engine(int parrent_socket, end_point_e socket_type) {
-  auto result = add_to_socket_pool(parrent_socket, socket_type);
-  if (!result) {
-    return std::unexpected(
-        result.error().add_context("Unable to add parent socket to pool"));
-  }
-  socket_pool_[0].type = end_point_e::PARENT;
-  if (auto result = init_epoll_wrapper(); !result) {
-    return std::unexpected(
-        std::move(result).error().add_context("Unable to init epoll"));
-  }
-  return ConnectionView{*result};
-}
-
 void NetworkEngine::set_message_handler(MessageHandler h) {
   on_message_callback_ = h;
 }
@@ -116,29 +80,6 @@ void NetworkEngine::run() {
                     LOG(error.full_report());
                     return {};
                   });
-  }
-  deferred_actions_.flush(*this);
-}
-
-network_co_handle NetworkEngine::run_co() {
-  while (true) {
-    auto ready_slots = epoll_handler_.wait_for_events(MAX_EVENTS);
-    if (!ready_slots) {
-      LOG("Cant get events");
-      LOG(ready_slots.error().full_report());
-      continue;
-    }
-    for (size_t slot : *ready_slots) {
-      if (socket_pool_[slot].type == end_point_e::LISTENER) {
-        process_server_socket(slot);
-      } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
-        process_client_socket(slot);
-      } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
-        process_client_socket(slot);
-      } else {
-        co_yield slot;
-      }
-    }
   }
   deferred_actions_.flush(*this);
 }
@@ -317,7 +258,8 @@ NetworkEngine::register_client(int client_socket, end_point_e socket_type) {
 
 void NetworkEngine::register_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
-    if (auto result = register_client(client, end_point_e::TO_CLIENT); !result) {
+    if (auto result = register_client(client, end_point_e::TO_CLIENT);
+        !result) {
       LOG(result.error().full_report());
     }
   }
@@ -329,8 +271,8 @@ void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
       process_server_socket(slot);
     } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
       process_client_socket(slot);
-    // } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
-    //   process_client_socket(slot);
+      // } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
+      //   process_client_socket(slot);
     } else {
       network_raw_tasks_.push(new size_t(slot));
       available_task_tags_.push(new task_tag_e(task_tag_e::NETWORK));
