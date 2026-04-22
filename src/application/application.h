@@ -1,23 +1,17 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
-#include <atomic>
-#include <condition_variable>
 #include <coroutine>
 #include <cstddef>
-#include <cstdint>
 #include <expected>
 #include <sys/wait.h>
-#include <variant>
 
 #include "core/atomic_queue.h"
 #include "core/dispatcher.h"
 #include "core/scheduler.h"
-#include "io/console_routine.h"
 #include "net/network_routine.h"
 #include "protocol/coroutine_promise.h"
 #include "protocol/network_types.h"
-#include "services/lobby_manager.h"
 #include "utility/error.h"
 #include "utility/utility.h"
 
@@ -31,19 +25,21 @@ public:
   };
   void await_resume() {}
 
-  virtual void run() = 0;
-  virtual ~Application();
   Application();
   std::expected<ConnectionView, Error> init(end_point_e socket_type,
                                             int parrent_socket);
-  virtual CommandStatus handle_client_cmd(const CommandContext& context) = 0;
+  virtual void run() = 0;
   bsm_co_handle network_co();
+  virtual CommandStatus handle_client_cmd(const CommandContext& context) = 0;
+  virtual ~Application();
 
 protected:
-  NetworkEngine& network_engine();
-  Dispatcher& dispatcher();
-  Scheduler& scheduler();
-  AtomicQueue<task_tag_e>& available_task_tags();
+  NetworkEngine& network_engine() { return network_engine_; }
+  Dispatcher& dispatcher() { return dispatcher_; }
+  Scheduler& scheduler() { return scheduler_; }
+  AtomicQueue<task_tag_e>& available_task_tags() {
+    return available_task_tags_;
+  }
 
 private:
   NetworkEngine network_engine_;
@@ -51,82 +47,6 @@ private:
   Dispatcher dispatcher_;
   Scheduler scheduler_;
   AtomicQueue<task_tag_e> available_task_tags_;
-};
-
-class Server : public Application {
-public:
-  Server() = default;
-  Ev init();
-  void run() override;
-  Ev init(end_point_e socket_type, int parrent_socket);
-
-private:
-  void handle_zombie_pocesses();
-
-  using ServerAction =
-      std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
-  CommandStatus handle_client_cmd(const CommandContext& context) override;
-  CommandStatus execute_action(const CreateLobby& action_type,
-                               const CommandContext& context);
-  std::expected<LobbyView, Error> request_lobby();
-  CommandStatus execute_action(const JoinLobby& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const ChatMessage& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const GeneralAction& action_type,
-                               const CommandContext& context);
-
-  LobbyManager lobby_manager_;
-};
-
-class Lobby : public Application {
-public:
-  Lobby() = default;
-  Ev init(int parrent_socket, end_point_e socket_type);
-  Ev init(end_point_e socket_type, int parrent_socket);
-  void run() override;
-  std::atomic_size_t pending_clients_counter_{0};
-
-private:
-  using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter, ChatMessage>;
-  CommandStatus handle_client_cmd(const CommandContext& context) override;
-  CommandStatus execute_action(const AcceptSocket& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const LobbyIdSetter& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const ChatMessage&,
-                               const CommandContext& context);
-  int64_t lobby_id_{0};
-  ConnectionView parent_view_{std::numeric_limits<std::size_t>::max()};
-};
-
-class Client : public Application {
-public:
-  bsm_co_handle console_co();
-  Client();
-  Ev init(end_point_e socket_type, int parrent_socket);
-  Ev init(end_point_e socket_type);
-  void run() override;
-  CommandStatus handle_client_cmd(const CommandContext& context) override;
-  CommandStatus handle_input(const CommandContext& context);
-  std::atomic_size_t pending_clients_counter_{0};
-
-private:
-  using ClientAction = std::variant<PrintAble, Quit>;
-  using LocalClientAction = std::variant<Quit>;
-  CommandStatus execute_action(const Quit&, const CommandContext& context);
-  CommandStatus execute_action(const PrintAble&, const CommandContext& context);
-
-  void register_user_input(std::string);
-  CommandStatus handle_local_cmd(ParsedCommand context);
-  CommandStatus execute_local_action(const Quit&);
-
-  ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
-  ConsoleHandler console_handler_;
-  AtomicQueue<std::string> console_raw_tasks_;
-
-  std::mutex m_;
-  std::condition_variable cv_;
 };
 
 } // namespace bsm
