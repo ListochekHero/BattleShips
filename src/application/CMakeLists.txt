@@ -1,4 +1,4 @@
-add_library(application application.cpp)
+add_library(application application.cpp server.cpp lobby.cpp client.cpp)
 
 target_include_directories(application PUBLIC ${CMAKE_SOURCE_DIR}/src)
 

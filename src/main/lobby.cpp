@@ -1,7 +1,11 @@
 #include "lobby.h"
 
-#include "application/application.h"
+#include "application/lobby.h"
+#include "net/socket_routine.h"
+#include "protocol/network_defs.h"
 #include "utility/logger.h"
+#include <cstring>
+#include <memory>
 
 using bsm::LOG;
 
@@ -16,7 +20,7 @@ int main(int argc, char* argv[]) {
   bsm::SocketHandler sock{std::stoi(argv[1])};
   std::unique_ptr<bsm::Lobby> lobby{std::make_unique<bsm::Lobby>()};
   bsm::LOG("starting lobby!");
-  lobby->init(std::stoi(argv[1]), bsm::end_point_e::TO_PARENT);
+  lobby->init(bsm::end_point_e::TO_PARENT, std::stoi(argv[1]));
   lobby->run();
 #ifdef DEBUG_LOGS
 #endif

@@ -1,6 +1,9 @@
 #include "main.h"
 
 #include "application/application.h"
+#include "application/server.h"
+#include "application/lobby.h"
+#include "protocol/network_defs.h"
 #include "utility/config.h"
 #include "utility/logger.h"
 
