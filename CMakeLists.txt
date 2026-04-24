@@ -49,6 +49,8 @@ if(ENABLE_SANITIZERS)
     )
 endif()
 
+# set(CMAKE_CXX_INCLUDE_WHAT_YOU_USE "include-what-you-use;-Xiwyu;--verbose=1;-Xiwyu;--mapping_file=/home/listochekhero/projects/battleships/libstdcxx2.imp")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 add_subdirectory(src)
