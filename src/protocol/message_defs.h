@@ -13,7 +13,7 @@ enum class message_type_e : uint8_t {
   ERROR
 };
 
-enum class message_status_e { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
+enum class message_status_e : uint8_t { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };
 
 } // namespace bsm
 

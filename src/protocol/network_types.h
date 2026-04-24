@@ -10,7 +10,7 @@ class ConnectionView {
 public:
   explicit ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
   explicit ConnectionView(size_t slot);
-  size_t get_slot() const;
+  [[nodiscard]] auto get_slot() const -> size_t;
 
 private:
   size_t slot{std::numeric_limits<std::size_t>::max()};

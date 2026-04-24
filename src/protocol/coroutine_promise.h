@@ -13,11 +13,11 @@ struct bsm_promise;
 using bsm_co_handle = std::coroutine_handle<bsm_promise>;
 
 struct bsm_promise {
-  bsm_co_handle get_return_object() {
+  auto get_return_object() -> bsm_co_handle {
     return bsm_co_handle::from_promise(*this);
   }
-  std::suspend_always initial_suspend() noexcept { return {}; }
-  std::suspend_always final_suspend() noexcept { return {}; }
+  static auto initial_suspend() noexcept -> std::suspend_always { return {}; }
+  static auto final_suspend() noexcept -> std::suspend_always { return {}; }
   void unhandled_exception() {}
 };
 } // namespace bsm
