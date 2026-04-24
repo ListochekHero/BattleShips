@@ -17,10 +17,11 @@ template <typename T> class AtomicQueue {
 public:
   // AtomicQueue() { queue.fill(nullptr); }
 
-  T* try_pop() {
+  auto try_pop() -> T* {
     uint8_t last_busy_index = head.load();
-    if (last_busy_index == tail)
+    if (last_busy_index == tail) {
       return nullptr;
+    }
     if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
       T* data{nullptr};
       while (data == nullptr) {
@@ -33,11 +34,12 @@ public:
     return nullptr;
   }
 
-  bool push(T* ptr) {
+  auto push(T* ptr) -> bool {
     while (true) {
       uint8_t last_free_index = tail.load();
-      if ((last_free_index + 1) == head)
+      if ((last_free_index + 1) == head) {
         return false;
+      }
       if (tail.compare_exchange_strong(last_free_index, last_free_index + 1)) {
         while (true) {
           T* data{queue[last_free_index].load()};
@@ -49,11 +51,10 @@ public:
           queue[last_free_index].wait(data);
         }
       }
-      continue;
     }
   }
 
-  T* pop() {
+  auto pop() -> T* {
     uint8_t last_busy_index = head.load();
     T* data{nullptr};
     while (data == nullptr) {
@@ -70,7 +71,9 @@ public:
     T* data{nullptr};
     while (data == nullptr) {
       queue[last_busy_index].wait(data);
-      if(queue[last_busy_index]!=nullptr)break;
+      if (queue[last_busy_index] != nullptr) {
+        break;
+      }
     }
   }
 

@@ -6,16 +6,18 @@
 #include "protocol/task_context_types.h"
 
 #include <coroutine>
-#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <limits>
 #include <memory>
 #include <semaphore>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace bsm {
 
-enum class task_tag_e { SCHEDULER, NETWORK, CONSOLE };
+enum class task_tag_e : uint8_t { SCHEDULER, NETWORK, CONSOLE };
 
 struct Producer {
   std::thread producer_thread;
@@ -23,14 +25,15 @@ struct Producer {
 
 struct Task {
   task_tag_e task_tag{};
-  std::unique_ptr<TaskContext> context{};
+  std::unique_ptr<TaskContext> context;
 };
 
 class Scheduler {
 public:
   void init();
-  bool await_ready() { return false; }
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) {
+  static auto await_ready() -> bool { return false; }
+  auto await_suspend(std::coroutine_handle<> /*unused*/)
+      -> std::coroutine_handle<> {
     std::unique_ptr<task_tag_e> task_tag{available_task_tags_.try_pop()};
     return get_co_by_tag(*task_tag);
   };
@@ -38,26 +41,26 @@ public:
   Scheduler(AtomicQueue<task_tag_e>& available_q)
       : available_task_tags_(available_q) {}
   void push_task(task_tag_e task_tag, std::unique_ptr<TaskContext> context);
-  Task* try_get_task();
+  auto try_get_task() -> Task*;
   using TaskExecutor = std::function<void(std::unique_ptr<TaskContext>)>;
-  bool add_executor(task_tag_e tag, TaskExecutor executor);
-  auto& get_executor_by_tag(task_tag_e task_tag);
-  std::coroutine_handle<> get_co_by_tag(task_tag_e task_tag);
+  auto add_executor(task_tag_e tag, TaskExecutor executor) -> bool;
+  auto get_executor_by_tag(task_tag_e task_tag) -> auto&;
+  auto get_co_by_tag(task_tag_e task_tag) -> std::coroutine_handle<>;
   void worker_loop();
   void run_workers();
-  bsm_co_handle co_run();
-  template <typename F> void add_and_run_producer(F&& f) {
-    producers_.emplace_back(std::thread(f));
+  auto co_run() -> bsm_co_handle;
+  template <typename Pf> void add_and_run_producer(Pf&& producer_func) {
+    producers_.emplace_back(std::thread(producer_func));
   }
-  template <typename F> void add_co_task(F&& f, task_tag_e task_tag) {
-    auto co_handle = std::invoke(f);
+  template <typename Cf>
+  void add_co_task(Cf&& coroutine_func, task_tag_e task_tag) {
+    auto co_handle = std::invoke(coroutine_func);
     co_handlers_map_.try_emplace(task_tag, co_handle);
   }
 
 private:
   std::vector<Producer> producers_;
-  std::unordered_map<task_tag_e, std::coroutine_handle<>>
-      co_handlers_map_;
+  std::unordered_map<task_tag_e, std::coroutine_handle<>> co_handlers_map_;
   AtomicQueue<Task> tasks_queue_;
   AtomicQueue<task_tag_e>& available_task_tags_;
 

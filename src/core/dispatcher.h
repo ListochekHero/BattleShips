@@ -2,13 +2,18 @@
 #define DISPATCHER_H
 
 #include "protocol/message_defs.h"
-#include "protocol/message_types.h"
 
+#include <array>
 #include <optional>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 namespace bsm {
+
+enum class end_point_e : uint8_t;
+struct ReadResult;
+
 struct CreateLobby {};
 struct JoinLobby {};
 struct Quit {};
@@ -21,7 +26,9 @@ struct GeneralAction {};
 using ParsedCommand =
     std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
                  ChatMessage, PrintAble, NotAllowed, GeneralAction>;
-enum class command_scope_e { NONE, LOCAL, BROADCAST, NETWORK };
+
+enum class command_scope_e : uint8_t { NONE, LOCAL, BROADCAST, NETWORK };
+
 struct CommandInfo {
   command_scope_e scope{command_scope_e::NONE};
   ParsedCommand parsed_cmd;
@@ -29,7 +36,7 @@ struct CommandInfo {
 
 class Dispatcher {
 public:
-  CommandInfo dispatch(const ReadResult& message);
+  static auto dispatch(const ReadResult& message) -> CommandInfo;
 
 private:
   struct Command {
@@ -39,12 +46,14 @@ private:
 
     using Factory = ParsedCommand (*)();
 
-    template <typename T> static ParsedCommand make_action() { return T{}; }
+    template <typename T> static auto make_action() -> ParsedCommand {
+      return T{};
+    }
     Factory make;
   };
 
   static const std::array<Command, 8> commands;
-  bool match_cmd(const Command& cmd, const ReadResult& msg);
+  static auto match_cmd(const Command& cmd, const ReadResult& msg) -> bool;
 };
 
 } // namespace bsm

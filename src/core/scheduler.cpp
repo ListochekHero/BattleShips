@@ -1,7 +1,9 @@
 #include "scheduler.h"
 
+#include "core/atomic_queue.h"
+
 #include <iostream>
-#include <ostream>
+#include <utility>
 
 namespace bsm {
 
@@ -17,10 +19,10 @@ void Scheduler::push_task(task_tag_e task_tag,
   pop_c_semaphore_.release();
 }
 
-Task* Scheduler::try_get_task() {
+auto Scheduler::try_get_task() -> Task* {
   pop_c_semaphore_.acquire();
   Task* task = tasks_queue_.try_pop();
-  if (task) {
+  if (task != nullptr) {
     push_c_semaphore_.release();
   } else {
     pop_c_semaphore_.release();
@@ -28,12 +30,12 @@ Task* Scheduler::try_get_task() {
   return task;
 }
 
-bool Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) {
+auto Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) -> bool {
   auto [it, inserted] = task_executors_.try_emplace(tag, executor);
   return inserted;
 }
 
-auto& Scheduler::get_executor_by_tag(task_tag_e task_tag) {
+auto Scheduler::get_executor_by_tag(task_tag_e task_tag) -> auto& {
   return task_executors_[task_tag];
 }
 
@@ -47,14 +49,14 @@ void Scheduler::worker_loop() {
     if (task_to_exe) {
       auto& executor{get_executor_by_tag(task_to_exe->task_tag)};
       executor(std::move(task_to_exe->context));
-      std::cout << "Task complited!" << std::endl;
+      std::cout << "Task complited!" << '\n';
     }
   }
 }
 
 void Scheduler::run_workers() {
   for (auto& thread : thread_pool_) {
-    thread = std::thread([this]() { return worker_loop(); });
+    thread = std::thread([this]() -> void { worker_loop(); });
   }
 }
 
