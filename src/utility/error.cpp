@@ -2,7 +2,7 @@
 
 namespace bsm {
 
-std::string Error::full_report() const {
+auto Error::full_report() const -> std::string {
   std::string report{"Error Trace:\n"};
   for (auto it = backtrace.rbegin(); it != backtrace.rend(); ++it) {
     report += "\t->" + *it + "\n";
@@ -10,13 +10,15 @@ std::string Error::full_report() const {
   return report;
 }
 
-std::string c_error_string() { return std::system_category().message(errno); }
+auto c_error_string() -> std::string {
+  return std::system_category().message(errno);
+}
 
-Error make_error_c(std::string message) {
+auto make_error_c(std::string message) -> Error {
   return {.backtrace = {message, c_error_string()}, .loc_errno = errno};
 }
 
-std::string_view user_message(user_error_e user) {
+auto user_message(user_error_e user) -> std::string_view {
   switch (user) {
   case user_error_e::GENERIC:
     return "Error occurred, please try again latter.";

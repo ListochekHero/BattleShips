@@ -9,7 +9,8 @@ struct JoinLobbyCode {
   std::string string_code;
   int64_t int_code;
 
-  static std::expected<JoinLobbyCode, Error> parse(const std::string& message);
+  static auto parse(const std::string& message)
+      -> std::expected<JoinLobbyCode, Error>;
 };
 
 } // namespace bsm

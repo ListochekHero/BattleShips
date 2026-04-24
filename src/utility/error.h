@@ -9,7 +9,7 @@
 
 namespace bsm {
 
-enum class user_error_e {
+enum class user_error_e : uint8_t {
   GENERIC,
   CANT_CREATE_LOBBY,
   CANT_JOIN_LOBBY,
@@ -21,21 +21,21 @@ struct Error {
   std::vector<std::string> backtrace;
   int loc_errno;
   template <typename Self>
-  auto&&
-  add_context(this Self&& self, std::string msg,
-              std::source_location loc = std::source_location::current()) {
+  auto add_context(this Self&& self, std::string msg,
+                   std::source_location loc = std::source_location::current())
+      -> auto&& {
     self.backtrace.push_back(std::format("{}:{}\n\t\tin {}:\n\t\t{}",
                                          loc.file_name(), loc.line(),
                                          loc.function_name(), msg));
     return std::forward<Self>(self);
   }
-  std::string full_report() const;
+  [[nodiscard]] auto full_report() const -> std::string;
 };
 using Ev = std::expected<void, Error>;
 
-std::string c_error_string();
-Error make_error_c(std::string message);
-std::string_view user_message(user_error_e user);
+auto c_error_string() -> std::string;
+auto make_error_c(std::string message) -> Error;
+auto user_message(user_error_e user) -> std::string_view;
 
 } // namespace bsm
 #endif

@@ -4,11 +4,15 @@
 #include "error.h"
 #include "logger.h"
 
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <expected>
 #include <optional>
 #include <string>
+#include <type_traits>
+#include <utility>
 #include <variant>
 
 namespace bsm {
@@ -17,7 +21,7 @@ class ConnectionView;
 struct ReadResult;
 enum class end_point_e : uint8_t;
 
-enum class command_status_e { CONTINUE, TERMINATE };
+enum class command_status_e : uint8_t { CONTINUE, TERMINATE };
 using cmd_se = command_status_e;
 
 struct CommandStatus {
@@ -36,11 +40,12 @@ struct DeliveryReport {
   size_t failed{0};
 };
 
-bool is_file_exist(const std::string& filename);
-int64_t generate_conn_code();
-std::expected<std::string, Error> parse(const std::string& message);
-std::expected<std::string, Error> generate_name();
-template <typename T, typename E> void drop_result(std::expected<T, E>&&) {}
+auto is_file_exist(const std::string& filename) -> bool;
+auto generate_conn_code() -> int64_t;
+auto parse(const std::string& message) -> std::expected<std::string, Error>;
+auto generate_name() -> std::expected<std::string, Error>;
+template <typename T, typename E>
+void drop_result(std::expected<T, E>&& /*unused*/) {}
 template <typename T, typename E>
 void success_or_terminate(std::expected<T, E>&& r) {
   if (!r) {
@@ -51,7 +56,7 @@ void success_or_terminate(std::expected<T, E>&& r) {
 }
 
 template <typename T, typename Variant>
-concept AlternativeOf = []<typename... Args>(std::variant<Args...>*) {
+concept AlternativeOf = []<typename... Args>(std::variant<Args...>*) -> auto {
   return (std::same_as<T, Args> || ...);
 }(static_cast<Variant*>(nullptr));
 
@@ -63,8 +68,8 @@ std::expected<TargetVariant, Error> filter_variant(SourceVariant&& source) {
         if constexpr (AlternativeOf<T, TargetVariant>) {
           return TargetVariant(std::forward<decltype(arg)>(arg));
         } else {
-          return std::unexpected(
-              Error{{"No such command can be found as supported"}});
+          return std::unexpected(Error{
+              .backtrace = {"No such command can be found as supported"}});
         }
       },
       std::forward<SourceVariant>(source));

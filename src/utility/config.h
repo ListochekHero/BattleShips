@@ -10,16 +10,16 @@
 namespace bsm {
 class Config {
 public:
-  static Config& instance();
+  static auto instance() -> Config&;
   Config();
   ~Config() = default;
   void init();
-  int get_line(std::string);
+  auto get_line(std::string) -> int;
   struct configopt_s {
     const std::string optname;
     std::variant<long, std::string> val;
   };
-  std::array<configopt_s, 1> configopt_sa{{"port", 0}};
+  std::array<configopt_s, 1> configopt_sa{{{.optname = "port", .val = 0}}};
 
 private:
 };

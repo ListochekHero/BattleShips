@@ -2,6 +2,7 @@
 
 #include "logger.h"
 
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -10,7 +11,7 @@ namespace bsm {
 
 Config::Config() { init(); }
 
-Config& Config::instance() {
+auto Config::instance() -> Config& {
   static Config instance;
   return instance;
 }
@@ -37,10 +38,10 @@ void Config::init() {
     }
   } else {
     LOG("error");
-    std::cout << "error" << std::endl;
+    std::cout << "error" << '\n';
   }
 }
 
-int Config::get_line(std::string line) { return 8000; }
+auto Config::get_line(std::string line) -> int { return 8000; }
 
 } // namespace bsm

@@ -8,11 +8,11 @@
 #include <fstream>
 #include <mutex>
 #include <string>
-#include <unistd.h>
+#include <string_view>
 
 namespace bsm {
 
-void LOG(const std::string_view message_to_log);
+void LOG(std::string_view message_to_log);
 
 // std::unexpected<Error> log_and_replace();
 // void log_and_ignore(const Error& error, std::string_view context);
@@ -32,9 +32,13 @@ inline auto with_log(std::string_view context) {
 
 class Logger {
 public:
-  static Logger& instance();
-  std::expected<void, std::string> log(const std::string_view message);
-  std::expected<void, std::string> init(const std::string& program_name);
+  static auto instance() -> Logger&;
+  auto log(std::string_view message) -> std::expected<void, std::string>;
+  auto init(const std::string& program_name)
+      -> std::expected<void, std::string>;
+
+  Logger(const Logger&) = delete;
+  auto operator=(const Logger&) -> Logger& = delete;
 
 private:
   std::ofstream log_file;
@@ -43,10 +47,8 @@ private:
 
   Logger() = default;
   ~Logger();
-  bool is_logfile_valid();
-  std::string get_current_time();
-  Logger(const Logger&) = delete;
-  Logger& operator=(const Logger&) = delete;
+  auto is_logfile_valid() -> bool;
+  static auto get_current_time() -> std::string;
 };
 } // namespace bsm
 
