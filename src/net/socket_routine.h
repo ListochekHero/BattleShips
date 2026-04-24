@@ -4,8 +4,8 @@
 #include <arpa/inet.h>
 #include <atomic>
 #include <cstddef>
+#include <cstdlib>
 #include <fcntl.h>
-#include <stdlib.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 
@@ -21,31 +21,32 @@
 
 namespace bsm {
 
-enum class socket_status_e { EMPTY, ALIVE, CLOSED, TRANSFERED };
+enum class socket_status_e : uint8_t { EMPTY, ALIVE, CLOSED, TRANSFERED };
 
 class SocketHandler {
 public:
   SocketHandler() = default;
   SocketHandler(int socket_fd);
   ~SocketHandler();
-  SocketHandler(SocketHandler&&);
-  SocketHandler& operator=(SocketHandler&&);
-  Ev setup_listener(int port);
-  Ev setup_client();
-  int get_socket() const;
-  socket_status_e get_socket_status() const;
+  SocketHandler(SocketHandler&&) noexcept;
+  auto operator=(SocketHandler&&) noexcept -> SocketHandler&;
+  auto setup_listener(int port) -> Ev;
+  auto setup_client() -> Ev;
+  [[nodiscard]] auto get_socket() const -> int;
+  [[nodiscard]] auto get_socket_status() const -> socket_status_e;
   void set_socket_status(socket_status_e socket_status);
-  std::expected<std::vector<int>, Error> accept_connections() const;
-  std::expected<ReadResult, Error> read_user_input();
-  Ev write_to_user(const OutgoingMessage& msg) const;
-  Ev remove_cloexec();
+  [[nodiscard]] auto accept_connections() const
+      -> std::expected<std::vector<int>, Error>;
+  auto read_user_input() -> std::expected<ReadResult, Error>;
+  [[nodiscard]] auto write_to_user(const OutgoingMessage& msg) const -> Ev;
+  auto remove_cloexec() -> Ev;
   void reset_with_new(int new_socket);
   void reset_to_empty();
 
   std::string nick_name{*generate_name()};
 
   SocketHandler(const SocketHandler&) = delete;
-  SocketHandler& operator=(const SocketHandler&) = delete;
+  auto operator=(const SocketHandler&) -> SocketHandler& = delete;
 
 private:
   int socket_{-1};
@@ -59,12 +60,12 @@ class EpollHandler {
 public:
   EpollHandler() = default;
   ~EpollHandler();
-  Ev init();
-  Ev add_socket(SocketHandler& socket_handler, size_t slot);
-  Ev rearm_socket(SocketHandler& socket_handler, size_t slot);
-  Ev remove_socket(SocketHandler& socket_handler);
-  std::expected<std::vector<size_t>, Error>
-  wait_for_events(size_t max_events) const;
+  auto init() -> Ev;
+  auto add_socket(SocketHandler& socket_handler, size_t slot) const -> Ev;
+  auto rearm_socket(SocketHandler& socket_handler, size_t slot) const -> Ev;
+  auto remove_socket(SocketHandler& socket_handler) const -> Ev;
+  [[nodiscard]] auto wait_for_events(size_t max_events) const
+      -> std::expected<std::vector<size_t>, Error>;
 
 private:
   int epollfd_ = 0;

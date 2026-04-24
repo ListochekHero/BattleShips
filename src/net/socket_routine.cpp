@@ -16,13 +16,14 @@ SocketHandler::SocketHandler(int socket_fd)
 
 SocketHandler::~SocketHandler() { close_socket(); }
 
-SocketHandler::SocketHandler(SocketHandler&& sock_hndl)
+SocketHandler::SocketHandler(SocketHandler&& sock_hndl) noexcept
     : socket_{std::exchange(sock_hndl.socket_, -1)},
       socket_status_{sock_hndl.socket_status_.load()} {
   sock_hndl.socket_status_.store(socket_status_e::EMPTY);
 }
 
-SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
+auto SocketHandler::operator=(SocketHandler&& sock_hndl) noexcept
+    -> SocketHandler& {
   if (this != &sock_hndl) {
     close_socket();
     socket_ = std::exchange(sock_hndl.socket_, -1);
@@ -32,25 +33,25 @@ SocketHandler& SocketHandler::operator=(SocketHandler&& sock_hndl) {
   return *this;
 }
 
-Ev SocketHandler::setup_listener(int port) {
-  if (!socket_)
+auto SocketHandler::setup_listener(int port) -> Ev {
+  if (socket_ != -1) {
     return std::unexpected(make_error_c("Socket is already exist"));
-
+  }
   socket_ = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
-  if (socket_ == -1)
+  if (socket_ == -1) {
     return std::unexpected(make_error_c("Error creating socket"));
-
+  }
   int opt = 1;
-  if (setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+  if (setsockopt(socket_, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
     return std::unexpected(make_error_c("Error setting socket options"));
-
+  }
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
   server_addr.sin_port = htons(port);
 
-  if (bind(socket_, (struct sockaddr*)&server_addr, sizeof(server_addr)) ==
-      -1) {
+  if (bind(socket_, reinterpret_cast<struct sockaddr*>(&server_addr),
+           sizeof(server_addr)) == -1) {
     close(socket_);
     return std::unexpected(make_error_c("Error binding socket"));
   }
@@ -65,15 +66,17 @@ Ev SocketHandler::setup_listener(int port) {
 
 Ev SocketHandler::setup_client() {
   struct sockaddr_in server_addr;
-  if ((socket_ = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    return std::unexpected(Error{{"Socket creation error"}});
+  socket_ = socket(AF_INET, SOCK_STREAM, 0);
+  if (socket_ < 0) {
+    return std::unexpected(Error{.backtrace = {"Socket creation error"}});
   }
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(8000);
   server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
-  if (connect(socket_, (struct sockaddr*)&server_addr, sizeof(server_addr)) <
-      0) {
-    return std::unexpected(Error{{"Connection to the server failed"}});
+  if (connect(socket_, reinterpret_cast<struct sockaddr*>(&server_addr),
+              sizeof(server_addr)) < 0) {
+    return std::unexpected(
+        Error{.backtrace = {"Connection to the server failed"}});
   }
   int flags = fcntl(socket_, F_GETFL, 0);
   fcntl(socket_, F_SETFL, flags | O_NONBLOCK);
@@ -81,9 +84,9 @@ Ev SocketHandler::setup_client() {
   return {};
 }
 
-int SocketHandler::get_socket() const { return socket_; }
+auto SocketHandler::get_socket() const -> int { return socket_; }
 
-socket_status_e SocketHandler::get_socket_status() const {
+auto SocketHandler::get_socket_status() const -> socket_status_e {
   return socket_status_;
 }
 
@@ -91,8 +94,8 @@ void SocketHandler::set_socket_status(socket_status_e socket_status) {
   socket_status_ = socket_status;
 }
 
-std::expected<std::vector<int>, Error>
-SocketHandler::accept_connections() const {
+auto SocketHandler::accept_connections() const
+    -> std::expected<std::vector<int>, Error> {
   std::vector<int> new_clients;
   while (true) {
     int client_fd =
@@ -100,21 +103,22 @@ SocketHandler::accept_connections() const {
     if (client_fd < 0) {
       if (errno == EAGAIN || errno == EWOULDBLOCK) {
         break;
-      } else {
-        return std::unexpected(
-            make_error_c("Error while accepting new connection"));
       }
+      return std::unexpected(
+          make_error_c("Error while accepting new connection"));
     }
     new_clients.push_back(client_fd);
   }
   return new_clients;
 }
 
-std::expected<ReadResult, Error> SocketHandler::read_user_input() {
+auto SocketHandler::read_user_input() -> std::expected<ReadResult, Error> {
   MsgHeader hdr;
   ReadResult result;
-  struct iovec iov[2]{{&hdr, sizeof(hdr)},
-                      {result.payload.data(), result.payload.size()}};
+  struct iovec iov[2]{
+      {.iov_base = &hdr, .iov_len = sizeof(hdr)},
+      {.iov_base = result.payload.data(), .iov_len = result.payload.size()},
+  };
   struct msghdr msg{};
   msg.msg_iov = iov;
   msg.msg_iovlen = 2;
@@ -127,7 +131,7 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
     result.payload.resize(n - sizeof(hdr));
     result.msg_type = hdr.msg_type;
     struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-    if (cmsg != NULL && cmsg->cmsg_level == SOL_SOCKET &&
+    if (cmsg != nullptr && cmsg->cmsg_level == SOL_SOCKET &&
         cmsg->cmsg_type == SCM_RIGHTS) {
       int socket;
       std::memcpy(&socket, CMSG_DATA(cmsg), sizeof(int));
@@ -146,14 +150,15 @@ std::expected<ReadResult, Error> SocketHandler::read_user_input() {
   return result;
 }
 
-Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
+auto SocketHandler::write_to_user(const OutgoingMessage& msg) const -> Ev {
   LOG(std::format("Message for user: {}", msg.payloads));
   MsgHeader hdr{.msg_type = msg.msg_type, .payload_count = msg.payloads.size()};
   std::vector<iovec> iov;
   iov.reserve(msg.payloads.size());
-  iov.push_back({&hdr, sizeof(hdr)});
+  iov.push_back({.iov_base = &hdr, .iov_len = sizeof(hdr)});
   for (auto message : msg.payloads) {
-    iov.push_back({const_cast<char*>(message.data()), message.size()});
+    iov.push_back({.iov_base = const_cast<char*>(message.data()),
+                   .iov_len = message.size()});
   }
   struct msghdr m{};
   m.msg_iov = iov.data();
@@ -170,12 +175,13 @@ Ev SocketHandler::write_to_user(const OutgoingMessage& msg) const {
     int socket = msg.socket.value();
     std::memcpy(CMSG_DATA(cmsg), &socket, sizeof(int));
   }
-  if (sendmsg(socket_, &m, MSG_NOSIGNAL) == -1)
+  if (sendmsg(socket_, &m, MSG_NOSIGNAL) == -1) {
     return std::unexpected(make_error_c("Failed to send a message, error"));
+  }
   return {};
 }
 
-Ev SocketHandler::remove_cloexec() {
+auto SocketHandler::remove_cloexec() -> Ev {
   int flags = fcntl(socket_, F_GETFD);
   if (flags == -1) {
     return std::unexpected(make_error_c("Cant get socket flags"));
@@ -211,48 +217,56 @@ void SocketHandler::close_socket() {
 
 EpollHandler::~EpollHandler() { close(epollfd_); }
 
-Ev EpollHandler::init() {
+auto EpollHandler::init() -> Ev {
   epollfd_ = epoll_create1(EPOLL_CLOEXEC);
-  if (epollfd_ == -1)
+  if (epollfd_ == -1) {
     return std::unexpected(make_error_c("Error creating epoll"));
+  }
   return {};
 }
 
-Ev EpollHandler::add_socket(SocketHandler& socket_handler, size_t slot) {
+auto EpollHandler::add_socket(SocketHandler& socket_handler, size_t slot) const
+    -> Ev {
   struct epoll_event event;
   event.data.u64 = slot;
   // event.data.ptr = static_cast<void*>(socket_handler);
   event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
   if (epoll_ctl(epollfd_, EPOLL_CTL_ADD, socket_handler.get_socket(), &event) ==
-      -1)
+      -1) {
     return std::unexpected(make_error_c("Error adding socket to epoll"));
+  }
   return {};
 }
 
-Ev EpollHandler::rearm_socket(SocketHandler& socket_handler, size_t slot) {
+auto EpollHandler::rearm_socket(SocketHandler& socket_handler,
+                                size_t slot) const -> Ev {
   struct epoll_event event;
   event.data.u64 = slot;
   event.events = EPOLLIN | EPOLLET | EPOLLONESHOT;
   if (epoll_ctl(epollfd_, EPOLL_CTL_MOD, socket_handler.get_socket(), &event) ==
-      -1)
+      -1) {
     return std::unexpected(make_error_c("Error rearming socket in epoll"));
+  }
   return {};
 }
 
-Ev EpollHandler::remove_socket(SocketHandler& socket_handler) {
+auto EpollHandler::remove_socket(SocketHandler& socket_handler) const -> Ev {
   if (epoll_ctl(epollfd_, EPOLL_CTL_DEL, socket_handler.get_socket(), NULL) ==
-      -1)
+      -1) {
     return std::unexpected(make_error_c("Error removing socket from epoll"));
+  }
   return {};
 }
 
-std::expected<std::vector<size_t>, Error>
-EpollHandler::wait_for_events(size_t max_events) const {
+auto EpollHandler::wait_for_events(size_t max_events) const
+    -> std::expected<std::vector<size_t>, Error> {
   std::vector<struct epoll_event> events(max_events);
   ssize_t n = epoll_wait(epollfd_, events.data(), 10, -1);
-  if (n == -1)
+  if (n == -1) {
     return std::unexpected(make_error_c("Error in epoll_wait()"));
+  }
   std::vector<size_t> ready_slots;
+  ready_slots.reserve(n);
   for (ssize_t i = 0; i < n; ++i) {
     ready_slots.push_back((events[i].data.u64));
   }

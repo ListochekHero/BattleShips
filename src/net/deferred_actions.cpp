@@ -1,5 +1,7 @@
 #include "deferred_actions.h"
 
+#include <utility>
+
 namespace bsm {
 
 void DeferredActions::schedule(std::unique_ptr<DeferredAction> action,
@@ -8,8 +10,9 @@ void DeferredActions::schedule(std::unique_ptr<DeferredAction> action,
   actions_.push_back(std::move(action));
 }
 void DeferredActions::flush(NetworkEngine& engine) {
-  for (auto& a : actions_)
-    a->execute(engine);
+  for (auto& action : actions_) {
+    action->execute(engine);
+  }
   actions_.clear();
 }
 
