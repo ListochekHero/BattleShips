@@ -4,7 +4,6 @@
 #include <coroutine>
 #include <cstddef>
 #include <expected>
-#include <sys/wait.h>
 
 #include "core/atomic_queue.h"
 #include "core/dispatcher.h"
@@ -16,28 +15,30 @@
 #include "utility/utility.h"
 
 namespace bsm {
-
+enum class end_point_e : uint8_t;
 class Application {
 public:
-  bool await_ready() { return false; }
-  std::coroutine_handle<> await_suspend(std::coroutine_handle<>) {
+  static auto await_ready() -> bool { return false; }
+  auto await_suspend(std::coroutine_handle<> /*unused*/)
+      -> std::coroutine_handle<> {
     return scheduler_.get_co_by_tag(task_tag_e::SCHEDULER);
   };
   void await_resume() {}
 
   Application();
-  std::expected<ConnectionView, Error> init(end_point_e socket_type,
-                                            int parrent_socket);
+  auto init(end_point_e socket_type, int parrent_socket)
+      -> std::expected<ConnectionView, Error>;
   virtual void run() = 0;
-  bsm_co_handle network_co();
-  virtual CommandStatus handle_client_cmd(const CommandContext& context) = 0;
+  auto network_co() -> bsm_co_handle;
+  virtual auto handle_client_cmd(const CommandContext& context)
+      -> CommandStatus = 0;
   virtual ~Application();
 
 protected:
-  NetworkEngine& network_engine() { return network_engine_; }
-  Dispatcher& dispatcher() { return dispatcher_; }
-  Scheduler& scheduler() { return scheduler_; }
-  AtomicQueue<task_tag_e>& available_task_tags() {
+  auto network_engine() -> NetworkEngine& { return network_engine_; }
+  auto dispatcher() -> Dispatcher& { return dispatcher_; }
+  auto scheduler() -> Scheduler& { return scheduler_; }
+  auto available_task_tags() -> AtomicQueue<task_tag_e>& {
     return available_task_tags_;
   }
 

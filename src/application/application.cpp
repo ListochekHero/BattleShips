@@ -10,7 +10,7 @@
 #include <expected>
 #include <memory>
 #include <string>
-#include <unistd.h>
+#include <utility>
 
 namespace bsm {
 
@@ -33,7 +33,7 @@ std::expected<ConnectionView, Error> Application::init(end_point_e socket_type,
   scheduler_.init();
   scheduler().add_executor(
       task_tag_e::NETWORK, [this](std::unique_ptr<TaskContext> context) {
-        NetworkTaskContext* network_context =
+        auto* network_context =
             static_cast<NetworkTaskContext*>(context.get());
         network_engine_.process_client(network_context->slot);
       });
@@ -42,7 +42,7 @@ std::expected<ConnectionView, Error> Application::init(end_point_e socket_type,
   return *init_result;
 }
 
-bsm_co_handle Application::network_co() {
+auto Application::network_co() -> bsm_co_handle {
   while (true) {
     size_t* pending_slot{network_raw_tasks_.try_pop()};
     std::unique_ptr<NetworkTaskContext> task_context(

@@ -15,7 +15,7 @@ Ev Client::init(end_point_e socket_type, int parrent_socket) {
         ConsoleTaskContext* console_context =
             static_cast<ConsoleTaskContext*>(context.get());
         handle_input(
-            {ConnectionView{}, {.payload = console_context->user_input}});
+            {.client_view=ConnectionView{}, .message={.payload = console_context->user_input}});
       });
   scheduler().add_co_task([this]() { return console_co(); },
                           task_tag_e::CONSOLE);

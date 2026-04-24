@@ -1,6 +1,7 @@
 #include "server.h"
 
 #include "utility/data_storage.h"
+#include <sys/wait.h>
 
 namespace bsm {
 
