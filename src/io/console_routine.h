@@ -1,12 +1,15 @@
 #ifndef CONSOLE_ROUTINE_H
 #define CONSOLE_ROUTINE_H
 
-#include "core/scheduler.h"
+#include "core/atomic_queue.h"
 #include "interfaces/modules.h"
 
 #include <string>
 
 namespace bsm {
+
+enum class task_tag_e : uint8_t;
+template <typename T> class AtomicQueue;
 
 class ConsoleHandler : public Module {
 public:
