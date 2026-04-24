@@ -2,27 +2,35 @@
 
 #include "utility/utility.h"
 
+#include <csignal>
+#include <cstdio>
 #include <cstdlib>
-#include <signal.h>
+#include <string>
 #include <sys/socket.h>
+#include <unistd.h>
+#include <utility>
 
 namespace bsm {
 
-std::expected<LobbyView, Error> LobbyManager::find(int64_t lobby_id) {
+auto LobbyManager::find(int64_t lobby_id) -> std::expected<LobbyView, Error> {
   auto it = lobbies_.find(lobby_id);
   if (it == lobbies_.end()) {
-    return std::unexpected(Error{{"Lobby with given id doesn`t exist"}});
+    return std::unexpected(
+        Error{.backtrace = {"Lobby with given id doesn`t exist"}});
   }
-  return LobbyView{lobby_id, it->second.control_connection};
+  return LobbyView{.lobby_id = lobby_id,
+                   .control_connection = it->second.control_connection};
 }
 
-std::expected<LobbyProcess, Error> LobbyManager::spawn_lobby() {
+auto LobbyManager::spawn_lobby() -> std::expected<LobbyProcess, Error> {
   int sv[2];
-  if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1)
+  if (socketpair(AF_UNIX, SOCK_SEQPACKET | SOCK_NONBLOCK, 0, sv) == -1) {
     return std::unexpected(make_error_c("Failed to create socketpair: {}"));
+  }
   pid_t pid = fork();
-  if (pid == -1)
+  if (pid == -1) {
     return std::unexpected(make_error_c("Failed to fork: {}"));
+  }
   if (pid == 0) {
     close(sv[1]);
     std::string socket_string{std::to_string(sv[0])};
@@ -32,18 +40,23 @@ std::expected<LobbyProcess, Error> LobbyManager::spawn_lobby() {
     _exit(EXIT_FAILURE);
   }
   close(sv[0]);
-  return LobbyProcess{pid, sv[1]};
+  return LobbyProcess{.pid = pid, .control_socket = sv[1]};
 }
 
-std::expected<LobbyView, Error>
-LobbyManager::attach(pid_t pid, ConnectionView control_connection) {
+auto LobbyManager::attach(pid_t pid, ConnectionView control_connection)
+    -> std::expected<LobbyView, Error> {
   int64_t lobby_id{generate_conn_code()};
-  auto [it, inserted] =
-      lobbies_.try_emplace(lobby_id, LobbyEntry{pid, control_connection});
+  auto [it, inserted] = lobbies_.try_emplace(
+      lobby_id,
+      LobbyEntry{.pid = pid, .control_connection = control_connection});
   if (!inserted) {
     kill(pid, SIGKILL);
-    return std::unexpected(Error{{"Unable to emplace lobby into map"}});
+    return std::unexpected(
+        Error{.backtrace = {"Unable to emplace lobby into map"}});
   }
-  return LobbyView{lobby_id, control_connection};
+  return LobbyView{
+      .lobby_id = lobby_id,
+      .control_connection = control_connection,
+  };
 }
 } // namespace bsm

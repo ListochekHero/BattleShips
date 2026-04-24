@@ -24,10 +24,10 @@ struct LobbyEntry {
 
 class LobbyManager {
 public:
-  std::expected<LobbyView, Error> find(int64_t lobby_id);
-  std::expected<LobbyProcess, Error> spawn_lobby();
-  std::expected<LobbyView, Error> attach(pid_t pid,
-                                         ConnectionView control_connection);
+  auto find(int64_t lobby_id) -> std::expected<LobbyView, Error>;
+  static auto spawn_lobby() -> std::expected<LobbyProcess, Error>;
+  auto attach(pid_t pid, ConnectionView control_connection)
+      -> std::expected<LobbyView, Error>;
 
 private:
   std::unordered_map<int64_t, LobbyEntry> lobbies_;
