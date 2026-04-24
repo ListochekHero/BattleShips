@@ -4,12 +4,14 @@
 #include "net/socket_routine.h"
 #include "protocol/network_defs.h"
 #include "utility/logger.h"
+
 #include <cstring>
 #include <memory>
+#include <string>
 
 using bsm::LOG;
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   char* program_name = strrchr(argv[0], '/');
   program_name++;
   bsm::Logger::instance().init(std::string(program_name));

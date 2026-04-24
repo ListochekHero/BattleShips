@@ -1,17 +1,22 @@
 #include "main.h"
 
 #include "application/application.h"
-#include "application/server.h"
 #include "application/lobby.h"
+#include "application/server.h"
 #include "protocol/network_defs.h"
 #include "utility/config.h"
+#include "utility/error.h"
 #include "utility/logger.h"
+#include <cstring>
+#include <expected>
+#include <string>
+#include <utility>
 
 #include <cstdlib>
 #include <iostream>
 #include <memory>
 
-int main(int argc, char* argv[]) {
+auto main(int argc, char* argv[]) -> int {
   char* program_name = strrchr(argv[0], '/');
   program_name++;
   if (auto result = bsm::Logger::instance().init(program_name); !result) {
