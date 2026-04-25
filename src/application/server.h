@@ -10,25 +10,26 @@ namespace bsm {
 class Server : public Application {
 public:
   Server() = default;
-  Ev init();
+  auto init() -> Ev;
   void run() override;
-  Ev init(end_point_e socket_type, int parrent_socket);
+  auto init(end_point_e socket_type, int parrent_socket) -> Ev;
 
 private:
-  void handle_zombie_pocesses();
+  static void handle_zombie_pocesses();
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
-  CommandStatus handle_client_cmd(const CommandContext& context) override;
-  CommandStatus execute_action(const CreateLobby& action_type,
-                               const CommandContext& context);
-  std::expected<LobbyView, Error> request_lobby();
-  CommandStatus execute_action(const JoinLobby& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const ChatMessage& action_type,
-                               const CommandContext& context);
-  CommandStatus execute_action(const GeneralAction& action_type,
-                               const CommandContext& context);
+  auto handle_client_cmd(const CommandContext& context)
+      -> CommandStatus override;
+  auto execute_action(const CreateLobby& action_type,
+                      const CommandContext& context) -> CommandStatus;
+  auto request_lobby() -> std::expected<LobbyView, Error>;
+  auto execute_action(const JoinLobby& action_type,
+                      const CommandContext& context) -> CommandStatus;
+  auto execute_action(const ChatMessage& action_type,
+                      const CommandContext& context) -> CommandStatus;
+  auto execute_action(const GeneralAction& action_type,
+                      const CommandContext& context) -> CommandStatus;
 
   LobbyManager lobby_manager_;
 };

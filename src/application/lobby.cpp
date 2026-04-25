@@ -2,7 +2,7 @@
 
 namespace bsm {
 
-Ev Lobby::init(end_point_e socket_type, int parrent_socket) {
+auto Lobby::init(end_point_e socket_type, int parrent_socket) -> Ev {
   auto init_result = Application::init(socket_type, parrent_socket);
   parent_view_ = *init_result;
   return {};
@@ -16,7 +16,7 @@ void Lobby::run() {
 
 auto Lobby::handle_client_cmd(const CommandContext& context) -> CommandStatus {
   LOG(std::format("Command to handle: {}", context.message.payload));
-  auto action_to_execute = dispatcher().dispatch(context.message);
+  auto action_to_execute = bsm::Dispatcher::dispatch(context.message);
   auto lobby_action = filter_variant<LobbyAction>(action_to_execute.parsed_cmd);
   if (!lobby_action) {
     return {

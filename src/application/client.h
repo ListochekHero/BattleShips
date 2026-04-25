@@ -8,24 +8,23 @@ namespace bsm {
 
 class Client : public Application {
 public:
-  bsm_co_handle console_co();
+  auto console_co() -> bsm_co_handle;
   Client();
-  Ev init(end_point_e socket_type, int parrent_socket);
-  Ev init(end_point_e socket_type);
+  auto init(end_point_e socket_type, int parrent_socket) -> Ev;
+  auto init(end_point_e socket_type) -> Ev;
   void run() override;
-  CommandStatus handle_client_cmd(const CommandContext& context) override;
-  CommandStatus handle_input(const CommandContext& context);
+  auto handle_client_cmd(const CommandContext& context)
+      -> CommandStatus override;
+  auto handle_input(const CommandContext& context) -> CommandStatus;
   std::atomic_size_t pending_clients_counter_{0};
 
 private:
   using ClientAction = std::variant<PrintAble, Quit>;
   using LocalClientAction = std::variant<Quit>;
-  CommandStatus execute_action(const Quit&, const CommandContext& context);
-  CommandStatus execute_action(const PrintAble&, const CommandContext& context);
-
-  void register_user_input(std::string);
-  CommandStatus handle_local_cmd(ParsedCommand context);
-  CommandStatus execute_local_action(const Quit&);
+  auto execute_action(const Quit&, const CommandContext& context)
+      -> CommandStatus;
+  auto execute_action(const PrintAble&, const CommandContext& context)
+      -> CommandStatus;
 
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;
