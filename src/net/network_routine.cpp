@@ -72,19 +72,15 @@ void NetworkEngine::set_message_handler(MessageHandler msg_handler) {
 
 void NetworkEngine::run() {
   while (true) {
-    [[maybe_unused]]
-    auto __ = epoll_handler_.wait_for_events(MAX_EVENTS)
-                  .and_then([this](auto&& event_slots) -> Ev {
-                    process_events(event_slots);
-                    return {};
-                  })
-                  .or_else([](auto&& error) -> Ev {
-                    LOG("Cant get events");
-                    LOG(error.full_report());
-                    return {};
-                  });
+    auto wait_result = epoll_handler_.wait_for_events(MAX_EVENTS);
+    if (!wait_result) {
+      LOG("Cant get events");
+      LOG(wait_result.error().full_report());
+    } else {
+      process_events(*wait_result);
+    }
+    deferred_actions_.flush(*this);
   }
-  deferred_actions_.flush(*this);
 }
 
 auto NetworkEngine::send_message_to(const ConnectionView& conn_view,
@@ -276,19 +272,13 @@ void NetworkEngine::register_clients(std::vector<int>& new_clients) {
   }
 }
 
-void NetworkEngine::process_events(std::vector<size_t>& event_slots) {
+void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
     if (socket_pool_[slot].type == end_point_e::LISTENER) {
       process_server_socket(slot);
-    } else if (socket_pool_[slot].type == end_point_e::TO_PARENT) {
-      process_client_socket(slot);
-      // } else if (socket_pool_[slot].type == end_point_e::TO_SERVER) {
-      //   process_client_socket(slot);
     } else {
       network_raw_tasks_.push(new size_t(slot));
       available_task_tags_.push(new task_tag_e(task_tag_e::NETWORK));
-      // bool push_success = push_to_clients_queue(slot); // <- callback to add
-      // pending client to queue for processing process_client_socket(slot);
     }
   }
 }

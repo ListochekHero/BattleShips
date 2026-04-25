@@ -118,7 +118,7 @@ private:
   auto register_client(int client_socket, end_point_e socket_type)
       -> std::expected<size_t, Error>;
   void register_clients(std::vector<int>& new_clients);
-  void process_events(std::vector<size_t>& event_slots);
+  void process_events(const std::vector<size_t>& event_slots);
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
   auto process_message(SlotEntry& slot_entry, ReadResult& message)

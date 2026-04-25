@@ -3,6 +3,7 @@
 
 #include <expected>
 #include <format>
+#include <optional>
 #include <source_location>
 #include <string>
 #include <vector>
@@ -13,13 +14,13 @@ enum class user_error_e : uint8_t {
   GENERIC,
   CANT_CREATE_LOBBY,
   CANT_JOIN_LOBBY,
-  UNKNOWN_COMMAND
+  UNKNOWN_COMMAND,
 };
 using us_e = user_error_e;
 
 struct Error {
   std::vector<std::string> backtrace;
-  int loc_errno;
+  std::optional<int> loc_errno{std::nullopt};
   template <typename Self>
   auto add_context(this Self&& self, std::string msg,
                    std::source_location loc = std::source_location::current())
