@@ -2,7 +2,7 @@
 
 namespace bsm {
 
-auto Lobby::init(end_point_e socket_type, int parrent_socket) -> Ev {
+auto Lobby::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
   auto init_result = Application::init(socket_type, parrent_socket);
   parent_view_ = *init_result;
   return {};

@@ -18,7 +18,7 @@ enum class end_point_e : uint8_t;
 class Lobby : public Application {
 public:
   Lobby() = default;
-  auto init(end_point_e socket_type, int parrent_socket) -> Ev;
+  auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
   void run() override;
 
 private:

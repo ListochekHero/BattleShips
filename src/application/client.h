@@ -10,8 +10,7 @@ class Client : public Application {
 public:
   auto console_co() -> bsm_co_handle;
   Client();
-  auto init(end_point_e socket_type, int parrent_socket) -> Ev;
-  auto init(end_point_e socket_type) -> Ev;
+  auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
   void run() override;
   auto handle_client_cmd(const CommandContext& context)
       -> CommandStatus override;

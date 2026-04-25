@@ -7,7 +7,7 @@ namespace bsm {
 Client::Client()
     : console_handler_(console_raw_tasks_, available_task_tags()) {}
 
-auto Client::init(end_point_e socket_type, int parrent_socket) -> Ev {
+auto Client::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
   auto init_result = Application::init(socket_type, parrent_socket);
   server_view_ = *init_result;
   scheduler().add_executor(

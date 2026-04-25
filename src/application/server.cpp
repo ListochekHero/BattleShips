@@ -5,21 +5,9 @@
 
 namespace bsm {
 
-auto Server::init(end_point_e socket_type, int parrent_socket) -> Ev {
-  Application::init(socket_type, parrent_socket);
-  return {};
-}
-
-auto Server::init() -> Ev {
-  network_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
-  if (auto init_result = network_engine().init_engine(end_point_e::LISTENER, 0);
-      !init_result) {
-    return std::unexpected(
-        std::move(init_result).error().add_context("Unalbe to init Server"));
-  }
-  network_engine().attach_to_scheduler(scheduler());
-  return {};
+auto Server::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
+  return Application::init(socket_type, parrent_socket)
+      .transform([](auto) -> void {});
 }
 
 void Server::run() {

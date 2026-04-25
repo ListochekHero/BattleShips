@@ -21,7 +21,7 @@
 
 #define SERVER_PORT 8000
 
-int main(int argc, char* argv[]) {
+auto main(int /*unused*/, char* argv[]) -> int {
   char* program_name = strrchr(argv[0], '/');
   program_name++;
   if (auto result = bsm::Logger::instance().init(program_name); !result) {
@@ -29,7 +29,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
   bsm::Client client{};
-  client.init(bsm::end_point_e::TO_SERVER, 0);
+  client.v_init(bsm::end_point_e::TO_SERVER, 0);
   client.run();
   exit(EXIT_SUCCESS);
 

@@ -10,9 +10,8 @@ namespace bsm {
 class Server : public Application {
 public:
   Server() = default;
-  auto init() -> Ev;
   void run() override;
-  auto init(end_point_e socket_type, int parrent_socket) -> Ev;
+  auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
 
 private:
   static void handle_zombie_pocesses();
