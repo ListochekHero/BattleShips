@@ -57,6 +57,7 @@ const std::array<Dispatcher::Command, 8> Dispatcher::commands = {
             .make = Command::make_action<AcceptSocket>,
         },
         {
+            .text_aliases = {"\\lobby_id"},
             .msg_type = message_type_e::LOBBY_ID,
             .scope = command_scope_e::NETWORK,
             .make = Command::make_action<LobbyIdSetter>,
@@ -74,6 +75,7 @@ const std::array<Dispatcher::Command, 8> Dispatcher::commands = {
             .make = Command::make_action<ChatMessage>,
         },
         {
+            .text_aliases = {"\\printable"},
             .msg_type = message_type_e::PRINTABLE,
             .scope = command_scope_e::LOCAL,
             .make = Command::make_action<PrintAble>,
