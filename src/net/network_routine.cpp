@@ -368,7 +368,7 @@ auto NetworkEngine::send_message_impl(SlotEntry& slot_entry,
 
 void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
   std::scoped_lock lock(engine.m_);
-  SlotEntry& entry{engine.socket_pool_[slot]};
+  SlotEntry& entry{engine.socket_pool_[slot_]};
   entry.generation++;
   entry.type = end_point_e::NONE;
   entry.handler->set_socket_status(socket_status_e::CLOSED);
@@ -376,11 +376,7 @@ void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
 
 void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {
   std::scoped_lock lock(engine.m_);
-  engine.release_client(engine.socket_pool_[slot]);
+  engine.release_client(engine.socket_pool_[slot_]);
 }
-
-ConnectionView::ConnectionView(size_t slot) : slot{slot} {}
-
-auto ConnectionView::get_slot() const -> size_t { return slot; }
 
 } // namespace bsm

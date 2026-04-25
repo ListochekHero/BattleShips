@@ -8,12 +8,12 @@ namespace bsm {
 
 class ConnectionView {
 public:
-  explicit ConnectionView() : slot(std::numeric_limits<size_t>::max()) {};
-  explicit ConnectionView(size_t slot);
-  [[nodiscard]] auto get_slot() const -> size_t;
+  explicit ConnectionView() : slot_(std::numeric_limits<size_t>::max()) {};
+  explicit ConnectionView(size_t slot) : slot_{slot} {};
+  [[nodiscard]] auto get_slot() const -> size_t { return slot_; };
 
 private:
-  size_t slot{std::numeric_limits<std::size_t>::max()};
+  size_t slot_{std::numeric_limits<std::size_t>::max()};
 };
 
 } // namespace bsm
