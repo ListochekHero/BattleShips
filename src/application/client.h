@@ -21,9 +21,9 @@ public:
 private:
   using ClientAction = std::variant<PrintAble, Quit>;
   using LocalClientAction = std::variant<Quit>;
-  auto execute_action(const Quit&, const CommandContext& context)
+  static auto execute_action(const Quit&, const CommandContext& context)
       -> CommandStatus;
-  auto execute_action(const PrintAble&, const CommandContext& context)
+  static auto execute_action(const PrintAble&, const CommandContext& context)
       -> CommandStatus;
 
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};

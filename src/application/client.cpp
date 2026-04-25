@@ -11,12 +11,12 @@ auto Client::init(end_point_e socket_type, int parrent_socket) -> Ev {
   auto init_result = Application::init(socket_type, parrent_socket);
   server_view_ = *init_result;
   scheduler().add_executor(
-      task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) {
+      task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) -> void {
         auto* console_context = static_cast<ConsoleTaskContext*>(context.get());
         handle_input({.client_view = ConnectionView{},
-                      .message = {.payload = console_context->user_input}});
+                      .message = {.payload = console_context->user_input},});
       });
-  scheduler().add_co_task([this]() { return console_co(); },
+  scheduler().add_co_task([this]() -> bsm_co_handle { return console_co(); },
                           task_tag_e::CONSOLE);
   return {};
 }

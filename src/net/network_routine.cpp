@@ -196,7 +196,8 @@ auto NetworkEngine::free_slot_entry(SlotEntry& slot_entry) -> Ev {
     avaiable_slots_.push(new_slot);
   } catch (const std::exception& e) {
     return std::unexpected(Error{
-        .backtrace = {e.what(), "Exception caught during freeing slot entry"}});
+        .backtrace = {e.what(), "Exception caught during freeing slot entry"},
+    });
   }
   return {};
 }

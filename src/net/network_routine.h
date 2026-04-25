@@ -86,7 +86,8 @@ public:
 
   template <typename Filter>
     requires std::predicate<Filter, const ConnectionMeta&>
-  std::expected<ConnectionView, Error> get_view_by_type(Filter&& filter) {
+  auto get_view_by_type(Filter&& filter)
+      -> std::expected<ConnectionView, Error> {
     for (SlotEntry& entry : socket_pool_) {
       if (!entry.handler) {
         continue;
@@ -127,13 +128,13 @@ private:
 
   class Cleanup_Connection : public DeferredAction {
   public:
-    explicit Cleanup_Connection(size_t s) : slot(s) {}
-    explicit Cleanup_Connection(ConnectionView view) : slot(view.get_slot()) {}
+    explicit Cleanup_Connection(size_t slot) : slot_(slot) {}
+    explicit Cleanup_Connection(ConnectionView view) : slot_(view.get_slot()) {}
     void prepare(NetworkEngine& engine) override;
     void execute(NetworkEngine& engine) override;
 
   private:
-    size_t slot;
+    size_t slot_;
   };
 
   std::vector<SlotEntry> socket_pool_;

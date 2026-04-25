@@ -31,7 +31,7 @@ auto Scheduler::try_get_task() -> Task* {
 }
 
 auto Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) -> bool {
-  auto [it, inserted] = task_executors_.try_emplace(tag, executor);
+  auto [iter, inserted] = task_executors_.try_emplace(tag, executor);
   return inserted;
 }
 
@@ -60,7 +60,7 @@ void Scheduler::run_workers() {
   }
 }
 
-bsm_co_handle Scheduler::co_run() {
+auto Scheduler::co_run() -> bsm_co_handle {
   while (true) {
     available_task_tags_.wait_for_data();
     co_await *this;

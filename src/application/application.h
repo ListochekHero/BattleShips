@@ -26,8 +26,7 @@ public:
   void await_resume() {}
 
   Application();
-  auto init(end_point_e socket_type, int parrent_socket)
-      -> std::expected<ConnectionView, Error>;
+
   virtual void run() = 0;
   auto network_co() -> bsm_co_handle;
   virtual auto handle_client_cmd(const CommandContext& context)
@@ -35,6 +34,8 @@ public:
   virtual ~Application();
 
 protected:
+  auto init(end_point_e socket_type, int parrent_socket)
+      -> std::expected<ConnectionView, Error>;
   auto network_engine() -> NetworkEngine& { return network_engine_; }
   auto dispatcher() -> Dispatcher& { return dispatcher_; }
   auto scheduler() -> Scheduler& { return scheduler_; }

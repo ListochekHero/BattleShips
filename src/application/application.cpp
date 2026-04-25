@@ -20,10 +20,12 @@ Application::Application()
     : network_engine_(network_raw_tasks_, available_task_tags_),
       scheduler_(available_task_tags_) {}
 
-std::expected<ConnectionView, Error> Application::init(end_point_e socket_type,
-                                                       int parrent_socket) {
+auto Application::init(end_point_e socket_type, int parrent_socket)
+    -> std::expected<ConnectionView, Error> {
   network_engine().set_message_handler(
-      [this](CommandContext context) { return handle_client_cmd(context); });
+      [this](CommandContext context) -> CommandStatus {
+        return handle_client_cmd(context);
+      });
   auto init_result = network_engine().init_engine(socket_type, parrent_socket);
   if (!init_result) {
     return std::unexpected(std::move(init_result)
@@ -33,8 +35,7 @@ std::expected<ConnectionView, Error> Application::init(end_point_e socket_type,
   scheduler_.init();
   scheduler().add_executor(
       task_tag_e::NETWORK, [this](std::unique_ptr<TaskContext> context) {
-        auto* network_context =
-            static_cast<NetworkTaskContext*>(context.get());
+        auto* network_context = static_cast<NetworkTaskContext*>(context.get());
         network_engine_.process_client(network_context->slot);
       });
   scheduler_.add_co_task([this]() { return network_co(); },
