@@ -21,10 +21,15 @@
 
 namespace bsm {
 
+ConnectionEntry::ConnectionEntry(end_point_e type, int socket)
+    : connection_type_(type), socket_handler_(SocketHandler(socket)) {}
+
 auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
     -> std::expected<ConnectionView, Error> {
   std::expected<size_t, Error> socket_slot{};
   if (parrent_socket != 0) {
+    socket_slot = socket_pool__.push_to_pool(
+        ConnectionEntry{socket_type, parrent_socket});
     socket_slot = add_to_socket_pool(parrent_socket, socket_type);
   } else {
     socket_slot = add_to_socket_pool();
@@ -40,23 +45,23 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
   case end_point_e::TO_LOBBY:
     break;
   case end_point_e::TO_PARENT:
-    socket_pool_[0].type = end_point_e::TO_PARENT;
+    socket_pool_[0].connection_type_ = end_point_e::TO_PARENT;
     break;
   case end_point_e::LISTENER:
-    if (auto result = socket_pool_[0].handler->setup_listener(
+    if (auto result = socket_pool_[0].socket_handler_.setup_listener(
             Config::instance().get_line("port"));
         !result) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup listener"));
     }
-    socket_pool_[0].type = end_point_e::LISTENER;
+    socket_pool_[0].connection_type_ = end_point_e::LISTENER;
     break;
   case end_point_e::TO_SERVER:
-    if (auto result = socket_pool_[0].handler->setup_client(); !result) {
+    if (auto result = socket_pool_[0].socket_handler_.setup_client(); !result) {
       return std::unexpected(
           std::move(result).error().add_context("Cant setup client"));
     }
-    socket_pool_[0].type = end_point_e::TO_SERVER;
+    socket_pool_[0].connection_type_ = end_point_e::TO_SERVER;
     break;
   }
   if (auto result = init_epoll(); !result) {
@@ -101,13 +106,13 @@ auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
 
 auto NetworkEngine::transfer(const ConnectionView& dest_view,
                              const ConnectionView& src_view) -> CommandStatus {
-  SlotEntry& dest_entry{socket_pool_[dest_view.get_slot()]};
-  SlotEntry& src_entry{socket_pool_[src_view.get_slot()]};
+  ConnectionEntry& dest_entry{socket_pool_[dest_view.get_slot()]};
+  ConnectionEntry& src_entry{socket_pool_[src_view.get_slot()]};
   unsubscribe_from_events(src_entry);
-  if (auto result = dest_entry.handler->write_to_user({
+  if (auto result = dest_entry.socket_handler_.write_to_user({
           .payloads = {"\\socket"},
           .msg_type = message_type_e::SOCKET,
-          .socket = src_entry.handler->get_socket(),
+          .socket = src_entry.socket_handler_.get_socket(),
       });
       !result) {
     LOG(result.error().full_report());
@@ -116,7 +121,8 @@ auto NetworkEngine::transfer(const ConnectionView& dest_view,
       LOG(result.error().full_report());
       LOG("Error while trying to recover socket, closing connection");
       deferred_actions_.schedule(
-          std::make_unique<Cleanup_Connection>(src_entry.slot), *this);
+          std::make_unique<Cleanup_Connection>(src_entry.occupied_slot_),
+          *this);
       return {
           .command_status_v = cmd_se::TERMINATE,
           .error = Error{.backtrace = {"Transfer failed, connection lost"}},
@@ -128,7 +134,7 @@ auto NetworkEngine::transfer(const ConnectionView& dest_view,
     };
   }
   deferred_actions_.schedule(
-      std::make_unique<Cleanup_Connection>(src_entry.slot), *this);
+      std::make_unique<Cleanup_Connection>(src_entry.occupied_slot_), *this);
   return {.command_status_v = cmd_se::TERMINATE};
 }
 
@@ -140,8 +146,9 @@ auto NetworkEngine::init_epoll() -> Ev {
         return error.add_context("Cant init epoll_handler");
       })
       .and_then([this]() -> Ev {
-        return this->epoll_handler_.add_socket(*socket_pool_[0].handler, 0)
-            .transform_error([](auto&& error) {
+        return this->epoll_handler_
+            .add_socket(socket_pool_[0].socket_handler_, 0)
+            .transform_error([](auto&& error) -> auto {
               return error.add_context("Cant add server socket to epoll");
             });
       });
@@ -185,10 +192,10 @@ auto NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type)
       });
 }
 
-auto NetworkEngine::free_slot_entry(SlotEntry& slot_entry) -> Ev {
+auto NetworkEngine::free_slot_entry(ConnectionEntry& slot_entry) -> Ev {
   try {
-    slot_entry.handler->reset_to_empty();
-    auto* new_slot = new size_t(slot_entry.slot);
+    slot_entry.socket_handler_.reset_to_empty();
+    auto* new_slot = new size_t(slot_entry.occupied_slot_);
     avaiable_slots_.push(new_slot);
   } catch (const std::exception& e) {
     return std::unexpected(Error{
@@ -203,9 +210,9 @@ auto NetworkEngine::find_spot_for_new_client(int client_socket,
     -> std::expected<size_t, Error> {
   size_t* slot = avaiable_slots_.try_pop();
   if (slot != nullptr) {
-    SlotEntry* entry{&socket_pool_[*slot]};
-    entry->handler->reset_with_new(client_socket);
-    entry->type = socket_type;
+    ConnectionEntry* entry{&socket_pool_[*slot]};
+    entry->socket_handler_.reset_with_new(client_socket);
+    entry->connection_type_ = socket_type;
     return *slot;
   }
   auto new_entry_slot = add_to_socket_pool(client_socket, socket_type);
@@ -218,23 +225,24 @@ auto NetworkEngine::find_spot_for_new_client(int client_socket,
   return new_entry_slot;
 }
 
-auto NetworkEngine::subscribe_to_events(SlotEntry& slot_entry) -> Ev {
-  return epoll_handler_.add_socket(*slot_entry.handler, slot_entry.slot)
+auto NetworkEngine::subscribe_to_events(ConnectionEntry& slot_entry) -> Ev {
+  return epoll_handler_
+      .add_socket(slot_entry.socket_handler_, slot_entry.occupied_slot_)
       .or_else([&](auto&& error) -> Ev {
         return std::unexpected(
             error.add_context("Unable to subscribe new client to epoll"));
       });
 }
 
-void NetworkEngine::unsubscribe_from_events(SlotEntry& slot_entry) {
-  drop_result(epoll_handler_.remove_socket(*slot_entry.handler)
+void NetworkEngine::unsubscribe_from_events(ConnectionEntry& slot_entry) {
+  drop_result(epoll_handler_.remove_socket(slot_entry.socket_handler_)
                   .or_else([](auto&& error) -> Ev {
                     LOG(error.full_report());
                     return {};
                   }));
 }
 
-void NetworkEngine::release_client(SlotEntry& slot_entry) {
+void NetworkEngine::release_client(ConnectionEntry& slot_entry) {
   unsubscribe_from_events(slot_entry);
   success_or_terminate(free_slot_entry(slot_entry));
 }
@@ -247,9 +255,9 @@ auto NetworkEngine::register_client(int client_socket, end_point_e socket_type)
                                .error()
                                .add_context("Unable to register new client"));
   }
-  SlotEntry& new_client_entry{socket_pool_[*new_client_slot]};
+  ConnectionEntry& new_client_entry{socket_pool_[*new_client_slot]};
   return subscribe_to_events(new_client_entry)
-      .transform([&]() { return new_client_entry.slot; })
+      .transform([&]() { return new_client_entry.occupied_slot_; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.full_report());
         send_message_impl(new_client_entry,
@@ -274,7 +282,7 @@ void NetworkEngine::register_clients(std::vector<int>& new_clients) {
 
 void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
-    if (socket_pool_[slot].type == end_point_e::LISTENER) {
+    if (socket_pool_[slot].connection_type_ == end_point_e::LISTENER) {
       process_server_socket(slot);
     } else {
       network_raw_tasks_.push(new size_t(slot));
@@ -285,7 +293,7 @@ void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
 
 void NetworkEngine::process_server_socket(size_t slot) {
   drop_result(socket_pool_[slot]
-                  .handler->accept_connections()
+                  .socket_handler_.accept_connections()
                   .and_then([this](auto&& new_clients) -> Ev {
                     register_clients(new_clients);
                     return {};
@@ -295,17 +303,17 @@ void NetworkEngine::process_server_socket(size_t slot) {
                     LOG("Cant accept new connections");
                     return {};
                   }));
-  epoll_handler_.rearm_socket(*(socket_pool_[slot].handler),
-                              socket_pool_[slot].slot);
+  epoll_handler_.rearm_socket((socket_pool_[slot].socket_handler_),
+                              socket_pool_[slot].occupied_slot_);
 }
 
 void NetworkEngine::process_client_socket(size_t slot) {
   CommandStatus cmd_status{.command_status_v = cmd_se::CONTINUE};
   while (cmd_status.command_status_v == cmd_se::CONTINUE &&
-         socket_pool_[slot].handler->get_socket_status() ==
+         socket_pool_[slot].socket_handler_.get_socket_status() ==
              socket_status_e::ALIVE) {
-    SlotEntry& entry = socket_pool_[slot];
-    auto read_result = entry.handler->read_user_input();
+    ConnectionEntry& entry = socket_pool_[slot];
+    auto read_result = entry.socket_handler_.read_user_input();
     if (!read_result) {
       LOG(read_result.error().full_report());
       break;
@@ -314,12 +322,13 @@ void NetworkEngine::process_client_socket(size_t slot) {
   }
 }
 
-auto NetworkEngine::process_message(SlotEntry& slot_entry, ReadResult& message)
-    -> CommandStatus {
+auto NetworkEngine::process_message(ConnectionEntry& slot_entry,
+                                    ReadResult& message) -> CommandStatus {
   switch (message.status) {
   case bsm::message_status_e::EMPTY:
   case bsm::message_status_e::WOULDBLOCK:
-    epoll_handler_.rearm_socket(*(slot_entry.handler), slot_entry.slot);
+    epoll_handler_.rearm_socket((slot_entry.socket_handler_),
+                                slot_entry.occupied_slot_);
     return {.command_status_v = cmd_se::TERMINATE};
   case message_status_e::DISCONNECTED:
     release_client(slot_entry);
@@ -327,7 +336,7 @@ auto NetworkEngine::process_message(SlotEntry& slot_entry, ReadResult& message)
   case bsm::message_status_e::DATA:
     break;
   }
-  ConnectionView connection{slot_entry.slot};
+  ConnectionView connection{slot_entry.occupied_slot_};
   CommandContext context{.client_view = connection, .message = message};
   CommandStatus cmd_status = on_message_callback_(
       context); //<-CallBack to Server, process user message
@@ -343,14 +352,14 @@ auto NetworkEngine::process_message(SlotEntry& slot_entry, ReadResult& message)
   return cmd_status;
 }
 
-auto NetworkEngine::send_message_impl(SlotEntry& slot_entry,
+auto NetworkEngine::send_message_impl(ConnectionEntry& slot_entry,
                                       const OutgoingMessage& message) -> bool {
-  if (auto write_result = slot_entry.handler->write_to_user(message);
+  if (auto write_result = slot_entry.socket_handler_.write_to_user(message);
       !write_result) {
     LOG("Unable to write message into socket");
     LOG(write_result.error().full_report());
     deferred_actions_.schedule(
-        std::make_unique<Cleanup_Connection>(slot_entry.slot), *this);
+        std::make_unique<Cleanup_Connection>(slot_entry.occupied_slot_), *this);
     return false;
   }
   return true;
@@ -358,10 +367,10 @@ auto NetworkEngine::send_message_impl(SlotEntry& slot_entry,
 
 void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
   std::scoped_lock lock(engine.m_);
-  SlotEntry& entry{engine.socket_pool_[slot_]};
-  entry.generation++;
-  entry.type = end_point_e::NONE;
-  entry.handler->set_socket_status(socket_status_e::CLOSED);
+  ConnectionEntry& entry{engine.socket_pool_[slot_]};
+  entry.generation_++;
+  entry.connection_type_ = end_point_e::NONE;
+  entry.socket_handler_.set_socket_status(socket_status_e::CLOSED);
 }
 
 void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {

@@ -2,6 +2,7 @@
 #define NETWORK_ROUTINE_H
 
 #include "core/atomic_queue.h"
+#include "core/object_pool.h"
 #include "deferred_actions.h"
 #include "interfaces/modules.h"
 #include "protocol/network_defs.h"
@@ -30,11 +31,16 @@ enum class task_tag_e : uint8_t;
 struct OutgoingMessage;
 struct ReadResult;
 
-struct SlotEntry {
-  std::unique_ptr<SocketHandler> handler;
-  end_point_e type{end_point_e::NONE};
-  size_t slot{std::numeric_limits<std::size_t>::max()};
-  size_t generation{std::numeric_limits<std::size_t>::max()};
+struct ConnectionEntry {
+  ConnectionEntry(end_point_e type, int socket);
+  ConnectionEntry(ConnectionEntry&&) noexcept = delete;
+  ConnectionEntry(const ConnectionEntry&) = delete;
+  auto operator=(ConnectionEntry other_entry) -> ConnectionEntry&;
+
+  end_point_e connection_type_{end_point_e::NONE};
+  SocketHandler socket_handler_;
+  size_t occupied_slot_{std::numeric_limits<std::size_t>::max()};
+  size_t generation_{0};
 };
 
 struct ConnectionMeta {
@@ -67,10 +73,11 @@ public:
       -> DeliveryReport {
     DeliveryReport delivery_report;
     for (auto& entry : socket_pool_) {
-      if (!entry.handler) {
+      if (entry.connection_type_ == end_point_e::NONE) {
         continue;
       }
-      ConnectionMeta meta{.slot = entry.slot, .type = entry.type};
+      ConnectionMeta meta{.slot = entry.occupied_slot_,
+                          .type = entry.connection_type_};
       if (!std::invoke(filter, meta)) {
         continue;
       }
@@ -87,15 +94,16 @@ public:
     requires std::predicate<Filter, const ConnectionMeta&>
   auto get_view_by_type(Filter&& filter)
       -> std::expected<ConnectionView, Error> {
-    for (SlotEntry& entry : socket_pool_) {
-      if (!entry.handler) {
+    for (ConnectionEntry& entry : socket_pool_) {
+      if (entry.connection_type_ == end_point_e::NONE) {
         continue;
       }
-      ConnectionMeta meta{.slot = entry.slot, .type = entry.type};
+      ConnectionMeta meta{.slot = entry.occupied_slot_,
+                          .type = entry.connection_type_};
       if (!std::invoke(filter, meta)) {
         continue;
       }
-      return ConnectionView{entry.slot};
+      return ConnectionView{entry.occupied_slot_};
     }
     return std::unexpected(Error{.backtrace = {"No such View could be found"}});
   }
@@ -108,22 +116,22 @@ private:
   auto add_to_socket_pool() -> std::expected<size_t, Error>;
   auto add_to_socket_pool(int socket_fd, end_point_e socket_type)
       -> std::expected<size_t, Error>;
-  auto free_slot_entry(SlotEntry& slot_entry) -> Ev;
+  auto free_slot_entry(ConnectionEntry& slot_entry) -> Ev;
   auto find_spot_for_new_client(int client_socket, end_point_e socket_type)
       -> std::expected<size_t, Error>;
-  auto subscribe_to_events(SlotEntry& slot_entry) -> Ev;
-  void unsubscribe_from_events(SlotEntry& slot_entry);
-  void release_client(SlotEntry& slot_entry);
+  auto subscribe_to_events(ConnectionEntry& slot_entry) -> Ev;
+  void unsubscribe_from_events(ConnectionEntry& slot_entry);
+  void release_client(ConnectionEntry& slot_entry);
   auto register_client(int client_socket, end_point_e socket_type)
       -> std::expected<size_t, Error>;
   void register_clients(std::vector<int>& new_clients);
   void process_events(const std::vector<size_t>& event_slots);
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
-  auto process_message(SlotEntry& slot_entry, ReadResult& message)
+  auto process_message(ConnectionEntry& slot_entry, ReadResult& message)
       -> CommandStatus;
-  auto send_message_impl(SlotEntry& slot_entry, const OutgoingMessage& message)
-      -> bool;
+  auto send_message_impl(ConnectionEntry& slot_entry,
+                         const OutgoingMessage& message) -> bool;
 
   class Cleanup_Connection : public DeferredAction {
   public:
@@ -136,7 +144,8 @@ private:
     size_t slot_;
   };
 
-  std::vector<SlotEntry> socket_pool_;
+  ObjectPool<ConnectionEntry> socket_pool__;
+  std::vector<ConnectionEntry> socket_pool_;
   AtomicQueue<size_t> avaiable_slots_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
