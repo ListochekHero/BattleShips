@@ -10,7 +10,7 @@ enum class message_type_e : uint8_t {
   SOCKET,
   CONN_CODE,
   LOBBY_ID,
-  ERROR
+  ERROR,
 };
 
 enum class message_status_e : uint8_t { EMPTY, WOULDBLOCK, DISCONNECTED, DATA };

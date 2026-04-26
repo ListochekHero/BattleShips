@@ -1,8 +1,10 @@
 #ifndef APPLICATION_H
 #define APPLICATION_H
 
+// IWYU pragma: begin_exports
 #include <coroutine>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 
 #include "core/atomic_queue.h"
@@ -13,6 +15,7 @@
 #include "protocol/network_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
+// IWYU pragma: end_export
 
 namespace bsm {
 enum class end_point_e : uint8_t;

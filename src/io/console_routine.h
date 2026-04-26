@@ -1,9 +1,9 @@
 #ifndef CONSOLE_ROUTINE_H
 #define CONSOLE_ROUTINE_H
 
-#include "core/atomic_queue.h"
 #include "interfaces/modules.h"
 
+#include <cstdint>
 #include <string>
 
 namespace bsm {

@@ -1,6 +1,15 @@
+// IWYU pragma: no_include <optional>
+// IWYU pragma: no_include <vector>
 #include "client.h"
 
+#include "protocol/message_types.h"
+#include "protocol/task_context_types.h"
+#include "utility/logger.h"
+
+#include <format>
 #include <iostream>
+#include <memory>
+#include <utility>
 
 namespace bsm {
 
@@ -11,10 +20,13 @@ auto Client::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
   auto init_result = Application::init(socket_type, parrent_socket);
   server_view_ = *init_result;
   scheduler().add_executor(
-      task_tag_e::CONSOLE, [this](std::unique_ptr<TaskContext> context) -> void {
+      task_tag_e::CONSOLE,
+      [this](std::unique_ptr<TaskContext> context) -> void {
         auto* console_context = static_cast<ConsoleTaskContext*>(context.get());
-        handle_input({.client_view = ConnectionView{},
-                      .message = {.payload = console_context->user_input},});
+        handle_input({
+            .client_view = ConnectionView{},
+            .message = {.payload = console_context->user_input},
+        });
       });
   scheduler().add_co_task([this]() -> bsm_co_handle { return console_co(); },
                           task_tag_e::CONSOLE);

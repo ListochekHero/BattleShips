@@ -1,20 +1,18 @@
+// IWYU pragma: no_include <vector>
 #include "client.h"
 
 #include "application/client.h"
 #include "net/socket_routine.h"
 #include "protocol/message_defs.h"
 #include "protocol/message_types.h"
-#include "protocol/network_defs.h"
 #include "utility/logger.h"
 
 #include <arpa/inet.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <expected>
 #include <iostream>
 #include <netinet/in.h>
-#include <string>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>

@@ -2,10 +2,8 @@
 #define NETWORK_ROUTINE_H
 
 #include "core/atomic_queue.h"
-#include "core/scheduler.h"
 #include "deferred_actions.h"
 #include "interfaces/modules.h"
-#include "protocol/message_types.h"
 #include "protocol/network_defs.h"
 #include "protocol/network_types.h"
 #include "socket_routine.h"
@@ -15,6 +13,7 @@
 #include <concepts>
 #include <condition_variable>
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <functional>
 #include <limits>

@@ -1,9 +1,11 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+// IWYU pragma: begin_exports
 #include "application/application.h"
 #include "protocol/lobby_types.h"
 #include "services/lobby_manager.h"
+// IWYU pragma: end_export
 
 namespace bsm {
 

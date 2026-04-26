@@ -1,4 +1,7 @@
+// IWYU pragma: no_include <vector>
 #include "data_storage.h"
+
+#include <cstdlib>
 
 namespace bsm {
 

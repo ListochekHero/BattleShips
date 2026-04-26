@@ -3,9 +3,6 @@
 #include "protocol/message_defs.h"
 #include "protocol/message_types.h"
 #include <algorithm>
-#include <string>
-
-#include "utility/utility.h"
 
 namespace bsm {
 

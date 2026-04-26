@@ -1,9 +1,8 @@
 #ifndef DISPATCHER_H
 #define DISPATCHER_H
 
-#include "protocol/message_defs.h"
-
 #include <array>
+#include <cstdint>
 #include <optional>
 #include <string_view>
 #include <variant>
@@ -11,7 +10,7 @@
 
 namespace bsm {
 
-enum class end_point_e : uint8_t;
+enum class message_type_e : uint8_t;
 struct ReadResult;
 
 struct CreateLobby {};

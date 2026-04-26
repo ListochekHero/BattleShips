@@ -1,8 +1,9 @@
 #ifndef UTILITY_H
 #define UTILITY_H
+// IWYU pragma: no_include <vector>
 
-#include "error.h"
-#include "logger.h"
+#include "utility/error.h"
+#include "utility/logger.h"
 
 #include <concepts>
 #include <cstddef>
@@ -19,7 +20,6 @@ namespace bsm {
 
 class ConnectionView;
 struct ReadResult;
-enum class end_point_e : uint8_t;
 
 enum class command_status_e : uint8_t { CONTINUE, TERMINATE };
 using cmd_se = command_status_e;

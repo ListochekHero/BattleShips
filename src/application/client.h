@@ -1,8 +1,23 @@
 #ifndef APP_CLIENT_H
 #define APP_CLIENT_H
 
+// IWYU pragma: begin_exports
 #include "application/application.h"
+#include "core/atomic_queue.h"
+#include "core/dispatcher.h"
 #include "io/console_routine.h"
+#include "protocol/coroutine_promise.h"
+#include "protocol/network_defs.h"
+#include "protocol/network_types.h"
+#include "utility/error.h"
+#include "utility/utility.h"
+
+#include <atomic>
+#include <cstddef>
+#include <limits>
+#include <string>
+#include <variant>
+// IWYU pragma: end_export
 
 namespace bsm {
 
@@ -28,9 +43,6 @@ private:
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;
   AtomicQueue<std::string> console_raw_tasks_;
-
-  std::mutex m_;
-  std::condition_variable cv_;
 };
 
 } // namespace bsm

@@ -1,25 +1,26 @@
+// IWYU pragma: no_include <vector>
 #include "lobby_manager.h"
 
 #include "utility/utility.h"
 
-#include <csignal>
+#include <csignal> // IWYU pragma: keep
 #include <cstdio>
 #include <cstdlib>
 #include <string>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <utility>
+#include <utility> // IWYU pragma: keep
 
 namespace bsm {
 
 auto LobbyManager::find(int64_t lobby_id) -> std::expected<LobbyView, Error> {
-  auto it = lobbies_.find(lobby_id);
-  if (it == lobbies_.end()) {
+  auto iter = lobbies_.find(lobby_id);
+  if (iter == lobbies_.end()) {
     return std::unexpected(
         Error{.backtrace = {"Lobby with given id doesn`t exist"}});
   }
   return LobbyView{.lobby_id = lobby_id,
-                   .control_connection = it->second.control_connection};
+                   .control_connection = iter->second.control_connection};
 }
 
 auto LobbyManager::spawn_lobby() -> std::expected<LobbyProcess, Error> {

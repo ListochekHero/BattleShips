@@ -1,9 +1,9 @@
 #ifndef APP_LOBBY_H
 #define APP_LOBBY_H
 
+// IWYU pragma: begin_exports
 #include "application/application.h"
 #include "core/dispatcher.h"
-#include "protocol/network_defs.h"
 #include "protocol/network_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <limits>
 #include <variant>
+// IWYU pragma: end_export
 
 namespace bsm {
 enum class end_point_e : uint8_t;

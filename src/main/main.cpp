@@ -1,14 +1,11 @@
 #include "main.h"
 
-#include "application/application.h"
 #include "application/lobby.h"
 #include "application/server.h"
 #include "protocol/network_defs.h"
 #include "utility/config.h"
-#include "utility/error.h"
 #include "utility/logger.h"
 #include <cstring>
-#include <expected>
 #include <string>
 #include <utility>
 

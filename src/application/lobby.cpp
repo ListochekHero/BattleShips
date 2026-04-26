@@ -1,4 +1,17 @@
+// IWYU pragma: no_include <vector>
+// IWYU pragma: no_include <string_view>
 #include "lobby.h"
+
+#include "protocol/message_defs.h"
+#include "protocol/message_types.h"
+#include "protocol/network_defs.h"
+#include "utility/logger.h"
+
+#include <cstdlib>
+#include <format>
+#include <optional>
+#include <string>
+#include <utility>
 
 namespace bsm {
 

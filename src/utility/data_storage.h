@@ -1,7 +1,11 @@
 #ifndef DATA_STORAGE_H
 #define DATA_STORAGE_H
 
-#include "error.h"
+#include "utility/error.h"
+
+#include <cstdint>
+#include <expected>
+#include <string>
 
 namespace bsm {
 
