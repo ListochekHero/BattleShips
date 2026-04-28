@@ -146,9 +146,7 @@ private:
     size_t slot_;
   };
 
-  ObjectPool<ConnectionEntry> socket_pool__;
-  std::vector<ConnectionEntry> socket_pool_;
-  AtomicQueue<size_t> avaiable_slots_;
+  ObjectPool<ConnectionEntry> socket_pool_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
   DeferredActions deferred_actions_;
