@@ -1,14 +1,18 @@
 #include "network_routine.h"
 
+#include "core/object_pool.h"
 #include "core/scheduler.h"
 #include "net/deferred_actions.h"
 #include "net/socket_routine.h"
 #include "protocol/message_defs.h"
 #include "protocol/message_types.h"
 #include "protocol/network_defs.h"
+#include "protocol/network_types.h"
 #include "utility/config.h"
 #include "utility/error.h"
 #include "utility/logger.h"
+#include "utility/scope_guard.h"
+#include "utility/utility.h"
 
 #include <cstddef>
 #include <exception>
@@ -21,6 +25,7 @@
 
 namespace bsm {
 
+// public:
 ConnectionEntry::ConnectionEntry(end_point_e type, int socket)
     : connection_type_(type), socket_handler_(SocketHandler(socket)) {}
 
@@ -168,6 +173,7 @@ void NetworkEngine::process_client(const ConnectionView& view) {
   process_client_socket(view.get_slot());
 }
 
+// private:
 auto NetworkEngine::init_epoll() -> Ev {
   return epoll_handler_.init()
       .transform_error([](auto&& error) -> auto {
@@ -305,9 +311,9 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
     LOG("Unable to handle client command: " + context.message.payload);
     LOG(cmd_status.error->full_report());
     if (send_message_impl(slot_entry,
-                      {
-                          .payloads = {user_message(*cmd_status.user_code)},
-                          .msg_type = message_type_e::PRINTABLE,
+                          {
+                              .payloads = {user_message(*cmd_status.user_code)},
+                              .msg_type = message_type_e::PRINTABLE,
                           })) {
       socket_pool_.release(slot);
     }

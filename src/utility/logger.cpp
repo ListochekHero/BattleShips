@@ -5,6 +5,8 @@
 #include <sstream>
 #include <unistd.h>
 
+struct tm;
+
 namespace bsm {
 
 void LOG(const std::string_view message_to_log) {

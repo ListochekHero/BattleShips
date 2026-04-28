@@ -4,6 +4,7 @@
 #include "core/scheduler.h"
 #include "net/network_routine.h"
 #include "protocol/coroutine_promise.h"
+#include "protocol/network_types.h"
 #include "protocol/task_context_types.h"
 
 #include <cstddef>
@@ -36,7 +37,7 @@ auto Application::init(end_point_e socket_type, int parrent_socket)
   scheduler().add_executor(
       task_tag_e::NETWORK, [this](std::unique_ptr<TaskContext> context) {
         auto* network_context = static_cast<NetworkTaskContext*>(context.get());
-        network_engine_.process_client(network_context->slot);
+        network_engine_.process_client(ConnectionView{network_context->slot});
       });
   scheduler_.add_co_task([this]() { return network_co(); },
                          task_tag_e::NETWORK);

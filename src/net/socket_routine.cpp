@@ -64,7 +64,7 @@ auto SocketHandler::setup_listener(int port) -> Ev {
   return {};
 }
 
-Ev SocketHandler::setup_client() {
+auto SocketHandler::setup_client() -> Ev {
   struct sockaddr_in server_addr;
   socket_ = socket(AF_INET, SOCK_STREAM, 0);
   if (socket_ < 0) {
