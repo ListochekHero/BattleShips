@@ -65,9 +65,9 @@ public:
                        const OutgoingMessage& message) -> bool;
   auto attach_socket(int socket, end_point_e socket_type)
       -> std::expected<ConnectionView, Error>;
-  auto transfer(const ConnectionView& dest, const ConnectionView& src)
-      -> CommandStatus;
-  void process_client(size_t slot);
+  auto transfer(const ConnectionView& destination_view,
+                const ConnectionView& source_view) -> CommandStatus;
+  void process_client(const ConnectionView& view);
 
   template <typename Filter>
     requires std::predicate<Filter, const ConnectionMeta&>
@@ -124,15 +124,15 @@ private:
   auto subscribe_to_events(ConnectionEntry& slot_entry) -> Ev;
   void unsubscribe_from_events(ConnectionEntry& slot_entry);
   void release_client(ConnectionEntry& slot_entry);
-  auto register_client(int client_socket, end_point_e socket_type)
+  auto register_client(end_point_e socket_type, int client_socket)
       -> std::expected<size_t, Error>;
   void register_clients(std::vector<int>& new_clients);
   void process_events(const std::vector<size_t>& event_slots);
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
-  auto process_message(ConnectionEntry& slot_entry, ReadResult& message)
-      -> CommandStatus;
-  auto send_message_impl(ConnectionEntry& slot_entry,
+  auto process_message(ConnectionEntry& slot_entry, size_t slot,
+                       ReadResult& message) -> CommandStatus;
+  auto send_message_impl(const ConnectionEntry& connection_entry, size_t slot,
                          const OutgoingMessage& message) -> bool;
 
   class Cleanup_Connection : public DeferredAction {

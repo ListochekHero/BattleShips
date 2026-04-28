@@ -119,7 +119,7 @@ auto NetworkEngine::send_message_to(const ConnectionView& view,
 
 auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
     -> std::expected<ConnectionView, Error> {
-  auto slot_index = register_client(socket, socket_type);
+  auto slot_index = register_client(socket_type, socket);
   if (!slot_index) {
     return std::unexpected(slot_index.error().add_context(
         "Unable to attach new socket to net_engine"));
@@ -149,12 +149,9 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
       !result) {
     LOG(result.error().full_report());
     LOG("Unable to transfer socket, trying to recover...");
-    if (auto result = subscribe_to_events(src_entry); !result) {
+    if (auto result = subscribe_to_events(source_conn, source_slot); !result) {
       LOG(result.error().full_report());
       LOG("Error while trying to recover socket, closing connection");
-      deferred_actions_.schedule(
-          std::make_unique<Cleanup_Connection>(src_entry.occupied_slot_),
-          *this);
       return {
           .command_status_v = cmd_se::TERMINATE,
           .error = Error{.backtrace = {"Transfer failed, connection lost"}},
@@ -166,15 +163,15 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
         .error = Error{.backtrace = {"Transfer failed, connection preserved"}},
     };
   }
-  deferred_actions_.schedule(
-      std::make_unique<Cleanup_Connection>(src_entry.occupied_slot_), *this);
   return {.command_status_v = cmd_se::TERMINATE};
 }
 
-void NetworkEngine::process_client(size_t slot) { process_client_socket(slot); }
+void NetworkEngine::process_client(const ConnectionView& view) {
+  process_client_socket(view.get_slot());
+}
 
 auto NetworkEngine::init_epoll() -> Ev {
-  return this->epoll_handler_.init()
+  return epoll_handler_.init()
       .transform_error([](auto&& error) -> auto {
         return error.add_context("Cant init epoll_handler");
       })
@@ -258,9 +255,9 @@ auto NetworkEngine::find_spot_for_new_client(int client_socket,
   return new_entry_slot;
 }
 
-auto NetworkEngine::subscribe_to_events(ConnectionEntry& slot_entry) -> Ev {
-  return epoll_handler_
-      .add_socket(slot_entry.socket_handler_, slot_entry.occupied_slot_)
+auto NetworkEngine::subscribe_to_events(ConnectionEntry& slot_entry,
+                                        size_t slot) -> Ev {
+  return epoll_handler_.add_socket(slot_entry.socket_handler_, slot)
       .or_else([&](auto&& error) -> Ev {
         return std::unexpected(
             error.add_context("Unable to subscribe new client to epoll"));
@@ -280,7 +277,7 @@ void NetworkEngine::release_client(ConnectionEntry& slot_entry) {
   success_or_terminate(free_slot_entry(slot_entry));
 }
 
-auto NetworkEngine::register_client(int client_socket, end_point_e socket_type)
+auto NetworkEngine::register_client(end_point_e socket_type, int client_socket)
     -> std::expected<size_t, Error> {
   auto new_client_spot{
       socket_pool_.push_to_pool(ConnectionEntry{socket_type, client_socket})};
@@ -294,7 +291,7 @@ auto NetworkEngine::register_client(int client_socket, end_point_e socket_type)
       .transform([&]() -> size_t { return *new_client_spot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.full_report());
-        send_message_impl(new_client_entry,
+        send_message_impl(new_client_entry, *new_client_spot,
                           {
                               .payloads = {user_message(us_e::GENERIC)},
                               .msg_type = message_type_e::PRINTABLE,
@@ -307,7 +304,7 @@ auto NetworkEngine::register_client(int client_socket, end_point_e socket_type)
 
 void NetworkEngine::register_clients(std::vector<int>& new_clients) {
   for (int client : new_clients) {
-    if (auto result = register_client(client, end_point_e::TO_CLIENT);
+    if (auto result = register_client(end_point_e::TO_CLIENT, client);
         !result) {
       LOG(result.error().full_report());
     }
@@ -353,17 +350,16 @@ void NetworkEngine::process_client_socket(size_t slot) {
       LOG(read_result.error().full_report());
       break;
     }
-    cmd_status = process_message(entry, *read_result);
+    cmd_status = process_message(entry, slot, *read_result);
   }
 }
 
-auto NetworkEngine::process_message(ConnectionEntry& slot_entry,
+auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
                                     ReadResult& message) -> CommandStatus {
   switch (message.status) {
   case bsm::message_status_e::EMPTY:
   case bsm::message_status_e::WOULDBLOCK:
-    epoll_handler_.rearm_socket((slot_entry.socket_handler_),
-                                slot_entry.occupied_slot_);
+    drop_result(epoll_handler_.rearm_socket(slot_entry.socket_handler_, slot));
     return {.command_status_v = cmd_se::TERMINATE};
   case message_status_e::DISCONNECTED:
     release_client(slot_entry);
@@ -371,14 +367,14 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry,
   case bsm::message_status_e::DATA:
     break;
   }
-  ConnectionView connection{slot_entry.occupied_slot_};
+  ConnectionView connection{slot};
   CommandContext context{.client_view = connection, .message = message};
   CommandStatus cmd_status = on_message_callback_(
       context); //<-CallBack to Server, process user message
   if (cmd_status.error) {
     LOG("Unable to handle client command: " + context.message.payload);
     LOG(cmd_status.error->full_report());
-    send_message_impl(slot_entry,
+    send_message_impl(slot_entry, slot,
                       {
                           .payloads = {user_message(*cmd_status.user_code)},
                           .msg_type = message_type_e::PRINTABLE,
@@ -387,14 +383,16 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry,
   return cmd_status;
 }
 
-auto NetworkEngine::send_message_impl(ConnectionEntry& slot_entry,
+auto NetworkEngine::send_message_impl(const ConnectionEntry& connection_entry,
+                                      size_t slot,
                                       const OutgoingMessage& message) -> bool {
-  if (auto write_result = slot_entry.socket_handler_.write_to_user(message);
+  if (auto write_result =
+          connection_entry.socket_handler_.write_to_user(message);
       !write_result) {
     LOG("Unable to write message into socket");
     LOG(write_result.error().full_report());
-    deferred_actions_.schedule(
-        std::make_unique<Cleanup_Connection>(slot_entry.occupied_slot_), *this);
+    deferred_actions_.schedule(std::make_unique<Cleanup_Connection>(slot),
+                               *this);
     return false;
   }
   return true;
