@@ -32,14 +32,16 @@ struct OutgoingMessage;
 struct ReadResult;
 
 struct ConnectionEntry {
-  ConnectionEntry(end_point_e type, int socket);
-  ConnectionEntry(ConnectionEntry&&) noexcept = delete;
+  ConnectionEntry() = default;
   ConnectionEntry(const ConnectionEntry&) = delete;
-  auto operator=(ConnectionEntry other_entry) -> ConnectionEntry&;
+  ConnectionEntry(end_point_e type, int socket);
+  ConnectionEntry(ConnectionEntry&&) noexcept;
+  auto operator=(ConnectionEntry&& other_entry) noexcept -> ConnectionEntry&;
+  auto operator=(const ConnectionEntry&) = delete;
+  void reset();
 
   end_point_e connection_type_{end_point_e::NONE};
   SocketHandler socket_handler_;
-  size_t occupied_slot_{std::numeric_limits<std::size_t>::max()};
   size_t generation_{0};
 };
 

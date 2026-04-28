@@ -24,6 +24,23 @@ namespace bsm {
 ConnectionEntry::ConnectionEntry(end_point_e type, int socket)
     : connection_type_(type), socket_handler_(SocketHandler(socket)) {}
 
+ConnectionEntry::ConnectionEntry(ConnectionEntry&& other) noexcept {
+  connection_type_ = other.connection_type_;
+  socket_handler_ = std::move(other).socket_handler_;
+}
+auto ConnectionEntry::reset() -> void {
+  connection_type_ = end_point_e::NONE;
+  socket_handler_.reset_to_empty();
+  generation_++;
+}
+
+auto ConnectionEntry::operator=(ConnectionEntry&& other) noexcept
+    -> ConnectionEntry& {
+  connection_type_ = other.connection_type_;
+  socket_handler_ = std::move(other).socket_handler_;
+  return *this;
+}
+
 auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
     -> std::expected<ConnectionView, Error> {
   std::expected<size_t, Error> socket_slot{};
