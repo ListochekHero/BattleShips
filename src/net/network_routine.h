@@ -74,20 +74,22 @@ public:
   auto send_message(const OutgoingMessage& message, Filter&& filter)
       -> DeliveryReport {
     DeliveryReport delivery_report;
-    for (auto& entry : socket_pool_) {
-      if (entry.connection_type_ == end_point_e::NONE) {
-        continue;
+    for (auto* entry : socket_pool_) {
+      size_t current_slot{0};
+      if (entry->connection_type_ != end_point_e::NONE) {
+        ConnectionMeta meta{
+            .slot = current_slot,
+            .type = entry->connection_type_,
+        };
+        if (std::invoke(filter, meta)) {
+          if (send_message_impl(*entry, current_slot, message)) {
+            delivery_report.delivered++;
+          } else {
+            delivery_report.failed++;
+          }
+        }
       }
-      ConnectionMeta meta{.slot = entry.occupied_slot_,
-                          .type = entry.connection_type_};
-      if (!std::invoke(filter, meta)) {
-        continue;
-      }
-      if (!send_message_impl(entry, message)) {
-        delivery_report.failed++;
-        continue;
-      }
-      delivery_report.delivered++;
+      current_slot++;
     }
     return delivery_report;
   }
@@ -96,16 +98,18 @@ public:
     requires std::predicate<Filter, const ConnectionMeta&>
   auto get_view_by_type(Filter&& filter)
       -> std::expected<ConnectionView, Error> {
-    for (ConnectionEntry& entry : socket_pool_) {
-      if (entry.connection_type_ == end_point_e::NONE) {
-        continue;
+    for (auto* entry : socket_pool_) {
+      size_t current_slot{0};
+      if (entry->connection_type_ != end_point_e::NONE) {
+        ConnectionMeta meta{
+            .slot = current_slot,
+            .type = entry->connection_type_,
+        };
+        if (std::invoke(filter, meta)) {
+          return ConnectionView{current_slot};
+        }
       }
-      ConnectionMeta meta{.slot = entry.occupied_slot_,
-                          .type = entry.connection_type_};
-      if (!std::invoke(filter, meta)) {
-        continue;
-      }
-      return ConnectionView{entry.occupied_slot_};
+      current_slot++;
     }
     return std::unexpected(Error{.backtrace = {"No such View could be found"}});
   }
