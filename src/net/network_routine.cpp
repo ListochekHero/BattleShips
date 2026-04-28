@@ -45,8 +45,8 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
     -> std::expected<ConnectionView, Error> {
   std::expected<size_t, Error> socket_slot{};
   if (parrent_socket != 0) {
-    socket_slot = socket_pool_.push_to_pool(
-        ConnectionEntry{socket_type, parrent_socket});
+    socket_slot =
+        socket_pool_.push_to_pool(ConnectionEntry{socket_type, parrent_socket});
   } else {
     socket_slot = socket_pool_.push_to_pool(ConnectionEntry{});
   }
@@ -102,7 +102,6 @@ void NetworkEngine::run() {
     } else {
       process_events(*wait_result);
     }
-    deferred_actions_.flush(*this);
   }
 }
 
@@ -110,7 +109,7 @@ auto NetworkEngine::send_message_to(const ConnectionView& view,
                                     const OutgoingMessage& message) -> bool {
   auto slot{view.get_slot()};
   auto& entry{*socket_pool_.get_object(slot)};
-  bool delivered{send_message_impl(entry, slot, message)};
+  bool delivered{send_message_impl(entry, message)};
   if (!delivered) {
     socket_pool_.release(slot);
   }
@@ -130,8 +129,7 @@ auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
 auto NetworkEngine::transfer(const ConnectionView& destination_view,
                              const ConnectionView& source_view)
     -> CommandStatus {
-  auto& destination_conn{
-      *socket_pool_.get_object(destination_view.get_slot())};
+  auto& destination_conn{*socket_pool_.get_object(destination_view.get_slot())};
   size_t source_slot{source_view.get_slot()};
   auto& source_conn{*socket_pool_.get_object(source_slot)};
   auto source_conn_guard{
@@ -184,77 +182,6 @@ auto NetworkEngine::init_epoll() -> Ev {
       });
 }
 
-auto NetworkEngine::init_epoll_wrapper() -> Ev {
-  return init_epoll().transform_error([](auto&& error) -> auto {
-    return error.add_context("Unable to init epoll");
-  });
-}
-
-template <typename... Args>
-auto NetworkEngine::emplace_new_entry_to_pool(Args&&... args)
-    -> std::expected<size_t, Error> {
-  try {
-    size_t occupied_slot{socket_pool_.size()};
-    socket_pool_.emplace_back(std::forward<Args>(args)..., occupied_slot);
-    return occupied_slot;
-  } catch (const std::exception& e) {
-    LOG(e.what());
-    return std::unexpected(
-        Error{.backtrace = {"Unable to emplace new socket handler"}});
-  }
-}
-
-auto NetworkEngine::add_to_socket_pool() -> std::expected<size_t, Error> {
-  return emplace_new_entry_to_pool(std::make_unique<SocketHandler>(),
-                                   end_point_e::NONE)
-      .transform_error([](auto&& error) {
-        return error.add_context("Unable to increase socket pool size");
-      });
-}
-
-auto NetworkEngine::add_to_socket_pool(int socket_fd, end_point_e socket_type)
-    -> std::expected<size_t, Error> {
-  return emplace_new_entry_to_pool(std::make_unique<SocketHandler>(socket_fd),
-                                   socket_type)
-      .transform_error([](auto&& error) {
-        error.add_context("Unable to add given socket to socket pool");
-        return error;
-      });
-}
-
-auto NetworkEngine::free_slot_entry(ConnectionEntry& slot_entry) -> Ev {
-  try {
-    slot_entry.socket_handler_.reset_to_empty();
-    auto* new_slot = new size_t(slot_entry.occupied_slot_);
-    avaiable_slots_.push(new_slot);
-  } catch (const std::exception& e) {
-    return std::unexpected(Error{
-        .backtrace = {e.what(), "Exception caught during freeing slot entry"},
-    });
-  }
-  return {};
-}
-
-auto NetworkEngine::find_spot_for_new_client(int client_socket,
-                                             end_point_e socket_type)
-    -> std::expected<size_t, Error> {
-  size_t* slot = avaiable_slots_.try_pop();
-  if (slot != nullptr) {
-    ConnectionEntry* entry{&socket_pool_[*slot]};
-    entry->socket_handler_.reset_with_new(client_socket);
-    entry->connection_type_ = socket_type;
-    return *slot;
-  }
-  auto new_entry_slot = add_to_socket_pool(client_socket, socket_type);
-  if (!new_entry_slot) {
-    return std::unexpected(
-        std::move(new_entry_slot)
-            .error()
-            .add_context("Unable to find spot for new client"));
-  }
-  return new_entry_slot;
-}
-
 auto NetworkEngine::subscribe_to_events(ConnectionEntry& slot_entry,
                                         size_t slot) -> Ev {
   return epoll_handler_.add_socket(slot_entry.socket_handler_, slot)
@@ -272,15 +199,17 @@ void NetworkEngine::unsubscribe_from_events(ConnectionEntry& slot_entry) {
                   }));
 }
 
-void NetworkEngine::release_client(ConnectionEntry& slot_entry) {
+void NetworkEngine::release_client(ConnectionEntry& slot_entry, size_t slot) {
   unsubscribe_from_events(slot_entry);
-  success_or_terminate(free_slot_entry(slot_entry));
+  slot_entry.reset();
+  socket_pool_.release(slot);
 }
 
 auto NetworkEngine::register_client(end_point_e socket_type, int client_socket)
     -> std::expected<size_t, Error> {
   auto new_client_spot{
-      socket_pool_.push_to_pool(ConnectionEntry{socket_type, client_socket})};
+      socket_pool_.push_to_pool(ConnectionEntry{socket_type, client_socket}),
+  };
   if (!new_client_spot) {
     return std::unexpected(std::move(new_client_spot)
                                .error()
@@ -291,12 +220,13 @@ auto NetworkEngine::register_client(end_point_e socket_type, int client_socket)
       .transform([&]() -> size_t { return *new_client_spot; })
       .or_else([&](auto&& error) -> std::expected<size_t, Error> {
         LOG(error.full_report());
-        send_message_impl(new_client_entry, *new_client_spot,
+        send_message_impl(new_client_entry,
                           {
                               .payloads = {user_message(us_e::GENERIC)},
                               .msg_type = message_type_e::PRINTABLE,
                           });
-        success_or_terminate(free_slot_entry(new_client_entry));
+        new_client_entry.reset();
+        socket_pool_.release(*new_client_spot);
         return std::unexpected(
             Error{.backtrace = {"Unable to add new client to epoll"}});
       });
@@ -362,7 +292,7 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
     drop_result(epoll_handler_.rearm_socket(slot_entry.socket_handler_, slot));
     return {.command_status_v = cmd_se::TERMINATE};
   case message_status_e::DISCONNECTED:
-    release_client(slot_entry);
+    release_client(slot_entry, slot);
     return {.command_status_v = command_status_e::TERMINATE};
   case bsm::message_status_e::DATA:
     break;
@@ -374,25 +304,25 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
   if (cmd_status.error) {
     LOG("Unable to handle client command: " + context.message.payload);
     LOG(cmd_status.error->full_report());
-    send_message_impl(slot_entry, slot,
+    if (send_message_impl(slot_entry,
                       {
                           .payloads = {user_message(*cmd_status.user_code)},
                           .msg_type = message_type_e::PRINTABLE,
-                      });
+                          })) {
+      socket_pool_.release(slot);
+    }
   }
   return cmd_status;
 }
 
-auto NetworkEngine::send_message_impl(const ConnectionEntry& connection_entry,
-                                      size_t slot,
+auto NetworkEngine::send_message_impl(ConnectionEntry& connection_entry,
                                       const OutgoingMessage& message) -> bool {
   if (auto write_result =
           connection_entry.socket_handler_.write_to_user(message);
       !write_result) {
     LOG("Unable to write message into socket");
     LOG(write_result.error().full_report());
-    deferred_actions_.schedule(std::make_unique<Cleanup_Connection>(slot),
-                               *this);
+    connection_entry.reset();
     return false;
   }
   return true;
@@ -408,7 +338,7 @@ void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
 
 void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {
   std::scoped_lock lock(engine.m_);
-  engine.release_client(*engine.socket_pool_.get_object(slot_));
+  engine.release_client(*engine.socket_pool_.get_object(slot_), slot_);
 }
 
 } // namespace bsm

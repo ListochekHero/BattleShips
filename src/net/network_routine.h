@@ -82,9 +82,11 @@ public:
             .type = entry->connection_type_,
         };
         if (std::invoke(filter, meta)) {
-          if (send_message_impl(*entry, current_slot, message)) {
+          if (send_message_impl(*entry, message)) {
             delivery_report.delivered++;
           } else {
+            entry->reset();
+            socket_pool_.release(current_slot);
             delivery_report.failed++;
           }
         }
@@ -116,18 +118,9 @@ public:
 
 private:
   auto init_epoll() -> Ev;
-  auto init_epoll_wrapper() -> Ev;
-  template <typename... Args>
-  auto emplace_new_entry_to_pool(Args&&...) -> std::expected<size_t, Error>;
-  auto add_to_socket_pool() -> std::expected<size_t, Error>;
-  auto add_to_socket_pool(int socket_fd, end_point_e socket_type)
-      -> std::expected<size_t, Error>;
-  auto free_slot_entry(ConnectionEntry& slot_entry) -> Ev;
-  auto find_spot_for_new_client(int client_socket, end_point_e socket_type)
-      -> std::expected<size_t, Error>;
-  auto subscribe_to_events(ConnectionEntry& slot_entry) -> Ev;
+  auto subscribe_to_events(ConnectionEntry& slot_entry, size_t slot) -> Ev;
   void unsubscribe_from_events(ConnectionEntry& slot_entry);
-  void release_client(ConnectionEntry& slot_entry);
+  void release_client(ConnectionEntry& slot_entry, size_t slot);
   auto register_client(end_point_e socket_type, int client_socket)
       -> std::expected<size_t, Error>;
   void register_clients(std::vector<int>& new_clients);
@@ -136,8 +129,8 @@ private:
   void process_client_socket(size_t slot);
   auto process_message(ConnectionEntry& slot_entry, size_t slot,
                        ReadResult& message) -> CommandStatus;
-  auto send_message_impl(const ConnectionEntry& connection_entry, size_t slot,
-                         const OutgoingMessage& message) -> bool;
+  static auto send_message_impl(ConnectionEntry& connection_entry,
+                                const OutgoingMessage& message) -> bool;
 
   class Cleanup_Connection : public DeferredAction {
   public:
