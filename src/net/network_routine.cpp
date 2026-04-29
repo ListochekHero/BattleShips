@@ -46,21 +46,25 @@ auto ConnectionEntry::operator=(ConnectionEntry&& other) noexcept
   return *this;
 }
 
-auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
+auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
     -> std::expected<ConnectionView, Error> {
-  std::expected<size_t, Error> socket_slot{};
-  if (parrent_socket != 0) {
-    socket_slot =
-        socket_pool_.push_to_pool(ConnectionEntry{socket_type, parrent_socket});
+  std::expected<size_t, Error> root_socket_slot{};
+  if (root_socket != 0) {
+    root_socket_slot = connection_pool_.push_to_pool(
+        ConnectionEntry{socket_type, root_socket});
   } else {
-    socket_slot = socket_pool_.push_to_pool(ConnectionEntry{});
+    root_socket_slot = connection_pool_.push_to_pool(ConnectionEntry{});
   }
-  if (!socket_slot) {
-    return std::unexpected(std::move(socket_slot)
+  if (!root_socket_slot) {
+    return std::unexpected(
+        std::move(root_socket_slot)
                                .error()
-                               .add_context("Unable to add socket to pool"));
+            .add_context("Unable to init NetworkEngine: failed to push socket "
+                         "to connection pool"));
   }
-  ConnectionEntry* root_connection{socket_pool_.get_object(*socket_slot)};
+  ConnectionEntry* root_connection{
+      connection_pool_.get_object(*root_socket_slot),
+  };
   switch (socket_type) {
   case end_point_e::NONE:
   case end_point_e::TO_CLIENT:
@@ -70,39 +74,41 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int parrent_socket)
     root_connection->connection_type_ = end_point_e::TO_PARENT;
     break;
   case end_point_e::LISTENER:
-    if (auto result = root_connection->socket_handler_.setup_listener(
+    if (auto setup_error = root_connection->socket_handler_.setup_listener(
             Config::instance().get_line("port"));
-        !result) {
+        setup_error) {
       return std::unexpected(
-          std::move(result).error().add_context("Cant setup listener"));
+          std::move(setup_error)
+              ->add_context("Unable to init NetworkEngine: failed to setup "
+                            "listener socket for server"));
     }
     root_connection->connection_type_ = end_point_e::LISTENER;
     break;
   case end_point_e::TO_SERVER:
-    if (auto result = root_connection->socket_handler_.setup_client();
-        !result) {
-      return std::unexpected(
-          std::move(result).error().add_context("Cant setup client"));
+    if (auto error = root_connection->socket_handler_.setup_client(); error) {
+      return std::unexpected(std::move(error)->add_context(
+          "Unable to init NetworkEngine: failed to setup client socket"));
     }
     root_connection->connection_type_ = end_point_e::TO_SERVER;
     break;
   }
-  if (auto result = init_epoll(); !result) {
-    return std::unexpected(
-        std::move(result).error().add_context("Unable to init epoll"));
+  if (auto error = init_epoll(); error) {
+    return std::unexpected(std::move(error)->add_context(
+        "Unable to init NetworkEngine: failed to init epoll"));
   }
-  return ConnectionView{*socket_slot};
+  return ConnectionView{*root_socket_slot};
 }
 
-void NetworkEngine::set_message_handler(MessageHandler msg_handler) {
-  on_message_callback_ = std::move(msg_handler);
+void NetworkEngine::set_message_handler(MessageHandler message_handler) {
+  on_message_callback_ = std::move(message_handler);
 }
 
-void NetworkEngine::run() {
+void NetworkEngine::run_event_loop() {
   while (true) {
-    auto wait_result = epoll_handler_.wait_for_events(MAX_EVENTS);
+    auto wait_result =
+        epoll_handler_.wait_for_events(MAX_EVENTS); // add this to Config
     if (!wait_result) {
-      LOG("Cant get events");
+      LOG("Error in run_event_loop");
       LOG(wait_result.error().full_report());
     } else {
       process_events(*wait_result);

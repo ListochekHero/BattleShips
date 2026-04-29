@@ -56,13 +56,14 @@ public:
   NetworkEngine(AtomicQueue<size_t>& network_q,
                 AtomicQueue<task_tag_e>& available_q)
       : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
-  auto init_engine(end_point_e socket_type, int parrent_socket)
+  auto init_engine(end_point_e socket_type, int root_socket)
       -> std::expected<ConnectionView, Error>;
   using MessageHandler = std::function<CommandStatus(const CommandContext&)>;
-  void set_message_handler(MessageHandler msg_handler);
-  void run();
-  auto send_message_to(const ConnectionView& conn_view,
-                       const OutgoingMessage& message) -> bool;
+  void set_message_handler(MessageHandler message_handler);
+  void run_event_loop();
+  auto send_message_to(const ConnectionView& recipient_view,
+                       const OutgoingMessage& outgoing_message)
+      -> std::optional<Error>;
   auto attach_socket(int socket, end_point_e socket_type)
       -> std::expected<ConnectionView, Error>;
   auto transfer(const ConnectionView& destination_view,
