@@ -116,25 +116,29 @@ void NetworkEngine::run_event_loop() {
   }
 }
 
-auto NetworkEngine::send_message_to(const ConnectionView& view,
-                                    const OutgoingMessage& message) -> bool {
-  auto slot{view.get_slot()};
-  auto& entry{*socket_pool_.get_object(slot)};
-  bool delivered{send_message_impl(entry, message)};
-  if (!delivered) {
-    socket_pool_.release(slot);
+auto NetworkEngine::send_message_to(const ConnectionView& recipient_view,
+                                    const OutgoingMessage& outgoing_message)
+    -> std::optional<Error> {
+  auto recipient_slot{recipient_view.get_slot()};
+  auto& recipient_connection{*connection_pool_.get_object(recipient_slot)};
+  auto error{send_message_impl(recipient_connection, outgoing_message)};
+  if (error) {
+    release_connection(
+        recipient_connection, // for now, if we cannot send message via
+        recipient_slot);      // connection, it's better to just drop it
+    return error;
   }
-  return delivered;
+  return std::nullopt;
 }
 
 auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
     -> std::expected<ConnectionView, Error> {
-  auto slot_index = register_client(socket_type, socket);
-  if (!slot_index) {
-    return std::unexpected(slot_index.error().add_context(
-        "Unable to attach new socket to net_engine"));
+  auto registration_slot = register_connection(socket_type, socket);
+  if (!registration_slot) {
+    return std::unexpected(registration_slot.error().add_context(
+        "Unable to attach socket: failed to register connection"));
   }
-  return ConnectionView{*slot_index};
+  return ConnectionView{*registration_slot};
 }
 
 auto NetworkEngine::transfer(const ConnectionView& destination_view,
