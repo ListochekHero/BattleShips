@@ -15,7 +15,7 @@ auto c_error_string() -> std::string {
 }
 
 auto make_error_c(std::string message) -> Error {
-  return {.backtrace = {message, c_error_string()}, .loc_errno = errno};
+  return {.backtrace = {c_error_string(), message}, .loc_errno = errno};
 }
 
 auto user_message(user_error_e user) -> std::string_view {

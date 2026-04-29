@@ -41,12 +41,22 @@ auto parse(const std::string& message) -> std::expected<std::string, Error>;
 auto generate_name() -> std::expected<std::string, Error>;
 template <typename T, typename E>
 void drop_result(std::expected<T, E>&& /*unused*/) {}
-template <typename T, typename E>
-void success_or_terminate(std::expected<T, E>&& r) {
-  if (!r) {
-    LOG(r.error().full_report());
-    LOG("Critical error occured, terminating...");
-    std::terminate();
+
+void plain_terminate() {
+  LOG("Critical error occured, terminating...");
+  std::terminate();
+}
+void success_or_terminate(const std::optional<Error>& error) {
+  if (error) {
+    LOG(error->full_report());
+    plain_terminate();
+  }
+}
+template <typename F, typename U>
+void success_or_terminate(std::expected<F, U>&& result) {
+  if (result) {
+    LOG(result.error().full_report());
+    plain_terminate();
   }
 }
 
