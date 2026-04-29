@@ -30,16 +30,17 @@ public:
   ~SocketHandler();
   SocketHandler(SocketHandler&&) noexcept;
   auto operator=(SocketHandler&&) noexcept -> SocketHandler&;
-  auto setup_listener(int port) -> Ev;
-  auto setup_client() -> Ev;
+  auto setup_listener(int port) -> std::optional<Error>;
+  auto setup_client() -> std::optional<Error>;
   [[nodiscard]] auto get_socket() const -> int;
   [[nodiscard]] auto get_socket_status() const -> socket_status_e;
   void set_socket_status(socket_status_e socket_status);
   [[nodiscard]] auto accept_connections() const
       -> std::expected<std::vector<int>, Error>;
-  auto read_user_input() -> std::expected<ReadResult, Error>;
-  [[nodiscard]] auto write_to_user(const OutgoingMessage& msg) const -> Ev;
-  auto remove_cloexec() -> Ev;
+  auto receive_message() -> std::expected<ReadResult, Error>;
+  [[nodiscard]] auto send_message(const OutgoingMessage& msg) const
+      -> std::optional<Error>;
+  auto remove_cloexec() const -> std::optional<Error>;
   void reset_with_new(int new_socket);
   void reset_to_empty();
 
@@ -60,10 +61,13 @@ class EpollHandler {
 public:
   EpollHandler() = default;
   ~EpollHandler();
-  auto init() -> Ev;
-  auto add_socket(SocketHandler& socket_handler, size_t slot) const -> Ev;
-  auto rearm_socket(SocketHandler& socket_handler, size_t slot) const -> Ev;
-  auto remove_socket(SocketHandler& socket_handler) const -> Ev;
+  auto init() -> std::optional<Error>;
+  auto add_socket(SocketHandler& socket_handler, size_t slot) const
+      -> std::optional<Error>;
+  auto rearm_socket(const SocketHandler& socket_handler, size_t slot) const
+      -> std::optional<Error>;
+  auto remove_socket(SocketHandler& socket_handler) const
+      -> std::optional<Error>;
   [[nodiscard]] auto wait_for_events(size_t max_events) const
       -> std::expected<std::vector<size_t>, Error>;
 
