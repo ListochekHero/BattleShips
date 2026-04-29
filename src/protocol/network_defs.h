@@ -11,7 +11,7 @@ enum class end_point_e : uint8_t {
   TO_LOBBY = 1 << 1,
   TO_PARENT = 1 << 2,
   LISTENER = 1 << 3,
-  TO_SERVER = 1 << 4
+  TO_SERVER = 1 << 4,
 };
 
 } // namespace bsm

@@ -16,6 +16,21 @@ private:
   size_t slot_{std::numeric_limits<std::size_t>::max()};
 };
 
+struct DeliveryReport {
+  size_t delivered{0};
+  size_t failed{0};
+};
+
+struct RegistrationReport {
+  size_t registered{0};
+  size_t failed{0};
+};
+
+struct TransferResult {
+  bool transferred{false};
+  bool destination_conn_preserved{true};
+  bool source_conn_preserved{true};
+};
 } // namespace bsm
 
 #endif

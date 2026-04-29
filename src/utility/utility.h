@@ -35,11 +35,6 @@ struct CommandContext {
   const ReadResult& message;
 };
 
-struct DeliveryReport {
-  size_t delivered{0};
-  size_t failed{0};
-};
-
 auto is_file_exist(const std::string& filename) -> bool;
 auto generate_conn_code() -> int64_t;
 auto parse(const std::string& message) -> std::expected<std::string, Error>;
