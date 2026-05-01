@@ -58,7 +58,7 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
   if (!root_socket_slot) {
     return std::unexpected(
         std::move(root_socket_slot)
-                               .error()
+            .error()
             .add_context("Unable to init NetworkEngine: failed to push socket "
                          "to connection pool"));
   }
@@ -160,10 +160,10 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
   if (auto transfer_error = send_message_impl(
           destination_conn,
           {
-          .payloads = {"\\socket"},
-          .msg_type = message_type_e::SOCKET,
-          .socket = source_conn.socket_handler_.get_socket(),
-      });
+              .payloads = {"\\socket"},
+              .msg_type = message_type_e::SOCKET,
+              .socket = source_conn.socket_handler_.get_socket(),
+          });
       transfer_error) {
     transfer_error->add_context("Unable to transfer socket: failed to send "
                                 "socket to recipient");
@@ -236,7 +236,7 @@ auto NetworkEngine::unsubscribe_from_events(ConnectionEntry& connection)
     error->add_context("Unable to unsubcribe connection from events: failed to "
                        "remove socket from epoll");
   }
-                    return {};
+  return {};
 }
 
 void NetworkEngine::release_connection(ConnectionEntry& connection,
@@ -258,7 +258,7 @@ auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
   if (!push_result) {
     return std::unexpected(
         std::move(push_result)
-                               .error()
+            .error()
             .add_context("Unable to register new connection: failed to push to "
                          "connection pool"));
   }
@@ -269,10 +269,10 @@ auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
     subscribe_error->add_context(
         "Unable to register new connection: failed to subscribe to events");
     send_message_impl(connection,
-                          {
+                      {
                           .payloads = {user_message(user_error_e::GENERIC)},
-                              .msg_type = message_type_e::PRINTABLE,
-                          });
+                          .msg_type = message_type_e::PRINTABLE,
+                      });
     connection.reset();
     connection_pool_.release(connection_slot);
     return std::unexpected(*subscribe_error);
@@ -314,66 +314,96 @@ void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
   }
 }
 
-void NetworkEngine::process_server_socket(size_t slot) {
-  drop_result(socket_pool_.get_object(slot)
-                  ->socket_handler_.accept_connections()
-                  .and_then([this](auto&& new_clients) -> Ev {
-                    register_clients(new_clients);
-                    return {};
-                  })
-                  .or_else([](auto&& error) -> Ev {
-                    LOG(error.full_report());
-                    LOG("Cant accept new connections");
-                    return {};
-                  }));
-  drop_result(epoll_handler_.rearm_socket(
-      socket_pool_.get_object(slot)->socket_handler_, slot));
-}
-
-void NetworkEngine::process_client_socket(size_t slot) {
-  CommandStatus cmd_status{.command_status_v = cmd_se::CONTINUE};
-  while (cmd_status.command_status_v == cmd_se::CONTINUE &&
-         socket_pool_.get_object(slot)->socket_handler_.get_socket_status() ==
-             socket_status_e::ALIVE) {
-    ConnectionEntry& entry = *socket_pool_.get_object(slot);
-    auto read_result = entry.socket_handler_.read_user_input();
-    if (!read_result) {
-      LOG(read_result.error().full_report());
-      break;
-    }
-    cmd_status = process_message(entry, slot, *read_result);
+void NetworkEngine::process_server_socket(
+    const ConnectionEntry& server_connection, size_t server_slot) {
+  auto accept_result{server_connection.socket_handler_.accept_connections()};
+  if (!accept_result) {
+    accept_result.error().add_context(
+        "Unable to process server socket: failed to accept new connections");
+    LOG(accept_result.error().full_report());
+    return;
   }
+  auto registation_report{register_connections(*accept_result)};
+  LOG(std::format("Accepted connections: {}, Rejected connections: {}",
+                  registation_report.registered, registation_report.failed));
+  success_or_terminate(epoll_handler_.rearm_socket(
+      server_connection.socket_handler_, server_slot));
 }
 
-auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
-                                    ReadResult& message) -> CommandStatus {
-  switch (message.status) {
-  case bsm::message_status_e::EMPTY:
-  case bsm::message_status_e::WOULDBLOCK:
-    drop_result(epoll_handler_.rearm_socket(slot_entry.socket_handler_, slot));
-    return {.command_status_v = cmd_se::TERMINATE};
+auto NetworkEngine::process_connection_impl(size_t pool_slot)
+    -> std::optional<Error> {
+  ActionResult process_result{};
+  ConnectionEntry& pending_connection = *connection_pool_.get_object(pool_slot);
+  while (pending_connection.socket_handler_.is_socket_alive() ||
+         process_result.action_status == ActionStatus::CONTINUE) {
+    auto receive_result = pending_connection.socket_handler_.receive_message();
+    if (!receive_result) {
+      release_connection(pending_connection, pool_slot);
+      return std::move(receive_result)
+          .error()
+          .add_context(
+              "Unable to process connection: failed to receive message");
+    }
+    process_result =
+        process_message(pending_connection, pool_slot, *receive_result);
+    if (process_result.user_code) {
+      send_message_impl(
+          pending_connection,
+          {
+              .payloads = {user_message(*process_result.user_code)},
+              .msg_type = message_type_e::PRINTABLE,
+          });
+    }
+    if (process_result.conn_status == ConnectionStatus::RELEASE) {
+      release_connection(pending_connection, pool_slot);
+    }
+    if (process_result.error) {
+      process_result.error->add_context(
+          "Error occured while processing connection: failed to process "
+          "message");
+      return std::move(process_result).error;
+    }
+  }
+  return std::nullopt;
+}
+
+auto NetworkEngine::process_message(ConnectionEntry& pending_connection,
+                                    size_t pool_slot,
+                                    ReceiveResult& received_message)
+    -> ActionResult {
+  ActionResult process_result{};
+  switch (received_message.status) {
+  case message_status_e::EMPTY:
+  case message_status_e::WOULDBLOCK:
+    if (auto rearm_error{
+            epoll_handler_.rearm_socket(pending_connection.socket_handler_,
+                                        pool_slot),
+        };
+        rearm_error) {
+      rearm_error->add_context(
+          "No more data to receive from connection but failed to rearm socket, "
+          "marking socket for releasing");
+      process_result.error = std::move(rearm_error);
+      process_result.conn_status = ConnectionStatus::RELEASE;
+    } else {
+      process_result.action_status = ActionStatus::TERMINATE;
+      process_result.conn_status = ConnectionStatus::KEEP;
+    }
+    return process_result;
   case message_status_e::DISCONNECTED:
-    release_client(slot_entry, slot);
-    return {.command_status_v = command_status_e::TERMINATE};
-  case bsm::message_status_e::DATA:
+    process_result.conn_status = ConnectionStatus::RELEASE;
+    return process_result;
+  case message_status_e::DATA:
     break;
   }
-  ConnectionView connection{slot};
-  CommandContext context{.client_view = connection, .message = message};
-  CommandStatus cmd_status = on_message_callback_(
-      context); //<-CallBack to Server, process user message
-  if (cmd_status.error) {
-    LOG("Unable to handle client command: " + context.message.payload);
-    LOG(cmd_status.error->full_report());
-    if (send_message_impl(slot_entry,
-                          {
-                              .payloads = {user_message(*cmd_status.user_code)},
-                              .msg_type = message_type_e::PRINTABLE,
-                          })) {
-      socket_pool_.release(slot);
-    }
-  }
-  return cmd_status;
+  ConnectionView pending_view{pool_slot};
+  ActionContext action_context{
+      .pending_view = pending_view,
+      .received_message = received_message,
+  };
+  process_result = on_message_callback_(
+      action_context); //<-CallBack to Server, process user message
+  return process_result;
 }
 
 auto NetworkEngine::send_message_impl(ConnectionEntry& connection_entry,
@@ -383,7 +413,7 @@ auto NetworkEngine::send_message_impl(ConnectionEntry& connection_entry,
       error) {
     return error->add_context("Unable to send message via connection: failed "
                               "to send message to socket");
-}
+  }
   return std::nullopt;
 }
 

@@ -20,6 +20,7 @@
 #include <limits>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -76,7 +77,7 @@ public:
   auto send_message(const OutgoingMessage& message, Filter&& filter)
       -> DeliveryReport {
     DeliveryReport delivery_report;
-      size_t current_slot{0};
+    size_t current_slot{0};
     for (auto* entry : connection_pool_) {
       if (entry->connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
@@ -132,24 +133,21 @@ private:
   auto register_connections(std::vector<int>& new_sockets)
       -> RegistrationReport;
   void process_events(const std::vector<size_t>& event_slots);
-  void process_server_socket(size_t slot);
-  void process_client_socket(size_t slot);
-  auto process_message(ConnectionEntry& slot_entry, size_t slot,
-                       ReadResult& message) -> CommandStatus;
+  void process_server_socket(const ConnectionEntry& server_connection,
+                             size_t server_slot);
+  auto process_connection_impl(size_t pool_slot) -> std::optional<Error>;
+  auto process_message(ConnectionEntry& pending_connection, size_t pool_slot,
+                       ReceiveResult& received_message) -> ActionResult;
   static auto send_message_impl(ConnectionEntry& connection_entry,
                                 const OutgoingMessage& message)
       -> std::optional<Error>;
 
-  ObjectPool<ConnectionEntry> socket_pool_;
+  ObjectPool<ConnectionEntry> connection_pool_;
   EpollHandler epoll_handler_;
   MessageHandler on_message_callback_;
-  DeferredActions deferred_actions_;
 
   AtomicQueue<size_t>& network_raw_tasks_;
   AtomicQueue<task_tag_e>& available_task_tags_;
-
-  std::mutex m_;
-  std::condition_variable cv_;
 };
 
 } // namespace bsm
