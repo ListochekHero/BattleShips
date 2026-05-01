@@ -143,40 +143,49 @@ auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
 
 auto NetworkEngine::transfer(const ConnectionView& destination_view,
                              const ConnectionView& source_view)
-    -> CommandStatus {
-  auto& destination_conn{*socket_pool_.get_object(destination_view.get_slot())};
+    -> TransferResult {
+  TransferResult transfer_result{};
+  auto& destination_conn{
+      *connection_pool_.get_object(destination_view.get_slot()),
+  };
   size_t source_slot{source_view.get_slot()};
-  auto& source_conn{*socket_pool_.get_object(source_slot)};
+  auto& source_conn{*connection_pool_.get_object(source_slot)};
   auto source_conn_guard{
       scope_guard([&source_conn, this, source_slot]() -> auto {
         source_conn.reset();
-        socket_pool_.release(source_slot);
+        connection_pool_.release(source_slot);
       }),
   };
   unsubscribe_from_events(source_conn);
-  if (auto result = destination_conn.socket_handler_.write_to_user({
+  if (auto transfer_error = send_message_impl(
+          destination_conn,
+          {
           .payloads = {"\\socket"},
           .msg_type = message_type_e::SOCKET,
           .socket = source_conn.socket_handler_.get_socket(),
       });
-      !result) {
-    LOG(result.error().full_report());
-    LOG("Unable to transfer socket, trying to recover...");
-    if (auto result = subscribe_to_events(source_conn, source_slot); !result) {
-      LOG(result.error().full_report());
-      LOG("Error while trying to recover socket, closing connection");
-      return {
-          .command_status_v = cmd_se::TERMINATE,
-          .error = Error{.backtrace = {"Transfer failed, connection lost"}},
-      };
+      transfer_error) {
+    transfer_error->add_context("Unable to transfer socket: failed to send "
+                                "socket to recipient");
+    transfer_error->add_context("Releasing recipient connection");
+    release_connection(destination_conn, destination_view.get_slot());
+    transfer_result.destination_conn_preserved = false;
+    transfer_error->add_context("Trying to recover source connection...");
+    if (auto recover_error = subscribe_to_events(source_conn, source_slot);
+        recover_error) {
+      transfer_error->add_context(recover_error->full_report());
+      transfer_error->add_context("Unable to recover source connection: failed "
+                                  "to subscribe back to events, "
+                                  "releasing source connection");
+      release_connection(source_conn, source_slot);
+      transfer_result.source_conn_preserved = false;
+    } else {
+      transfer_error->add_context("Source connection preserved");
     }
     source_conn_guard.dismiss();
-    return {
-        .command_status_v = cmd_se::CONTINUE,
-        .error = Error{.backtrace = {"Transfer failed, connection preserved"}},
-    };
+    LOG(transfer_error->full_report());
   }
-  return {.command_status_v = cmd_se::TERMINATE};
+  return transfer_result;
 }
 
 void NetworkEngine::process_client(const ConnectionView& view) {
