@@ -131,18 +131,8 @@ private:
   auto process_message(ConnectionEntry& slot_entry, size_t slot,
                        ReadResult& message) -> CommandStatus;
   static auto send_message_impl(ConnectionEntry& connection_entry,
-                                const OutgoingMessage& message) -> bool;
-
-  class Cleanup_Connection : public DeferredAction {
-  public:
-    explicit Cleanup_Connection(size_t slot) : slot_(slot) {}
-    explicit Cleanup_Connection(ConnectionView view) : slot_(view.get_slot()) {}
-    void prepare(NetworkEngine& engine) override;
-    void execute(NetworkEngine& engine) override;
-
-  private:
-    size_t slot_;
-  };
+                                const OutgoingMessage& message)
+      -> std::optional<Error>;
 
   ObjectPool<ConnectionEntry> socket_pool_;
   EpollHandler epoll_handler_;

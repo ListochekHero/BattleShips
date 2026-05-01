@@ -332,29 +332,14 @@ auto NetworkEngine::process_message(ConnectionEntry& slot_entry, size_t slot,
 }
 
 auto NetworkEngine::send_message_impl(ConnectionEntry& connection_entry,
-                                      const OutgoingMessage& message) -> bool {
-  if (auto write_result =
-          connection_entry.socket_handler_.write_to_user(message);
-      !write_result) {
-    LOG("Unable to write message into socket");
-    LOG(write_result.error().full_report());
-    connection_entry.reset();
-    return false;
-  }
-  return true;
+                                      const OutgoingMessage& message)
+    -> std::optional<Error> {
+  if (auto error{connection_entry.socket_handler_.send_message(message)};
+      error) {
+    return error->add_context("Unable to send message via connection: failed "
+                              "to send message to socket");
 }
-
-void NetworkEngine::Cleanup_Connection::prepare(NetworkEngine& engine) {
-  std::scoped_lock lock(engine.m_);
-  ConnectionEntry& entry{*engine.socket_pool_.get_object(slot_)};
-  entry.generation_++;
-  entry.connection_type_ = end_point_e::NONE;
-  entry.socket_handler_.set_socket_status(socket_status_e::CLOSED);
-}
-
-void NetworkEngine::Cleanup_Connection::execute(NetworkEngine& engine) {
-  std::scoped_lock lock(engine.m_);
-  engine.release_client(*engine.socket_pool_.get_object(slot_), slot_);
+  return std::nullopt;
 }
 
 } // namespace bsm
