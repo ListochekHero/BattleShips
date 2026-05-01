@@ -188,92 +188,128 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
   return transfer_result;
 }
 
-void NetworkEngine::process_client(const ConnectionView& view) {
-  process_client_socket(view.get_slot());
+auto NetworkEngine::process_connection(const ConnectionView& pending_view)
+    -> std::optional<Error> {
+  if (auto process_error{process_connection_impl(pending_view.get_slot())};
+      process_error) {
+    return process_error;
+  }
+  return std::nullopt;
 }
 
 // private:
-auto NetworkEngine::init_epoll() -> Ev {
-  return epoll_handler_.init()
-      .transform_error([](auto&& error) -> auto {
-        return error.add_context("Cant init epoll_handler");
-      })
-      .and_then([this]() -> Ev {
-        return this->epoll_handler_
-            .add_socket(socket_pool_.get_object(0)->socket_handler_, 0)
-            .transform_error([](auto&& error) -> auto {
-              return error.add_context("Cant add server socket to epoll");
-            });
-      });
-}
-
-auto NetworkEngine::subscribe_to_events(ConnectionEntry& slot_entry,
-                                        size_t slot) -> Ev {
-  return epoll_handler_.add_socket(slot_entry.socket_handler_, slot)
-      .or_else([&](auto&& error) -> Ev {
-        return std::unexpected(
-            error.add_context("Unable to subscribe new client to epoll"));
-      });
-}
-
-void NetworkEngine::unsubscribe_from_events(ConnectionEntry& slot_entry) {
-  drop_result(epoll_handler_.remove_socket(slot_entry.socket_handler_)
-                  .or_else([](auto&& error) -> Ev {
-                    LOG(error.full_report());
-                    return {};
-                  }));
-}
-
-void NetworkEngine::release_client(ConnectionEntry& slot_entry, size_t slot) {
-  unsubscribe_from_events(slot_entry);
-  slot_entry.reset();
-  socket_pool_.release(slot);
-}
-
-auto NetworkEngine::register_client(end_point_e socket_type, int client_socket)
-    -> std::expected<size_t, Error> {
-  auto new_client_spot{
-      socket_pool_.push_to_pool(ConnectionEntry{socket_type, client_socket}),
-  };
-  if (!new_client_spot) {
-    return std::unexpected(std::move(new_client_spot)
-                               .error()
-                               .add_context("Unable to register new client"));
+auto NetworkEngine::init_epoll() -> std::optional<Error> {
+  if (auto init_error{epoll_handler_.init()}; init_error) {
+    return init_error->add_context(
+        "Unable to init epoll for Engine: failed to init");
   }
-  auto& new_client_entry{*socket_pool_.get_object(*new_client_spot)};
-  return subscribe_to_events(new_client_entry, *new_client_spot)
-      .transform([&]() -> size_t { return *new_client_spot; })
-      .or_else([&](auto&& error) -> std::expected<size_t, Error> {
-        LOG(error.full_report());
-        send_message_impl(new_client_entry,
+  size_t root_slot{0};
+  auto& root_connection{*connection_pool_.get_object(root_slot)};
+  if (auto adding_error{
+          subscribe_to_events(root_connection, root_slot),
+      };
+      adding_error) {
+    return adding_error->add_context("Unable to init epoll for Engine: failed "
+                                     "to subscribe root connection to events");
+  }
+  return std::nullopt;
+}
+
+auto NetworkEngine::subscribe_to_events(ConnectionEntry& connection,
+                                        size_t pool_slot)
+    -> std::optional<Error> {
+  if (auto adding_error{
+          epoll_handler_.add_socket(connection.socket_handler_, pool_slot),
+      };
+      adding_error) {
+    return adding_error->add_context(
+        "Unable to subscribe connection to events: failed "
+        "to add socket to epoll");
+  }
+  return std::nullopt;
+}
+
+auto NetworkEngine::unsubscribe_from_events(ConnectionEntry& connection)
+    -> std::optional<Error> {
+  if (auto error{epoll_handler_.remove_socket(connection.socket_handler_)};
+      error) {
+    error->add_context("Unable to unsubcribe connection from events: failed to "
+                       "remove socket from epoll");
+  }
+                    return {};
+}
+
+void NetworkEngine::release_connection(ConnectionEntry& connection,
+                                       size_t pool_slot) {
+  if (auto unsubscribe_error{unsubscribe_from_events(connection)};
+      unsubscribe_error) {
+    LOG(unsubscribe_error
+            ->full_report()); // For now just ignore errors from epoll
+  }
+  connection.reset();
+  connection_pool_.release(pool_slot);
+}
+
+auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
+    -> std::expected<size_t, Error> {
+  auto push_result{
+      connection_pool_.push_to_pool(ConnectionEntry{socket_type, socket}),
+  };
+  if (!push_result) {
+    return std::unexpected(
+        std::move(push_result)
+                               .error()
+            .add_context("Unable to register new connection: failed to push to "
+                         "connection pool"));
+  }
+  size_t connection_slot{*push_result};
+  auto& connection{*connection_pool_.get_object(connection_slot)};
+  if (auto subscribe_error{subscribe_to_events(connection, connection_slot)};
+      subscribe_error) {
+    subscribe_error->add_context(
+        "Unable to register new connection: failed to subscribe to events");
+    send_message_impl(connection,
                           {
-                              .payloads = {user_message(us_e::GENERIC)},
+                          .payloads = {user_message(user_error_e::GENERIC)},
                               .msg_type = message_type_e::PRINTABLE,
                           });
-        new_client_entry.reset();
-        socket_pool_.release(*new_client_spot);
-        return std::unexpected(
-            Error{.backtrace = {"Unable to add new client to epoll"}});
-      });
+    connection.reset();
+    connection_pool_.release(connection_slot);
+    return std::unexpected(*subscribe_error);
+  }
+  return connection_slot;
 }
 
-void NetworkEngine::register_clients(std::vector<int>& new_clients) {
-  for (int client : new_clients) {
-    if (auto result = register_client(end_point_e::TO_CLIENT, client);
-        !result) {
-      LOG(result.error().full_report());
+auto NetworkEngine::register_connections(std::vector<int>& new_sockets)
+    -> RegistrationReport {
+  RegistrationReport registration_report;
+  for (int socket : new_sockets) {
+    if (auto registration_result{
+            register_connection(end_point_e::TO_CLIENT, socket),
+        };
+        !registration_result) {
+      LOG(registration_result.error().full_report());
+      registration_report.failed++;
+    } else {
+      registration_report.registered++;
     }
   }
+  return registration_report;
 }
 
 void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
-    if (socket_pool_.get_object(slot)->connection_type_ ==
-        end_point_e::LISTENER) {
-      process_server_socket(slot);
+    auto& pending_connection{*connection_pool_.get_object(slot)};
+    if (pending_connection.connection_type_ == end_point_e::LISTENER) {
+      process_server_socket(pending_connection, slot);
     } else {
-      network_raw_tasks_.push(new size_t(slot));
-      available_task_tags_.push(new task_tag_e(task_tag_e::NETWORK));
+      auto* task_slot{new (std::nothrow) size_t(slot)};
+      auto* task_tag{new (std::nothrow) task_tag_e(task_tag_e::NETWORK)};
+      if (task_slot == nullptr || task_tag == nullptr) {
+        plain_terminate();
+      }
+      network_raw_tasks_.push(task_slot);
+      available_task_tags_.push(task_tag);
     }
   }
 }

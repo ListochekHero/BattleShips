@@ -58,7 +58,7 @@ public:
       : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
   auto init_engine(end_point_e socket_type, int root_socket)
       -> std::expected<ConnectionView, Error>;
-  using MessageHandler = std::function<CommandStatus(const CommandContext&)>;
+  using MessageHandler = std::function<ActionResult(const ActionContext&)>;
   void set_message_handler(MessageHandler message_handler);
   void run_event_loop();
   auto send_message_to(const ConnectionView& recipient_view,
@@ -67,28 +67,31 @@ public:
   auto attach_socket(int socket, end_point_e socket_type)
       -> std::expected<ConnectionView, Error>;
   auto transfer(const ConnectionView& destination_view,
-                const ConnectionView& source_view) -> CommandStatus;
-  void process_client(const ConnectionView& view);
+                const ConnectionView& source_view) -> TransferResult;
+  auto process_connection(const ConnectionView& pending_view)
+      -> std::optional<Error>;
 
   template <typename Filter>
     requires std::predicate<Filter, const ConnectionMeta&>
   auto send_message(const OutgoingMessage& message, Filter&& filter)
       -> DeliveryReport {
     DeliveryReport delivery_report;
-    for (auto* entry : socket_pool_) {
       size_t current_slot{0};
+    for (auto* entry : connection_pool_) {
       if (entry->connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
             .slot = current_slot,
             .type = entry->connection_type_,
         };
         if (std::invoke(filter, meta)) {
-          if (send_message_impl(*entry, message)) {
-            delivery_report.delivered++;
-          } else {
+          auto send_error{send_message_impl(*entry, message)};
+          if (send_error) {
+            LOG(send_error->full_report());
             entry->reset();
-            socket_pool_.release(current_slot);
+            connection_pool_.release(current_slot);
             delivery_report.failed++;
+          } else {
+            delivery_report.delivered++;
           }
         }
       }
@@ -101,7 +104,7 @@ public:
     requires std::predicate<Filter, const ConnectionMeta&>
   auto get_view_by_type(Filter&& filter)
       -> std::expected<ConnectionView, Error> {
-    for (auto* entry : socket_pool_) {
+    for (auto* entry : connection_pool_) {
       size_t current_slot{0};
       if (entry->connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
@@ -118,13 +121,16 @@ public:
   }
 
 private:
-  auto init_epoll() -> Ev;
-  auto subscribe_to_events(ConnectionEntry& slot_entry, size_t slot) -> Ev;
-  void unsubscribe_from_events(ConnectionEntry& slot_entry);
-  void release_client(ConnectionEntry& slot_entry, size_t slot);
-  auto register_client(end_point_e socket_type, int client_socket)
+  auto init_epoll() -> std::optional<Error>;
+  auto subscribe_to_events(ConnectionEntry& connection, size_t pool_slot)
+      -> std::optional<Error>;
+  auto unsubscribe_from_events(ConnectionEntry& connection)
+      -> std::optional<Error>;
+  void release_connection(ConnectionEntry& connection, size_t pool_slot);
+  auto register_connection(end_point_e socket_type, int client_socket)
       -> std::expected<size_t, Error>;
-  void register_clients(std::vector<int>& new_clients);
+  auto register_connections(std::vector<int>& new_sockets)
+      -> RegistrationReport;
   void process_events(const std::vector<size_t>& event_slots);
   void process_server_socket(size_t slot);
   void process_client_socket(size_t slot);
