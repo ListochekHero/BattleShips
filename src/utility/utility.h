@@ -6,7 +6,6 @@
 #include "utility/logger.h"
 
 #include <concepts>
-#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <expected>
@@ -19,20 +18,21 @@
 namespace bsm {
 
 class ConnectionView;
-struct ReadResult;
+struct ReceiveResult;
 
-enum class command_status_e : uint8_t { CONTINUE, TERMINATE };
-using cmd_se = command_status_e;
+enum class ActionStatus : uint8_t { CONTINUE, TERMINATE };
+enum class ConnectionStatus : uint8_t { KEEP, RELEASE };
 
-struct CommandStatus {
-  command_status_e command_status_v;
+struct ActionResult {
+  ActionStatus action_status{ActionStatus::CONTINUE};
+  ConnectionStatus conn_status{ConnectionStatus::KEEP};
   std::optional<Error> error{std::nullopt};
-  std::optional<us_e> user_code{us_e::GENERIC};
+  std::optional<user_error_e> user_code{std::nullopt};
 };
 
-struct CommandContext {
-  const ConnectionView& client_view;
-  const ReadResult& message;
+struct ActionContext {
+  const ConnectionView& pending_view;
+  const ReceiveResult& received_message;
 };
 
 auto is_file_exist(const std::string& filename) -> bool;
@@ -42,18 +42,18 @@ auto generate_name() -> std::expected<std::string, Error>;
 template <typename T, typename E>
 void drop_result(std::expected<T, E>&& /*unused*/) {}
 
-void plain_terminate() {
+inline void plain_terminate() {
   LOG("Critical error occured, terminating...");
   std::terminate();
 }
-void success_or_terminate(const std::optional<Error>& error) {
+inline void success_or_terminate(const std::optional<Error>& error) {
   if (error) {
     LOG(error->full_report());
     plain_terminate();
   }
 }
 template <typename F, typename U>
-void success_or_terminate(std::expected<F, U>&& result) {
+inline void success_or_terminate(std::expected<F, U>&& result) {
   if (result) {
     LOG(result.error().full_report());
     plain_terminate();
