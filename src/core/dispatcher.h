@@ -11,7 +11,7 @@
 namespace bsm {
 
 enum class message_type_e : uint8_t;
-struct ReadResult;
+struct ReceiveResult;
 
 struct CreateLobby {};
 struct JoinLobby {};
@@ -35,7 +35,7 @@ struct CommandInfo {
 
 class Dispatcher {
 public:
-  static auto dispatch(const ReadResult& message) -> CommandInfo;
+  static auto dispatch(const ReceiveResult& message) -> CommandInfo;
 
 private:
   struct Command {
@@ -52,7 +52,7 @@ private:
   };
 
   static const std::array<Command, 8> commands;
-  static auto match_cmd(const Command& cmd, const ReadResult& msg) -> bool;
+  static auto match_cmd(const Command& cmd, const ReceiveResult& msg) -> bool;
 };
 
 } // namespace bsm

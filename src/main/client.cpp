@@ -59,7 +59,7 @@ auto main(int /*unused*/, char* argv[]) -> int {
     std::string message;
     std::getline(std::cin, message);
 
-    socket_server.write_to_user({{message}});
+    socket_server.send_message({{message}});
 
     // send(sockfd, message.c_str(), message.size(), 0);
 
@@ -71,7 +71,7 @@ auto main(int /*unused*/, char* argv[]) -> int {
     setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout,
                sizeof(timeout));
     while (true) {
-      auto result = socket_server.read_user_input();
+      auto result = socket_server.receive_message();
       if (result) {
         printf("Server: %s\n", (*result).payload.c_str());
       }

@@ -39,7 +39,7 @@ auto Scheduler::get_executor_by_tag(task_tag_e task_tag) -> auto& {
   return task_executors_[task_tag];
 }
 
-std::coroutine_handle<> Scheduler::get_co_by_tag(task_tag_e task_tag) {
+auto Scheduler::get_co_by_tag(task_tag_e task_tag) -> std::coroutine_handle<> {
   return co_handlers_map_[task_tag];
 }
 

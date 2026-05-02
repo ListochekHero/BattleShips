@@ -38,7 +38,8 @@ auto Logger::log(const std::string_view message)
     return std::unexpected("Log file failed to open");
   }
   log_file << "[" << get_current_time() << "] " << "[" << program_name << "] "
-           << "[PID: " << getpid() << "] " << message << '\n';
+           << "[PID: " << getpid() << "] " << message << '\n'
+           << std::flush;
   return {};
 }
 

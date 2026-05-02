@@ -334,7 +334,7 @@ auto NetworkEngine::process_connection_impl(size_t pool_slot)
     -> std::optional<Error> {
   ActionResult process_result{};
   ConnectionEntry& pending_connection = *connection_pool_.get_object(pool_slot);
-  while (pending_connection.socket_handler_.is_socket_alive() ||
+  while (pending_connection.socket_handler_.is_socket_alive() &&
          process_result.action_status == ActionStatus::CONTINUE) {
     auto receive_result = pending_connection.socket_handler_.receive_message();
     if (!receive_result) {

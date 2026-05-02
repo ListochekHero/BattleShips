@@ -27,10 +27,10 @@ struct RegistrationReport {
 };
 
 struct TransferResult {
-  bool transferred{false};
   bool destination_conn_preserved{true};
   bool source_conn_preserved{true};
 };
+
 } // namespace bsm
 
 #endif

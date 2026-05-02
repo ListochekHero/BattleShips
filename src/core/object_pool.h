@@ -5,6 +5,7 @@
 #include "core/atomic_queue.h"
 #include "utility/error.h"
 #include "utility/logger.h"
+#include "utility/utility.h"
 #include <cstddef>
 #include <exception>
 #include <expected>
@@ -29,7 +30,11 @@ public:
     return validate_new(object_ptr);
   }
   void release(size_t slot) {
-    available_slots_.push(new (std::nothrow) size_t(slot));
+    auto* available_slot{new (std::nothrow) size_t(slot)};
+    if (available_slot == nullptr) {
+      plain_terminate();
+    }
+    available_slots_.push(available_slot);
   }
 
   auto begin() { return object_pool_.begin(); }

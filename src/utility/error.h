@@ -17,7 +17,6 @@ enum class user_error_e : uint8_t {
   CANT_JOIN_LOBBY,
   UNKNOWN_COMMAND,
 };
-using us_e = user_error_e;
 
 struct Error {
   std::vector<std::string> backtrace;

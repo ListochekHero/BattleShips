@@ -37,8 +37,8 @@ auto Client::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
 auto Client::console_co() -> bsm_co_handle {
   while (true) {
     std::string* user_input{console_raw_tasks_.try_pop()};
-    std::unique_ptr<ConsoleTaskContext> task_context(
-        new ConsoleTaskContext(std::move(*user_input)));
+    std::unique_ptr<ConsoleTaskContext> task_context = std::make_unique<ConsoleTaskContext>(
+        std::move(*user_input));
     delete user_input;
     scheduler().push_task(task_tag_e::CONSOLE, std::move(task_context));
     co_await *this;

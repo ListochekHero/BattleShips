@@ -6,7 +6,7 @@
 
 namespace bsm {
 
-auto Dispatcher::match_cmd(const Command& cmd, const ReadResult& msg) -> bool {
+auto Dispatcher::match_cmd(const Command& cmd, const ReceiveResult& msg) -> bool {
   if (cmd.msg_type && cmd.msg_type == msg.msg_type) {
     return true;
   }
@@ -15,7 +15,7 @@ auto Dispatcher::match_cmd(const Command& cmd, const ReadResult& msg) -> bool {
   });
 }
 
-auto Dispatcher::dispatch(const ReadResult& message) -> CommandInfo {
+auto Dispatcher::dispatch(const ReceiveResult& message) -> CommandInfo {
   for (const auto& cmd : commands) {
     if (match_cmd(cmd, message)) {
       return {.scope = cmd.scope, .parsed_cmd = cmd.make()};
