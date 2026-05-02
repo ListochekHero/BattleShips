@@ -60,4 +60,9 @@ auto LobbyManager::attach(pid_t pid, ConnectionView control_connection)
       .control_connection = control_connection,
   };
 }
+
+void LobbyManager::kill_lobby(int64_t lobby_id) {
+  kill(lobbies_[lobby_id].pid, SIGKILL);
+}
+
 } // namespace bsm

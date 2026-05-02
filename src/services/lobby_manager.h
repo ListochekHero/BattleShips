@@ -28,7 +28,7 @@ public:
   static auto spawn_lobby() -> std::expected<LobbyProcess, Error>;
   auto attach(pid_t pid, ConnectionView control_connection)
       -> std::expected<LobbyView, Error>;
-
+  void kill_lobby(int64_t lobby_id);
 private:
   std::unordered_map<int64_t, LobbyEntry> lobbies_;
 };
