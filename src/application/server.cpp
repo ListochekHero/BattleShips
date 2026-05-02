@@ -1,6 +1,9 @@
 #include "server.h"
 
 #include "utility/data_storage.h"
+#include "utility/error.h"
+#include "utility/utility.h"
+#include <csignal>
 #include <sys/wait.h>
 
 namespace bsm {
@@ -64,10 +67,7 @@ auto Server::execute_action(const CreateLobby& /*unused*/,
           .payloads = {std::to_string(lobby_view->lobby_id)},
           .msg_type = message_type_e::LOBBY_ID,
       });
-
-  // return CommandStatus{cmd_se::CONTINUE, std::move(result).error()};
-  return network_engine().transfer(lobby_view->control_connection,
-                                   context.client_view);
+  return perform_transfer(*lobby_view, context);
 }
 
 auto Server::request_lobby() -> std::expected<LobbyView, Error> {
@@ -91,6 +91,20 @@ auto Server::request_lobby() -> std::expected<LobbyView, Error> {
   }
   return lobby_handler;
 }
+auto Server::perform_transfer(const LobbyView& recipient, ActionContext context)
+    -> ActionResult {
+  auto transfer_result{
+      network_engine().transfer(recipient.control_connection,
+                                context.pending_view),
+  };
+  if (!transfer_result.destination_conn_preserved) {
+    lobby_manager_.kill_lobby(recipient.lobby_id);
+  }
+  if (transfer_result.source_conn_preserved) {
+    return {.conn_status = ConnectionStatus::KEEP};
+  }
+  return {.conn_status = ConnectionStatus::RELEASE};
+}
 
 auto Server::execute_action(const JoinLobby& /*unused*/,
                             const ActionContext& context) -> ActionResult {
@@ -112,8 +126,7 @@ auto Server::execute_action(const JoinLobby& /*unused*/,
         .user_code = user_error_e::CANT_JOIN_LOBBY,
     };
   }
-  return network_engine().transfer(lobby_view->control_connection,
-                                   context.client_view);
+  return perform_transfer(*lobby_view, context);
 }
 
 auto Server::execute_action(const ChatMessage& /*unused*/,
