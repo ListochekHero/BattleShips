@@ -20,17 +20,17 @@ private:
 
   using ServerAction =
       std::variant<CreateLobby, JoinLobby, ChatMessage, GeneralAction>;
-  auto handle_client_cmd(const CommandContext& context)
-      -> CommandStatus override;
+  auto handle_client_cmd(const ActionContext& context)
+      -> ActionResult override;
   auto execute_action(const CreateLobby& action_type,
-                      const CommandContext& context) -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
   auto request_lobby() -> std::expected<LobbyView, Error>;
   auto execute_action(const JoinLobby& action_type,
-                      const CommandContext& context) -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
   auto execute_action(const ChatMessage& action_type,
-                      const CommandContext& context) -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
   auto execute_action(const GeneralAction& action_type,
-                      const CommandContext& context) -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
 
   LobbyManager lobby_manager_;
 };

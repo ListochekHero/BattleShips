@@ -11,7 +11,8 @@ auto Server::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
 }
 
 void Server::run() {
-  scheduler().add_and_run_producer([this]() { network_engine().run(); });
+  scheduler().add_and_run_producer(
+      [this]() -> void { network_engine().run_event_loop(); });
   scheduler().run_workers();
   scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
@@ -27,33 +28,34 @@ void Server::handle_zombie_pocesses() {
   }
 }
 
-auto Server::handle_client_cmd(const CommandContext& context) -> CommandStatus {
-  LOG(std::format("Command to handle: {}", context.message.payload));
-  CommandInfo command_info = bsm::Dispatcher::dispatch(context.message);
+auto Server::handle_client_cmd(const ActionContext& context) -> ActionResult {
+  LOG(std::format("Command to handle: {}", context.received_message.payload));
+  CommandInfo command_info =
+      bsm::Dispatcher::dispatch(context.received_message);
   auto server_action = filter_variant<ServerAction>(command_info.parsed_cmd);
   if (!server_action) {
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(server_action)
                      .error()
                      .add_context("Command not allowed in this context"),
     };
   }
   return std::visit(
-      [&](const auto& action_type) -> CommandStatus {
+      [&](const auto& action_type) -> ActionResult {
         return execute_action(action_type, context);
       },
       *server_action);
 }
 
 auto Server::execute_action(const CreateLobby& /*unused*/,
-                            const CommandContext& context) -> CommandStatus {
+                            const ActionContext& context) -> ActionResult {
   auto lobby_view{request_lobby()};
   if (!lobby_view) {
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(lobby_view.error()),
-        .user_code = us_e::CANT_CREATE_LOBBY,
+        .user_code = user_error_e::CANT_CREATE_LOBBY,
     };
   }
   network_engine().send_message_to(
@@ -91,23 +93,23 @@ auto Server::request_lobby() -> std::expected<LobbyView, Error> {
 }
 
 auto Server::execute_action(const JoinLobby& /*unused*/,
-                            const CommandContext& context) -> CommandStatus {
-  auto parse_result = JoinLobbyCode::parse(context.message.payload);
+                            const ActionContext& context) -> ActionResult {
+  auto parse_result = JoinLobbyCode::parse(context.received_message.payload);
   if (!parse_result) {
     parse_result.error().add_context("Unable to parse connection code");
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(parse_result).error(),
-        .user_code = us_e::CANT_JOIN_LOBBY,
+        .user_code = user_error_e::CANT_JOIN_LOBBY,
     };
   }
   auto lobby_view = lobby_manager_.find(parse_result->int_code);
   if (!lobby_view) {
     lobby_view.error().add_context("Unable to find lobby with given id");
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(lobby_view).error(),
-        .user_code = us_e::CANT_JOIN_LOBBY,
+        .user_code = user_error_e::CANT_JOIN_LOBBY,
     };
   }
   return network_engine().transfer(lobby_view->control_connection,
@@ -115,12 +117,12 @@ auto Server::execute_action(const JoinLobby& /*unused*/,
 }
 
 auto Server::execute_action(const ChatMessage& /*unused*/,
-                            const CommandContext& context) -> CommandStatus {
-  auto parse_result = parse(context.message.payload);
+                            const ActionContext& context) -> ActionResult {
+  auto parse_result = parse(context.received_message.payload);
   if (!parse_result) {
     parse_result.error().add_context("Unable to parse client chat message");
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(parse_result).error(),
     };
   }
@@ -129,18 +131,18 @@ auto Server::execute_action(const ChatMessage& /*unused*/,
       [](const auto& meta) -> auto {
         return meta.type == end_point_e::TO_CLIENT;
       });
-  return {.command_status_v = cmd_se::CONTINUE};
+  return {.conn_status = ConnectionStatus::KEEP};
 }
 
 auto Server::execute_action(const GeneralAction& /*unused*/,
-                            const CommandContext& context) -> CommandStatus {
+                            const ActionContext& context) -> ActionResult {
   network_engine().send_message_to(
-      context.client_view,
+      context.pending_view,
       {
-          .payloads = {user_message(us_e::UNKNOWN_COMMAND)},
+          .payloads = {user_message(user_error_e::UNKNOWN_COMMAND)},
           .msg_type = message_type_e::PRINTABLE,
       });
-  return {.command_status_v = cmd_se::CONTINUE};
+  return {.conn_status = ConnectionStatus::KEEP};
 }
 
 } // namespace bsm
