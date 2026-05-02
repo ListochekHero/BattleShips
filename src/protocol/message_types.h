@@ -20,7 +20,7 @@ struct OutgoingMessage {
   std::optional<int> socket{std::nullopt};
 };
 
-struct ReadResult {
+struct ReceiveResult {
   message_status_e status{message_status_e::EMPTY};
   message_type_e msg_type{message_type_e::DEFAULT};
   std::string payload{std::string(1024, '\0')};

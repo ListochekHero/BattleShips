@@ -93,6 +93,10 @@ void SocketHandler::set_socket_status(socket_status_e socket_status) {
   socket_status_ = socket_status;
 }
 
+auto SocketHandler::is_socket_alive() -> bool {
+  return socket_status_ == socket_status_e::ALIVE;
+}
+
 auto SocketHandler::accept_connections() const
     -> std::expected<std::vector<int>, Error> {
   std::vector<int> new_clients;
@@ -111,12 +115,12 @@ auto SocketHandler::accept_connections() const
   return new_clients;
 }
 
-auto SocketHandler::receive_message() -> std::expected<ReadResult, Error> {
+auto SocketHandler::receive_message() -> std::expected<ReceiveResult, Error> {
   MsgHeader hdr;
-  ReadResult result;
+  ReceiveResult received_messaage;
   struct iovec iov[2]{
       {.iov_base = &hdr, .iov_len = sizeof(hdr)},
-      {.iov_base = result.payload.data(), .iov_len = result.payload.size()},
+      {.iov_base = received_messaage.payload.data(), .iov_len = received_messaage.payload.size()},
   };
   struct msghdr msg{};
   msg.msg_iov = iov;
@@ -127,26 +131,26 @@ auto SocketHandler::receive_message() -> std::expected<ReadResult, Error> {
 
   ssize_t n = recvmsg(socket_, &msg, 0);
   if (n > 0) {
-    result.payload.resize(n - sizeof(hdr));
-    result.msg_type = hdr.msg_type;
+    received_messaage.payload.resize(n - sizeof(hdr));
+    received_messaage.msg_type = hdr.msg_type;
     struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
     if (cmsg != nullptr && cmsg->cmsg_level == SOL_SOCKET &&
         cmsg->cmsg_type == SCM_RIGHTS) {
       int socket;
       std::memcpy(&socket, CMSG_DATA(cmsg), sizeof(int));
-      result.socket = socket;
+      received_messaage.socket = socket;
     }
-    LOG(std::format("Message received: {}", result.payload));
-    result.status = message_status_e::DATA;
+    LOG(std::format("Message received: {}", received_messaage.payload));
+    received_messaage.status = message_status_e::DATA;
   } else if (n == 0) {
-    result.status = message_status_e::DISCONNECTED;
+    received_messaage.status = message_status_e::DISCONNECTED;
     socket_status_ = socket_status_e::CLOSED;
   } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-    result.status = message_status_e::WOULDBLOCK;
+    received_messaage.status = message_status_e::WOULDBLOCK;
   } else {
     return std::unexpected(make_error_c("Read error"));
   }
-  return result;
+  return received_messaage;
 }
 
 auto SocketHandler::send_message(const OutgoingMessage& msg) const

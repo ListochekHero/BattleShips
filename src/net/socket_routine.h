@@ -34,10 +34,11 @@ public:
   auto setup_client() -> std::optional<Error>;
   [[nodiscard]] auto get_socket() const -> int;
   [[nodiscard]] auto get_socket_status() const -> socket_status_e;
+  auto is_socket_alive()-> bool;
   void set_socket_status(socket_status_e socket_status);
   [[nodiscard]] auto accept_connections() const
       -> std::expected<std::vector<int>, Error>;
-  auto receive_message() -> std::expected<ReadResult, Error>;
+  auto receive_message() -> std::expected<ReceiveResult, Error>;
   [[nodiscard]] auto send_message(const OutgoingMessage& msg) const
       -> std::optional<Error>;
   auto remove_cloexec() const -> std::optional<Error>;
