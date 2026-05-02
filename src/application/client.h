@@ -27,18 +27,17 @@ public:
   Client();
   auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
   void run() override;
-  auto handle_client_cmd(const CommandContext& context)
-      -> CommandStatus override;
-  auto handle_input(const CommandContext& context) -> CommandStatus;
+  auto handle_client_cmd(const ActionContext& context) -> ActionResult override;
+  auto handle_input(const ActionContext& context) -> ActionResult;
   std::atomic_size_t pending_clients_counter_{0};
 
 private:
   using ClientAction = std::variant<PrintAble, Quit>;
   using LocalClientAction = std::variant<Quit>;
-  static auto execute_action(const Quit&, const CommandContext& context)
-      -> CommandStatus;
-  static auto execute_action(const PrintAble&, const CommandContext& context)
-      -> CommandStatus;
+  static auto execute_action(const Quit&, const ActionContext& context)
+      -> ActionResult;
+  static auto execute_action(const PrintAble&, const ActionContext& context)
+      -> ActionResult;
 
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
   ConsoleHandler console_handler_;

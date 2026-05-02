@@ -5,6 +5,7 @@
 #include "protocol/message_types.h"
 #include "protocol/task_context_types.h"
 #include "utility/logger.h"
+#include "utility/utility.h"
 
 #include <format>
 #include <iostream>
@@ -24,8 +25,8 @@ auto Client::v_init(end_point_e socket_type, int parrent_socket) -> Ev {
       [this](std::unique_ptr<TaskContext> context) -> void {
         auto* console_context = static_cast<ConsoleTaskContext*>(context.get());
         handle_input({
-            .client_view = ConnectionView{},
-            .message = {.payload = console_context->user_input},
+            .pending_view = ConnectionView{},
+            .received_message = {.payload = console_context->user_input},
         });
       });
   scheduler().add_co_task([this]() -> bsm_co_handle { return console_co(); },
@@ -45,17 +46,19 @@ auto Client::console_co() -> bsm_co_handle {
 }
 
 void Client::run() {
-  scheduler().add_and_run_producer([this]() { network_engine().run(); });
+  scheduler().add_and_run_producer(
+      [this]() -> void { network_engine().run_event_loop(); });
   scheduler().add_and_run_producer([this]() { console_handler_.run(); });
   scheduler().run_workers();
   scheduler().get_co_by_tag(task_tag_e::SCHEDULER).resume();
 }
 
-auto Client::handle_input(const CommandContext& context) -> CommandStatus {
-  CommandInfo cmd_info = bsm::Dispatcher::dispatch(context.message);
+auto Client::handle_input(const ActionContext& context) -> ActionResult {
+  CommandInfo cmd_info = bsm::Dispatcher::dispatch(context.received_message);
   switch (cmd_info.scope) {
   case command_scope_e::BROADCAST:
-    network_engine().send_message_to(server_view_, {{context.message.payload}});
+    network_engine().send_message_to(
+        server_view_, {.payloads = {context.received_message.payload}});
     return {};
   case command_scope_e::NONE:
   case command_scope_e::LOCAL:
@@ -65,49 +68,50 @@ auto Client::handle_input(const CommandContext& context) -> CommandStatus {
   auto client_action = filter_variant<ClientAction>(cmd_info.parsed_cmd);
   if (!client_action) {
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(client_action)
                      .error()
                      .add_context("Command not allowed in this context"),
     };
   }
   return std::visit(
-      [&](auto&& lobby_action) -> CommandStatus {
+      [&](auto&& lobby_action) -> ActionResult {
         return execute_action(lobby_action, context);
       },
       *client_action);
 }
 
-auto Client::handle_client_cmd(const CommandContext& context) -> CommandStatus {
-  LOG(std::format("Command to handle: {}", context.message.payload));
-  CommandInfo action_to_execute = bsm::Dispatcher::dispatch(context.message);
+auto Client::handle_client_cmd(const ActionContext& context) -> ActionResult {
+  LOG(std::format("Command to handle: {}", context.received_message.payload));
+  CommandInfo action_to_execute =
+      bsm::Dispatcher::dispatch(context.received_message);
   auto client_action =
       filter_variant<ClientAction>(action_to_execute.parsed_cmd);
   if (!client_action) {
     return {
-        .command_status_v = cmd_se::CONTINUE,
+        .conn_status = ConnectionStatus::KEEP,
         .error = std::move(client_action)
                      .error()
                      .add_context("Command not allowed in this context"),
     };
   }
   return std::visit(
-      [&](auto&& lobby_action) -> CommandStatus {
+      [&](auto&& lobby_action) -> ActionResult {
         return execute_action(lobby_action, context);
       },
       *client_action);
 }
 
 auto Client::execute_action(const Quit& /*unused*/,
-                            const CommandContext& /*unused*/) -> CommandStatus {
+                            const ActionContext& /*unused*/) -> ActionResult {
   std::cout << "->_<-" << '\n';
-  return {.command_status_v = cmd_se::CONTINUE};
+  return {.conn_status = ConnectionStatus::KEEP};
 }
 auto Client::execute_action(const PrintAble& /*unused*/,
-                            const CommandContext& context) -> CommandStatus {
+                            const ActionContext& context) -> ActionResult {
 
-  std::cout << context.message.payload << '\n';
-  return {.command_status_v = cmd_se::CONTINUE};
+  std::cout << context.received_message.payload << '\n';
+  return {.conn_status = ConnectionStatus::KEEP};
 }
 
 } // namespace bsm

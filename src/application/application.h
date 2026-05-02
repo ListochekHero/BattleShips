@@ -15,7 +15,7 @@
 #include "protocol/network_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
-// IWYU pragma: end_export
+// IWYU pragma: end_exports
 
 namespace bsm {
 enum class end_point_e : uint8_t;
@@ -32,8 +32,8 @@ public:
 
   virtual void run() = 0;
   auto network_co() -> bsm_co_handle;
-  virtual auto handle_client_cmd(const CommandContext& context)
-      -> CommandStatus = 0;
+  virtual auto handle_client_cmd(const ActionContext& context)
+      -> ActionResult = 0;
   virtual ~Application();
 
 protected:

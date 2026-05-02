@@ -24,14 +24,13 @@ public:
 
 private:
   using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter, ChatMessage>;
-  auto handle_client_cmd(const CommandContext& context)
-      -> CommandStatus override;
+  auto handle_client_cmd(const ActionContext& context) -> ActionResult override;
   auto execute_action(const AcceptSocket& action_type,
-                      const CommandContext& context) -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
   auto execute_action(const LobbyIdSetter& action_type,
-                      const CommandContext& context) -> CommandStatus;
-  auto execute_action(const ChatMessage&, const CommandContext& context)
-      -> CommandStatus;
+                      const ActionContext& context) -> ActionResult;
+  auto execute_action(const ChatMessage&, const ActionContext& context)
+      -> ActionResult;
   int64_t lobby_id_{0};
   ConnectionView parent_view_{std::numeric_limits<std::size_t>::max()};
 };
