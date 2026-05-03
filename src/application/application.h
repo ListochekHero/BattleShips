@@ -27,7 +27,7 @@ public:
   virtual ~Application();
 
 protected:
-  auto init(end_point_e socket_type, int parrent_socket)
+  auto init_app(end_point_e socket_type, int parrent_socket)
       -> std::expected<ConnectionView, Error>;
   auto network_engine() -> NetworkEngine& { return network_engine_; }
   auto dispatcher() -> Dispatcher& { return dispatcher_; }
@@ -37,6 +37,13 @@ protected:
   }
 
 private:
+  auto init_network(end_point_e socket_type, int socket)
+      -> std::expected<ConnectionView, Error>;
+  auto init_scheduler() -> std::optional<Error>;
+  auto register_network_task() -> std::optional<Error>;
+  auto network_co() -> bsm_co_handle;
+  virtual auto handle_action(const ActionContext& context) -> ActionResult = 0;
+
   NetworkEngine network_engine_;
   AtomicQueue<size_t> network_raw_tasks_;
   Dispatcher dispatcher_;
