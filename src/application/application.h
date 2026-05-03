@@ -21,19 +21,9 @@ namespace bsm {
 enum class end_point_e : uint8_t;
 class Application {
 public:
-  static auto await_ready() -> bool { return false; }
-  auto await_suspend(std::coroutine_handle<> /*unused*/)
-      -> std::coroutine_handle<> {
-    return scheduler_.get_co_by_tag(task_tag_e::SCHEDULER);
-  };
-  void await_resume() {}
-
   Application();
-
   virtual void run() = 0;
-  auto network_co() -> bsm_co_handle;
-  virtual auto handle_client_cmd(const ActionContext& context)
-      -> ActionResult = 0;
+  auto yield_to_scheduler() { return AppAwaiter(*this); }
   virtual ~Application();
 
 protected:
@@ -52,6 +42,16 @@ private:
   Dispatcher dispatcher_;
   Scheduler scheduler_;
   AtomicQueue<task_tag_e> available_task_tags_;
+
+  struct AppAwaiter {
+    Application& application_;
+    static auto await_ready() -> bool { return false; }
+    auto await_suspend(std::coroutine_handle<> /*unused*/)
+        -> std::coroutine_handle<> {
+      return application_.scheduler_.get_co_by_tag(task_tag_e::SCHEDULER);
+    };
+    void await_resume() {}
+  };
 };
 
 } // namespace bsm
