@@ -64,9 +64,9 @@ private:
   AtomicQueue<Task> tasks_queue_;
   AtomicQueue<task_tag_e>& available_task_tags_;
 
-  // std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /
-  //                                       2};
-  std::vector<std::thread> thread_pool_{1};
+  std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /
+                                        2};
+  // std::vector<std::thread> thread_pool_{1};
   std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
       pop_c_semaphore_{0};
   std::counting_semaphore<std::numeric_limits<uint16_t>::max()>

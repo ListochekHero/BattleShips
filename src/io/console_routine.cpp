@@ -16,9 +16,9 @@ void ConsoleHandler::run() {
     auto* ptr{new std::string(std::move(user_cmd))};
     console_raw_tasks_.push(ptr);
     available_task_tags_.push(new task_tag_e(task_tag_e::CONSOLE));
-    if (*ptr == "\\quit") {
-      break;
-    }
+    // if (*ptr == "\\quit") {
+    //   break;
+    // }
   }
 }
 

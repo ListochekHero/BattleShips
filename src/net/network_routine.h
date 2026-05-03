@@ -78,7 +78,8 @@ public:
       -> DeliveryReport {
     DeliveryReport delivery_report;
     size_t current_slot{0};
-    for (auto* entry : connection_pool_) {
+    auto snapshot{connection_pool_.get_vector()};
+    for (auto* entry : snapshot) {
       if (entry->connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
             .slot = current_slot,

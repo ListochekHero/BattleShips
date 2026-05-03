@@ -36,7 +36,7 @@ public:
     }
     available_slots_.push(available_slot);
   }
-
+  auto get_vector(){return object_pool_;}
   auto begin() { return object_pool_.begin(); }
   auto end() { return object_pool_.end(); }
 

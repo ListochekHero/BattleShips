@@ -44,12 +44,14 @@ auto Scheduler::get_co_by_tag(task_tag_e task_tag) -> std::coroutine_handle<> {
 }
 
 void Scheduler::worker_loop() {
+  int task_counter{0};
   while (true) {
     std::unique_ptr<Task> task_to_exe{try_get_task()};
     if (task_to_exe) {
       auto& executor{get_executor_by_tag(task_to_exe->task_tag)};
       executor(std::move(task_to_exe->context));
-      std::cout << "Task complited!" << '\n';
+      std::cout << "Task complited!" << task_counter << '\n';
+      task_counter++;
     }
   }
 }
