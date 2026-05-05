@@ -23,20 +23,19 @@ namespace bsm {
 
 class Client : public Application {
 public:
-  auto console_co() -> bsm_co_handle;
   Client();
-  auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
+  auto init(end_point_e socket_type, int socket) -> std::optional<Error>;
   void run() override;
-  auto handle_client_cmd(const ActionContext& context) -> ActionResult override;
-  auto handle_input(const ActionContext& context) -> ActionResult;
-  std::atomic_size_t pending_clients_counter_{0};
 
 private:
-  using ClientAction = std::variant<PrintAble, Quit>;
-  using LocalClientAction = std::variant<Quit>;
-  static auto execute_action(const Quit&, const ActionContext& context)
+  auto register_console_task() -> std::optional<Error>;
+  auto console_co() -> bsm_co_handle;
+  auto handle_action(const ActionContext& context) -> ActionResult override;
+  auto send_input_to_server(const ActionContext& context) -> ActionResult;
+  using ClientAction = std::variant<PrintMessage, Quit>;
+  static auto execute_action(const PrintMessage&, const ActionContext& context)
       -> ActionResult;
-  static auto execute_action(const PrintAble&, const ActionContext& context)
+  static auto execute_action(const Quit&, const ActionContext& context)
       -> ActionResult;
 
   ConnectionView server_view_{std::numeric_limits<std::size_t>::max()};
