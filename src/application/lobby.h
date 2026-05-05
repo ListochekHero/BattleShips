@@ -19,15 +19,18 @@ enum class end_point_e : uint8_t;
 class Lobby : public Application {
 public:
   Lobby() = default;
-  auto v_init(end_point_e socket_type, int parrent_socket) -> Ev;
+  auto init(end_point_e socket_type, int parrent_socket)
+      -> std::optional<Error>;
   void run() override;
 
 private:
-  using LobbyAction = std::variant<AcceptSocket, LobbyIdSetter, ChatMessage>;
-  auto handle_client_cmd(const ActionContext& context) -> ActionResult override;
+  using LobbyAction = std::variant<AcceptSocket, SetLobbyId, ChatMessage>;
+  auto handle_action(const ActionContext& context) -> ActionResult override;
   auto execute_action(const AcceptSocket& action_type,
                       const ActionContext& context) -> ActionResult;
-  auto execute_action(const LobbyIdSetter& action_type,
+  auto send_join_lobby_message(ConnectionView recipient_view)
+      -> std::optional<Error>;
+  auto execute_action(const SetLobbyId& action_type,
                       const ActionContext& context) -> ActionResult;
   auto execute_action(const ChatMessage&, const ActionContext& context)
       -> ActionResult;
