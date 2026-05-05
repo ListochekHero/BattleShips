@@ -30,14 +30,6 @@ struct Task {
 
 class Scheduler {
 public:
-  void init();
-  static auto await_ready() -> bool { return false; }
-  auto await_suspend(std::coroutine_handle<> /*unused*/)
-      -> std::coroutine_handle<> {
-    std::unique_ptr<task_tag_e> task_tag{available_task_tags_.try_pop()};
-    return get_co_by_tag(*task_tag);
-  };
-  void await_resume() {}
   Scheduler(AtomicQueue<task_tag_e>& available_q)
       : available_task_tags_(available_q) {}
   void push_task(task_tag_e task_tag, std::unique_ptr<TaskContext> context);
@@ -72,6 +64,22 @@ private:
   std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
       push_c_semaphore_{std::numeric_limits<uint16_t>::max() - 1};
   std::unordered_map<task_tag_e, TaskExecutor> task_executors_;
+
+  // std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /
+  //                                       2};
+  std::vector<std::thread> thread_pool_{1};
+
+  struct SchedulerAwaiter {
+    Scheduler& scheduler;
+    static auto await_ready() -> bool { return false; }
+    auto await_suspend(std::coroutine_handle<> /*unused*/)
+        -> std::coroutine_handle<> {
+      std::unique_ptr<task_tag_e> task_tag{
+          scheduler.available_task_tags_.try_pop()};
+      return scheduler.get_co_handle_by_tag(*task_tag);
+    };
+    void await_resume() {}
+  };
 };
 
 } // namespace bsm
