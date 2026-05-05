@@ -7,53 +7,38 @@
 
 namespace bsm {
 
-void Scheduler::init() {
-  co_handlers_map_.try_emplace(task_tag_e::SCHEDULER, co_run());
+auto Scheduler::init() -> std::optional<Error> {
+  auto [iter, inserted]{
+      co_handles_map_.try_emplace(task_tag_e::SCHEDULER, coroutine_loop()),
+  };
+  if (!inserted) {
+    return Error{
+        .backtrace =
+            {"Unable to init Scheduler: failed to emplace main coroutine"},
+    };
+  }
+  return std::nullopt;
 }
 
-void Scheduler::push_task(task_tag_e task_tag,
+void Scheduler::push_task(task_tag_e tag,
                           std::unique_ptr<TaskContext> context) {
-  push_c_semaphore_.acquire();
-  Task* task = new Task(task_tag, std::move(context));
-  tasks_queue_.push(task);
-  pop_c_semaphore_.release();
+  push_task_semaphore_.acquire();
+  Task* task = new Task(tag, std::move(context));
+  tasks_queue_.push(task); // We ignore returned bool because this is invariant
+                           // and and should never happen
+  pop_task_semaphore_.release();
 }
 
-auto Scheduler::try_get_task() -> Task* {
-  pop_c_semaphore_.acquire();
-  Task* task = tasks_queue_.try_pop();
-  if (task != nullptr) {
-    push_c_semaphore_.release();
-  } else {
-    pop_c_semaphore_.release();
-  }
-  return task;
-}
-
-auto Scheduler::add_executor(task_tag_e tag, TaskExecutor executor) -> bool {
+auto Scheduler::add_task_executor(task_tag_e tag, TaskExecutor executor)
+    -> std::optional<Error> {
   auto [iter, inserted] = task_executors_.try_emplace(tag, executor);
-  return inserted;
-}
-
-auto Scheduler::get_executor_by_tag(task_tag_e task_tag) -> auto& {
-  return task_executors_[task_tag];
-}
-
-auto Scheduler::get_co_by_tag(task_tag_e task_tag) -> std::coroutine_handle<> {
-  return co_handlers_map_[task_tag];
-}
-
-void Scheduler::worker_loop() {
-  int task_counter{0};
-  while (true) {
-    std::unique_ptr<Task> task_to_exe{try_get_task()};
-    if (task_to_exe) {
-      auto& executor{get_executor_by_tag(task_to_exe->task_tag)};
-      executor(std::move(task_to_exe->context));
-      std::cout << "Task complited!" << task_counter << '\n';
-      task_counter++;
-    }
+  if (!inserted) {
+    return Error{
+        .backtrace =
+            {"Unable to add executor for task: failed to emplace into map"},
+    };
   }
+  return std::nullopt;
 }
 
 void Scheduler::run_workers() {
@@ -62,10 +47,40 @@ void Scheduler::run_workers() {
   }
 }
 
-auto Scheduler::co_run() -> bsm_co_handle {
+auto Scheduler::get_co_handle_by_tag(task_tag_e tag)
+    -> std::coroutine_handle<> {
+  return co_handles_map_[tag];
+}
+
+auto Scheduler::try_get_task() -> Task* {
+  pop_task_semaphore_.acquire();
+  Task* task = tasks_queue_.try_pop();
+  if (task != nullptr) {
+    push_task_semaphore_.release();
+  } else {
+    pop_task_semaphore_.release();
+  }
+  return task;
+}
+
+auto Scheduler::get_executor_by_tag(task_tag_e tag) -> auto& {
+  return task_executors_[tag];
+}
+
+void Scheduler::worker_loop() {
+  while (true) {
+    std::unique_ptr<Task> ready_task{try_get_task()};
+    if (ready_task) {
+      auto& task_executor{get_executor_by_tag(ready_task->tag)};
+      task_executor(std::move(ready_task->context));
+    }
+  }
+}
+
+auto Scheduler::coroutine_loop() -> bsm_co_handle { // NOLINT
   while (true) {
     available_task_tags_.wait_for_data();
-    co_await *this;
+    co_await yield_to_application(); // NOLINT
   }
 }
 
