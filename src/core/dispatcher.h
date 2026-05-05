@@ -17,42 +17,43 @@ struct CreateLobby {};
 struct JoinLobby {};
 struct Quit {};
 struct AcceptSocket {};
-struct LobbyIdSetter {};
+struct SetLobbyId {};
 struct ChatMessage {};
-struct PrintAble {};
+struct PrintMessage {};
 struct NotAllowed {};
 struct GeneralAction {};
-using ParsedCommand =
-    std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, LobbyIdSetter,
-                 ChatMessage, PrintAble, NotAllowed, GeneralAction>;
+using ActionVariant =
+    std::variant<CreateLobby, JoinLobby, Quit, AcceptSocket, SetLobbyId,
+                 ChatMessage, PrintMessage, NotAllowed, GeneralAction>;
 
-enum class command_scope_e : uint8_t { NONE, LOCAL, BROADCAST, NETWORK };
+enum class action_scope_e : uint8_t { NONE, LOCAL, BROADCAST, NETWORK };
 
-struct CommandInfo {
-  command_scope_e scope{command_scope_e::NONE};
-  ParsedCommand parsed_cmd;
+struct ActionInfo {
+  action_scope_e scope{action_scope_e::NONE};
+  ActionVariant variant;
 };
 
 class Dispatcher {
 public:
-  static auto dispatch(const ReceiveResult& message) -> CommandInfo;
+  static auto dispatch(const ReceiveResult& message) -> ActionInfo;
 
 private:
-  struct Command {
+  struct Action {
     std::vector<std::string_view> text_aliases;
-    std::optional<message_type_e> msg_type;
-    command_scope_e scope;
+    std::optional<message_type_e> type;
+    action_scope_e scope;
 
-    using Factory = ParsedCommand (*)();
+    using Factory = ActionVariant (*)();
 
-    template <typename T> static auto make_action() -> ParsedCommand {
+    template <typename T> static auto make_action() -> ActionVariant {
       return T{};
     }
     Factory make;
   };
 
-  static const std::array<Command, 8> commands;
-  static auto match_cmd(const Command& cmd, const ReceiveResult& msg) -> bool;
+  static const std::array<Action, 8> actions;
+  static auto match_action(const Action& action,
+                            const ReceiveResult& message) -> bool;
 };
 
 } // namespace bsm
