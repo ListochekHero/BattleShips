@@ -10,19 +10,19 @@
 namespace bsm {
 
 struct MsgHeader {
-  message_type_e msg_type{message_type_e::DEFAULT};
+  message_type_e type{message_type_e::DEFAULT};
   uint64_t payload_count{0};
 };
 
 struct OutgoingMessage {
   std::vector<std::string_view> payloads;
-  message_type_e msg_type{message_type_e::DEFAULT};
+  message_type_e type{message_type_e::DEFAULT};
   std::optional<int> socket{std::nullopt};
 };
 
 struct ReceiveResult {
   message_status_e status{message_status_e::EMPTY};
-  message_type_e msg_type{message_type_e::DEFAULT};
+  message_type_e type{message_type_e::DEFAULT};
   std::string payload{std::string(1024, '\0')};
   std::optional<int> socket{std::nullopt};
 };

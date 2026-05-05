@@ -161,7 +161,7 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
           destination_conn,
           {
               .payloads = {"\\socket"},
-              .msg_type = message_type_e::SOCKET,
+              .type = message_type_e::SOCKET,
               .socket = source_conn.socket_handler_.get_socket(),
           });
       transfer_error) {
@@ -271,7 +271,7 @@ auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
     send_message_impl(connection,
                       {
                           .payloads = {user_message(user_error_e::GENERIC)},
-                          .msg_type = message_type_e::PRINTABLE,
+                          .type = message_type_e::PRINTABLE,
                       });
     connection.reset();
     connection_pool_.release(connection_slot);
@@ -351,7 +351,7 @@ auto NetworkEngine::process_connection_impl(size_t pool_slot)
           pending_connection,
           {
               .payloads = {user_message(*process_result.user_code)},
-              .msg_type = message_type_e::PRINTABLE,
+              .type = message_type_e::PRINTABLE,
           });
     }
     if (process_result.conn_status == ConnectionStatus::RELEASE) {
@@ -396,6 +396,7 @@ auto NetworkEngine::process_message(ConnectionEntry& pending_connection,
   case message_status_e::DATA:
     break;
   }
+  LOG(received_message.payload);
   ConnectionView pending_view{pool_slot};
   ActionContext action_context{
       .pending_view = pending_view,

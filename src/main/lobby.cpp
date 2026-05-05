@@ -22,7 +22,7 @@ auto main(int argc, char* argv[]) -> int {
   bsm::SocketHandler sock{std::stoi(argv[1])};
   std::unique_ptr<bsm::Lobby> lobby{std::make_unique<bsm::Lobby>()};
   bsm::LOG("starting lobby!");
-  lobby->v_init(bsm::end_point_e::TO_PARENT, std::stoi(argv[1]));
+  lobby->init(bsm::end_point_e::TO_PARENT, std::stoi(argv[1]));
   lobby->run();
 #ifdef DEBUG_LOGS
 #endif

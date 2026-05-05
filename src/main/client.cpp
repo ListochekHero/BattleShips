@@ -27,7 +27,7 @@ auto main(int /*unused*/, char* argv[]) -> int {
     return EXIT_FAILURE;
   }
   bsm::Client client{};
-  client.v_init(bsm::end_point_e::TO_SERVER, 0);
+  client.init(bsm::end_point_e::TO_SERVER, 0);
   client.run();
   exit(EXIT_SUCCESS);
 
