@@ -61,8 +61,7 @@ auto Application::init_network(end_point_e socket_type, int socket)
 }
 
 auto Application::init_scheduler() -> std::optional<Error> {
-  auto init_error = scheduler_.init();
-  if (init_error) {
+  if (auto init_error{scheduler_.init()}) {
     return std::move(init_error)
         ->add_context("Unalbe to init scheduler: failed to init scheduler");
   }
@@ -82,7 +81,7 @@ auto Application::register_network_task() -> std::optional<Error> {
         "Unalbe to register network task: failed to add executor "
         "for task NETWORK");
   }
-  add_error = scheduler_.add_co_task(
+  add_error = scheduler_.add_co_handle(
       [this]() -> bsm_co_handle { return network_co(); }, task_tag_e::NETWORK);
   if (add_error) {
     return std::move(add_error)->add_context(

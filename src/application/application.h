@@ -23,10 +23,10 @@ class Application {
 public:
   Application();
   virtual void run() = 0;
-  auto yield_to_scheduler() { return AppAwaiter(*this); }
   virtual ~Application();
 
 protected:
+  auto yield_to_scheduler() { return AppAwaiter(*this); }
   auto init_app(end_point_e socket_type, int parrent_socket)
       -> std::expected<ConnectionView, Error>;
   auto network_engine() -> NetworkEngine& { return network_engine_; }
@@ -51,11 +51,11 @@ private:
   AtomicQueue<task_tag_e> available_task_tags_;
 
   struct AppAwaiter {
-    Application& application_;
+    Application& application;
     static auto await_ready() -> bool { return false; }
     auto await_suspend(std::coroutine_handle<> /*unused*/)
         -> std::coroutine_handle<> {
-      return application_.scheduler_.get_co_by_tag(task_tag_e::SCHEDULER);
+      return application.scheduler_.get_co_handle_by_tag(task_tag_e::SCHEDULER);
     };
     void await_resume() {}
   };
