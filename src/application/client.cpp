@@ -81,18 +81,22 @@ auto Client::handle_input(const ActionContext& context) -> ActionResult {
       *client_action);
 }
 
-auto Client::handle_client_cmd(const ActionContext& context) -> ActionResult {
-  LOG(std::format("Command to handle: {}", context.received_message.payload));
-  CommandInfo action_to_execute =
-      bsm::Dispatcher::dispatch(context.received_message);
-  auto client_action =
-      filter_variant<ClientAction>(action_to_execute.parsed_cmd);
-  if (!client_action) {
+auto Client::send_input_to_server(const ActionContext& context)
+    -> ActionResult {
+  if (auto send_error{
+          network_engine().send_message_to(
+              server_view_, {.payloads = {context.received_message.payload}}),
+      }) {
     return {
-        .conn_status = ConnectionStatus::KEEP,
-        .error = std::move(client_action)
-                     .error()
-                     .add_context("Command not allowed in this context"),
+        .error =
+            Error{
+                .backtrace =
+                    {
+                        "Unable to send input to server : failed to "
+                        "send message",
+                    },
+            },
+        .user_code = user_error_e::GENERIC, // add error message for this case
     };
   }
   return std::visit(
