@@ -62,39 +62,20 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
             .add_context("Unable to init NetworkEngine: failed to push socket "
                          "to connection pool"));
   }
-  ConnectionEntry* root_connection{
-      connection_pool_.get_object(*root_socket_slot),
+  ConnectionEntry& root_connection{
+      *connection_pool_.get_object(*root_socket_slot),
   };
-  switch (socket_type) {
-  case end_point_e::NONE:
-  case end_point_e::TO_CLIENT:
-  case end_point_e::TO_LOBBY:
-    break;
-  case end_point_e::TO_PARENT:
-    root_connection->connection_type_ = end_point_e::TO_PARENT;
-    break;
-  case end_point_e::LISTENER:
-    if (auto setup_error = root_connection->socket_handler_.setup_listener(
-            Config::instance().get_line("port"));
-        setup_error) {
-      return std::unexpected(
-          std::move(setup_error)
-              ->add_context("Unable to init NetworkEngine: failed to setup "
-                            "listener socket for server"));
-    }
-    root_connection->connection_type_ = end_point_e::LISTENER;
-    break;
-  case end_point_e::TO_SERVER:
-    if (auto error = root_connection->socket_handler_.setup_client(); error) {
-      return std::unexpected(std::move(error)->add_context(
-          "Unable to init NetworkEngine: failed to setup client socket"));
-    }
-    root_connection->connection_type_ = end_point_e::TO_SERVER;
-    break;
+  if (auto init_error = init_connection_type(socket_type, root_connection)) {
+    return std::unexpected(
+        std::move(init_error)
+            ->add_context("Unable to init NetworkEngine: failed to init "
+                          "connection according to a type"));
   }
-  if (auto error = init_epoll(); error) {
-    return std::unexpected(std::move(error)->add_context(
-        "Unable to init NetworkEngine: failed to init epoll"));
+  if (auto epoll_error = init_epoll(); epoll_error) {
+    return std::unexpected(
+        std::move(epoll_error)
+            ->add_context(
+                "Unable to init NetworkEngine: failed to init epoll"));
   }
   return ConnectionView{*root_socket_slot};
 }
