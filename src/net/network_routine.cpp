@@ -191,6 +191,22 @@ auto NetworkEngine::process_connection(const ConnectionView& pending_view)
   return std::nullopt;
 }
 
+auto NetworkEngine::reset_base_connection(end_point_e socket_type)
+    -> std::optional<Error> {
+  auto& root_connection{*connection_pool_.get_object(0)};
+  if (auto init_error = init_connection_type(socket_type, root_connection)) {
+    return init_error->add_context("Unable to reset base connection: failed to "
+                                   "init connection according to a type");
+  }
+  return std::nullopt;
+}
+
+void NetworkEngine::release_connection_by_view(ConnectionView view_to_release) {
+  size_t slot_to_release{view_to_release.get_slot()};
+  release_connection(*connection_pool_.get_object(slot_to_release),
+                     slot_to_release);
+}
+
 // private:
 auto NetworkEngine::init_epoll() -> std::optional<Error> {
   if (auto init_error{epoll_handler_.init()}; init_error) {
@@ -205,6 +221,40 @@ auto NetworkEngine::init_epoll() -> std::optional<Error> {
       adding_error) {
     return adding_error->add_context("Unable to init epoll for Engine: failed "
                                      "to subscribe root connection to events");
+  }
+  return std::nullopt;
+}
+
+auto NetworkEngine::init_connection_type(end_point_e socket_type,
+                                         ConnectionEntry& connection)
+    -> std::optional<Error> {
+  switch (socket_type) {
+  case end_point_e::NONE:
+  case end_point_e::TO_CLIENT:
+  case end_point_e::TO_LOBBY:
+    break;
+  case end_point_e::TO_PARENT:
+    connection.connection_type_ = end_point_e::TO_PARENT;
+    break;
+  case end_point_e::LISTENER:
+    if (auto setup_error = connection.socket_handler_.setup_listener(
+            Config::instance().get_line("port"));
+        setup_error) {
+      return std::move(setup_error)
+          ->add_context(
+              "Unable to init connection based on type: failed to setup "
+              "listener socket for server");
+    }
+    connection.connection_type_ = end_point_e::LISTENER;
+    break;
+  case end_point_e::TO_SERVER:
+    if (auto error = connection.socket_handler_.setup_client(); error) {
+      return std::move(error)->add_context(
+          "Unable to init connection based on type: failed to setup client "
+          "socket");
+    }
+    connection.connection_type_ = end_point_e::TO_SERVER;
+    break;
   }
   return std::nullopt;
 }

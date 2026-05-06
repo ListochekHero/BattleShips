@@ -71,6 +71,8 @@ public:
                 const ConnectionView& source_view) -> TransferResult;
   auto process_connection(const ConnectionView& pending_view)
       -> std::optional<Error>;
+  auto reset_base_connection(end_point_e socket_type) -> std::optional<Error>;
+  void release_connection_by_view(ConnectionView view_to_release);
 
   template <typename Filter>
     requires std::predicate<Filter, const ConnectionMeta&>
@@ -124,6 +126,9 @@ public:
 
 private:
   auto init_epoll() -> std::optional<Error>;
+  static auto init_connection_type(end_point_e socket_type,
+                                   ConnectionEntry& connection)
+      -> std::optional<Error>;
   auto subscribe_to_events(ConnectionEntry& connection, size_t pool_slot)
       -> std::optional<Error>;
   auto unsubscribe_from_events(ConnectionEntry& connection)
