@@ -121,14 +121,8 @@ auto NetworkEngine::send_message_to(const ConnectionView& recipient_view,
     -> std::optional<Error> {
   auto recipient_slot{recipient_view.get_slot()};
   auto& recipient_connection{*connection_pool_.get_object(recipient_slot)};
-  auto error{send_message_impl(recipient_connection, outgoing_message)};
-  if (error) {
-    release_connection(
-        recipient_connection, // for now, if we cannot send message via
-        recipient_slot);      // connection, it's better to just drop it
-    return error;
-  }
-  return std::nullopt;
+  auto send_error{send_message_impl(recipient_connection, outgoing_message)};
+  return send_error ? send_error : std::nullopt;
 }
 
 auto NetworkEngine::attach_socket(int socket, end_point_e socket_type)
