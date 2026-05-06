@@ -7,11 +7,9 @@
 #include "protocol/message_types.h"
 #include "protocol/network_defs.h"
 #include "protocol/network_types.h"
-#include "utility/logger.h"
 #include "utility/utility.h"
 
 #include <cstdlib>
-#include <format>
 #include <optional>
 #include <string>
 #include <utility>
@@ -78,8 +76,11 @@ auto Lobby::execute_action(const AcceptSocket& /*unused*/,
   if (auto greeting_error{send_join_lobby_message(*client_view)}) {
     greeting_error->add_context(
         "Unable to accept socket: failed to send greeting message");
-    return {.conn_status = ConnectionStatus::KEEP,
-            .error = std::move(greeting_error)};
+    network_engine().release_connection_by_view(*client_view);
+    return {
+        .conn_status = ConnectionStatus::KEEP,
+        .error = std::move(greeting_error),
+    };
   }
   return {.conn_status = ConnectionStatus::KEEP};
 }
