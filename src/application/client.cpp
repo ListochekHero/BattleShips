@@ -4,12 +4,11 @@
 
 #include "core/dispatcher.h"
 #include "protocol/message_types.h"
+#include "protocol/network_defs.h"
 #include "protocol/task_context_types.h"
 #include "utility/error.h"
-#include "utility/logger.h"
 #include "utility/utility.h"
 
-#include <format>
 #include <iostream>
 #include <memory>
 #include <utility>
@@ -81,8 +80,9 @@ auto Client::console_co() -> bsm_co_handle { // NOLINT
 auto Client::handle_action(const ActionContext& context) -> ActionResult {
   ActionInfo action_info = bsm::Dispatcher::dispatch(context.received_message);
   switch (action_info.scope) {
-  case bsm::action_scope_e::BROADCAST:
-    return send_input_to_server(context);
+  case bsm::action_scope_e::BROADCAST: {
+    return handle_broadcast_action(context);
+  }
   case action_scope_e::NONE:
   case action_scope_e::LOCAL:
   case action_scope_e::NETWORK:
@@ -104,23 +104,31 @@ auto Client::handle_action(const ActionContext& context) -> ActionResult {
       *client_action);
 }
 
-auto Client::send_input_to_server(const ActionContext& context)
+auto Client::handle_broadcast_action(const ActionContext& context)
     -> ActionResult {
+  if (auto send_error{send_input_to_server(context.received_message)}) {
+    send_error->add_context(
+        "Unable to handle broadcast action: failed to send input to Server. "
+        "Trying to reconnect to Server...");
+    LOG(send_error->full_report());
+    success_or_terminate(
+        network_engine().reset_base_connection(end_point_e::TO_SERVER));
+    return {
+        .error = std::move(send_error)
+                     ->add_context("Succesfully reconnected to Server"),
+    };
+  }
+  return {};
+}
+
+auto Client::send_input_to_server(const ReceiveResult& message_to_send)
+    -> std::optional<Error> {
   if (auto send_error{
           network_engine().send_message_to(
-              server_view_, {.payloads = {context.received_message.payload}}),
+              server_view_, {.payloads = {message_to_send.payload}}),
       }) {
-    return {
-        .error =
-            Error{
-                .backtrace =
-                    {
-                        "Unable to send input to server : failed to "
-                        "send message",
-                    },
-            },
-        .user_code = user_error_e::GENERIC, // add error message for this case
-    };
+    return send_error->add_context("Unable to send input to server : failed to "
+                                   "send message");
   }
   return {};
 }

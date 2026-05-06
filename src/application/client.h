@@ -7,6 +7,7 @@
 #include "core/dispatcher.h"
 #include "io/console_routine.h"
 #include "protocol/coroutine_promise.h"
+#include "protocol/message_types.h"
 #include "protocol/network_defs.h"
 #include "protocol/network_types.h"
 #include "utility/error.h"
@@ -15,6 +16,7 @@
 #include <atomic>
 #include <cstddef>
 #include <limits>
+#include <optional>
 #include <string>
 #include <variant>
 // IWYU pragma: end_export
@@ -31,7 +33,9 @@ private:
   auto register_console_task() -> std::optional<Error>;
   auto console_co() -> bsm_co_handle;
   auto handle_action(const ActionContext& context) -> ActionResult override;
-  auto send_input_to_server(const ActionContext& context) -> ActionResult;
+  auto handle_broadcast_action(const ActionContext& context) -> ActionResult;
+  auto send_input_to_server(const ReceiveResult& message_to_send)
+      -> std::optional<Error>;
   using ClientAction = std::variant<PrintMessage, Quit>;
   static auto execute_action(const PrintMessage&, const ActionContext& context)
       -> ActionResult;
