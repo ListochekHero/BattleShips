@@ -184,8 +184,11 @@ auto NetworkEngine::reset_base_connection(end_point_e socket_type)
 
 void NetworkEngine::release_connection_by_view(ConnectionView view_to_release) {
   size_t slot_to_release{view_to_release.get_slot()};
+  auto& connection{*connection_pool_.get_object(slot_to_release)};
+  if (connection.socket_handler_.is_socket_alive()) {
   release_connection(*connection_pool_.get_object(slot_to_release),
                      slot_to_release);
+}
 }
 
 // private:
