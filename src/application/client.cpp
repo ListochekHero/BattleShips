@@ -125,7 +125,7 @@ auto Client::send_input_to_server(const ReceiveResult& message_to_send)
     -> std::optional<Error> {
   if (auto send_error{
           network_engine().send_message_to(
-              server_view_, {.payloads = {message_to_send.payload}}),
+              server_view_, {.payload = {message_to_send.payload}}),
       }) {
     return send_error->add_context("Unable to send input to server : failed to "
                                    "send message");

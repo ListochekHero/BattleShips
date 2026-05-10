@@ -8,14 +8,15 @@
 #include <vector>
 
 namespace bsm {
-
-struct MsgHeader {
+#pragma pack(push, 1)
+struct MessageHeader {
   message_type_e type{message_type_e::DEFAULT};
-  uint64_t payload_count{0};
+  uint64_t payload_size{0};
 };
+#pragma pack(pop)
 
 struct OutgoingMessage {
-  std::vector<std::string_view> payloads;
+  std::string_view payload;
   message_type_e type{message_type_e::DEFAULT};
   std::optional<int> socket{std::nullopt};
 };
@@ -23,7 +24,7 @@ struct OutgoingMessage {
 struct ReceiveResult {
   message_status_e status{message_status_e::EMPTY};
   message_type_e type{message_type_e::DEFAULT};
-  std::string payload{std::string(1024, '\0')};
+  std::string payload;
   std::optional<int> socket{std::nullopt};
 };
 

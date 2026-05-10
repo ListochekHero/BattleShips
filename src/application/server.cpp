@@ -110,7 +110,7 @@ auto Server::init_lobby(const LobbyView& lobby_view) -> std::optional<Error> {
   auto send_error = network_engine().send_message_to(
       lobby_view.control_connection,
       {
-          .payloads = {std::to_string(lobby_view.lobby_id)},
+          .payload = {std::to_string(lobby_view.lobby_id)},
           .type = message_type_e::LOBBY_ID,
       });
   if (send_error) {
@@ -172,7 +172,7 @@ auto Server::execute_action(const ChatMessage& /*unused*/,
     };
   }
   network_engine().send_message(
-      {.payloads = {*parse_result}, .type = message_type_e::PRINTABLE},
+      {.payload = {*parse_result}, .type = message_type_e::PRINTABLE},
       [](const auto& meta) -> auto {
         return meta.type == end_point_e::TO_CLIENT;
       });
@@ -184,7 +184,7 @@ auto Server::execute_action(const GeneralAction& /*unused*/,
   auto send_error = network_engine().send_message_to(
       context.pending_view,
       {
-          .payloads = {user_message(user_error_e::UNKNOWN_COMMAND)},
+          .payload = {user_message(user_error_e::UNKNOWN_COMMAND)},
           .type = message_type_e::PRINTABLE,
       });
   if (send_error) {

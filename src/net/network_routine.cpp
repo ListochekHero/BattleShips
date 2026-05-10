@@ -135,7 +135,7 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
   if (auto transfer_error = send_message_impl(
           destination_conn,
           {
-              .payloads = {"\\socket"},
+              .payload = {"\\socket"},
               .type = message_type_e::SOCKET,
               .socket = source_conn.socket_handler_.get_socket(),
           });
@@ -186,9 +186,9 @@ void NetworkEngine::release_connection_by_view(ConnectionView view_to_release) {
   size_t slot_to_release{view_to_release.get_slot()};
   auto& connection{*connection_pool_.get_object(slot_to_release)};
   if (connection.socket_handler_.is_socket_alive()) {
-  release_connection(*connection_pool_.get_object(slot_to_release),
-                     slot_to_release);
-}
+    release_connection(*connection_pool_.get_object(slot_to_release),
+                       slot_to_release);
+  }
 }
 
 // private:
@@ -298,7 +298,7 @@ auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
         "Unable to register new connection: failed to subscribe to events");
     send_message_impl(connection,
                       {
-                          .payloads = {user_message(user_error_e::GENERIC)},
+                          .payload = {user_message(user_error_e::GENERIC)},
                           .type = message_type_e::PRINTABLE,
                       });
     connection.reset();
@@ -378,7 +378,7 @@ auto NetworkEngine::process_connection_impl(size_t pool_slot)
       send_message_impl(
           pending_connection,
           {
-              .payloads = {user_message(*process_result.user_code)},
+              .payload = {user_message(*process_result.user_code)},
               .type = message_type_e::PRINTABLE,
           });
     }

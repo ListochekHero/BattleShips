@@ -58,7 +58,7 @@ auto Lobby::execute_action(const AcceptSocket& /*unused*/,
            .socket) { // Need to work on Server<->Lobby protocol
     network_engine().send_message_to(
         parent_view_, {
-                          .payloads = {"No socket found in message"},
+                          .payload = {"No socket found in message"},
                           .type = message_type_e::ERROR,
                       });
     return {.conn_status = ConnectionStatus::KEEP};
@@ -89,12 +89,12 @@ auto Lobby::send_join_lobby_message(ConnectionView recipient_view)
     -> std::optional<Error> {
   if (auto send_error = network_engine().send_message_to(
           recipient_view, {
-                              .payloads =
+                              .payload =
                                   {
-                                      "Connected to lobby\n",
-                                      "Connection code is: \n",
-                                      "\t",
-                                      std::to_string(lobby_id_),
+                                      std::format("Connected to lobby\n"
+                                                  "Connection code is:\n"
+                                                  "\t{}",
+                                                  std::to_string(lobby_id_)),
                                   },
                               .type = message_type_e::PRINTABLE,
                           })) {
@@ -123,7 +123,7 @@ auto Lobby::execute_action(const ChatMessage& /*unused*/,
     };
   }
   network_engine().send_message(
-      {.payloads = {*parse_result}, .type = message_type_e::PRINTABLE},
+      {.payload = {*parse_result}, .type = message_type_e::PRINTABLE},
       [](const auto& meta) -> auto {
         return meta.type == end_point_e::TO_CLIENT;
       });

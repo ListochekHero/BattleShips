@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 
 #include "core/atomic_queue.h"
 #include "core/dispatcher.h"
