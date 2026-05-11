@@ -5,15 +5,13 @@
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <vector>
 
 namespace bsm {
-#pragma pack(push, 1)
+
 struct MessageHeader {
   message_type_e type{message_type_e::DEFAULT};
   uint64_t payload_size{0};
 };
-#pragma pack(pop)
 
 struct OutgoingMessage {
   std::string_view payload;
@@ -21,7 +19,7 @@ struct OutgoingMessage {
   std::optional<int> socket{std::nullopt};
 };
 
-struct ReceiveResult {
+struct ReceivedMessage {
   message_status_e status{message_status_e::EMPTY};
   message_type_e type{message_type_e::DEFAULT};
   std::string payload;

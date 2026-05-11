@@ -6,7 +6,7 @@
 
 namespace bsm {
 
-auto Dispatcher::dispatch(const ReceiveResult& message) -> ActionInfo {
+auto Dispatcher::dispatch(const ReceivedMessage& message) -> ActionInfo {
   for (const auto& action : actions) {
     if (match_action(action, message)) {
       return {.scope = action.scope, .variant = action.make()};
@@ -19,7 +19,7 @@ auto Dispatcher::dispatch(const ReceiveResult& message) -> ActionInfo {
 }
 
 auto Dispatcher::match_action(const Action& action,
-                              const ReceiveResult& message) -> bool {
+                              const ReceivedMessage& message) -> bool {
   if (action.type && action.type == message.type) {
     return true;
   }

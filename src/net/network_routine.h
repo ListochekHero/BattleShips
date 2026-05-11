@@ -5,6 +5,7 @@
 #include "core/object_pool.h"
 #include "deferred_actions.h"
 #include "interfaces/modules.h"
+#include "protocol/message_types.h"
 #include "protocol/network_defs.h"
 #include "protocol/network_types.h"
 #include "socket_routine.h"
@@ -30,7 +31,7 @@ namespace bsm {
 
 enum class task_tag_e : uint8_t;
 struct OutgoingMessage;
-struct ReadResult;
+struct ReceivedMessage;
 
 struct ConnectionEntry {
   ConnectionEntry() = default;
@@ -143,7 +144,7 @@ private:
                              size_t server_slot);
   auto process_connection_impl(size_t pool_slot) -> std::optional<Error>;
   auto process_message(ConnectionEntry& pending_connection, size_t pool_slot,
-                       ReceiveResult& received_message) -> ActionResult;
+                       ReceivedMessage& received_message) -> ActionResult;
   static auto send_message_impl(ConnectionEntry& connection_entry,
                                 const OutgoingMessage& message)
       -> std::optional<Error>;

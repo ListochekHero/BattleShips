@@ -11,7 +11,7 @@
 namespace bsm {
 
 enum class message_type_e : uint8_t;
-struct ReceiveResult;
+struct ReceivedMessage;
 
 struct CreateLobby {};
 struct JoinLobby {};
@@ -35,7 +35,7 @@ struct ActionInfo {
 
 class Dispatcher {
 public:
-  static auto dispatch(const ReceiveResult& message) -> ActionInfo;
+  static auto dispatch(const ReceivedMessage& message) -> ActionInfo;
 
 private:
   struct Action {
@@ -52,8 +52,8 @@ private:
   };
 
   static const std::array<Action, 8> actions;
-  static auto match_action(const Action& action,
-                            const ReceiveResult& message) -> bool;
+  static auto match_action(const Action& action, const ReceivedMessage& message)
+      -> bool;
 };
 
 } // namespace bsm

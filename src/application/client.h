@@ -34,7 +34,7 @@ private:
   auto console_co() -> bsm_co_handle;
   auto handle_action(const ActionContext& context) -> ActionResult override;
   auto handle_broadcast_action(const ActionContext& context) -> ActionResult;
-  auto send_input_to_server(const ReceiveResult& message_to_send)
+  auto send_input_to_server(const ReceivedMessage& message_to_send)
       -> std::optional<Error>;
   using ClientAction = std::variant<PrintMessage, Quit>;
   static auto execute_action(const PrintMessage&, const ActionContext& context)

@@ -121,7 +121,7 @@ auto Client::handle_broadcast_action(const ActionContext& context)
   return {};
 }
 
-auto Client::send_input_to_server(const ReceiveResult& message_to_send)
+auto Client::send_input_to_server(const ReceivedMessage& message_to_send)
     -> std::optional<Error> {
   if (auto send_error{
           network_engine().send_message_to(
