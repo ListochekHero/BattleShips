@@ -1,13 +1,22 @@
 #include "socket_routine.h"
 
+#include "protocol/message_defs.h"
+#include "protocol/message_types.h"
 #include "utility/logger.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <fcntl.h>
+#include <memory>
+#include <optional>
+#include <ranges>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <utility>
+#include <vector>
 
 namespace bsm {
 
@@ -159,6 +168,132 @@ auto SocketHandler::receive_message() -> std::expected<ReceivedMessage, Error> {
     return std::unexpected(make_error_c("Read error"));
   }
   return received_messaage;
+}
+
+auto SocketHandler::get_message() -> std::optional<ReceivedMessage> {
+  if (!receive_handle_) {
+    set_receive_handle();
+  }
+  receive_handle_->resume();
+  auto received_message{std::move(receive_handle_->promise().receive_result)};
+  if (receive_handle_->done()) {
+    destroy_co_handle();
+  }
+  if (!received_message) {
+    LOG(received_message.error().full_report());
+    return std::nullopt;
+  }
+  return std::move(*received_message);
+}
+
+void SocketHandler::set_receive_handle() {
+  receive_handle_ = co_receive_from_socket();
+}
+
+auto SocketHandler::co_receive_from_socket() -> receive_co_handle {
+  std::vector<char> receive_buffer;
+  receive_buffer.resize(1024); // add this to Config
+  uint16_t free_beggins{0};
+  while (true) {
+    struct iovec iodata_vector{
+        .iov_base = receive_buffer.data() + free_beggins,
+        .iov_len = receive_buffer.size() - free_beggins,
+
+    };
+    struct msghdr raw_message{};
+    raw_message.msg_iov = &iodata_vector;
+    raw_message.msg_iovlen = 1;
+    char control_buf[CMSG_SPACE(sizeof(int))]; // NOLINT
+    raw_message.msg_control = control_buf;
+    raw_message.msg_controllen = sizeof(control_buf);
+
+    ssize_t bytes_received = recvmsg(socket_, &raw_message, 0);
+    ReceivedMessage received_message;
+    if (bytes_received > 0) {
+      bytes_received += free_beggins;
+      free_beggins = bytes_received;
+      if (auto socket{process_control_message(raw_message)}) {
+        received_message.socket = socket;
+      }
+      const char* data_beggins{
+          static_cast<char*>(receive_buffer.data()),
+      };
+      MessageHeader header;
+      while (bytes_received > 0) {
+        if (header.type == message_type_e::NONE) {
+          if (!process_message_header(data_beggins, bytes_received, header)) {
+            break;
+          }
+        }
+        if (process_message_payload(received_message, data_beggins,
+                                    bytes_received, header.payload_size)) {
+          received_message.type =
+              std::exchange(header.type, message_type_e::NONE);
+          LOG(std::format("Message received: {}", received_message.payload));
+          co_yield std::move(received_message);
+        } else {
+          break;
+        }
+      }
+      move_leftover_to_beginning(receive_buffer, data_beggins, bytes_received,
+                                 free_beggins);
+    } else if (bytes_received == 0) {
+      received_message.status = message_status_e::DISCONNECTED;
+      socket_status_ = socket_status_e::CLOSED;
+      co_return received_message;
+    } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+      received_message.status = message_status_e::WOULDBLOCK;
+      co_yield std::move(received_message);
+    } else {
+      co_return std::unexpected(make_error_c("Read error"));
+    }
+  }
+}
+
+auto SocketHandler::process_control_message(const struct msghdr& raw_message)
+    -> std::optional<int> {
+  struct cmsghdr* control_message = CMSG_FIRSTHDR(&raw_message);
+  if (control_message != nullptr && control_message->cmsg_level == SOL_SOCKET &&
+      control_message->cmsg_type == SCM_RIGHTS) {
+    int socket;
+    std::memcpy(&socket, CMSG_DATA(control_message), sizeof(int));
+    return socket;
+  }
+  return std::nullopt;
+}
+
+auto SocketHandler::process_message_header(const char*& data_beggins,
+                                           ssize_t& bytes_received,
+                                           MessageHeader& header) -> bool {
+  auto header_size{sizeof(header)};
+  if (std::cmp_greater_equal(bytes_received, header_size)) {
+    memcpy(&header, data_beggins, header_size);
+    data_beggins += header_size;
+    bytes_received -= header_size;
+    return true;
+  }
+  return false;
+}
+
+auto SocketHandler::process_message_payload(ReceivedMessage& received_message,
+                                            const char*& data_beggins,
+                                            ssize_t& bytes_received,
+                                            uint64_t payload_size) -> bool {
+  if (std::cmp_greater_equal(bytes_received, payload_size)) {
+    received_message.payload = std::string{data_beggins, payload_size};
+    data_beggins += payload_size;
+    bytes_received -= payload_size;
+    received_message.status = message_status_e::DATA;
+    return true;
+  }
+  return false;
+}
+
+void SocketHandler::move_leftover_to_beginning(
+    std::vector<char>& receive_buffer, const char* data_beggins,
+    ssize_t bytes_received, uint16_t& free_beggins) {
+  memmove(receive_buffer.data(), data_beggins, bytes_received);
+  free_beggins = bytes_received;
 }
 
 auto SocketHandler::send_message(const OutgoingMessage& msg) const

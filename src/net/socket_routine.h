@@ -3,6 +3,7 @@
 
 #include <arpa/inet.h>
 #include <atomic>
+#include <coroutine>
 #include <cstddef>
 #include <cstdlib>
 #include <fcntl.h>
@@ -54,17 +55,32 @@ public:
   auto setup_client() -> std::optional<Error>;
   [[nodiscard]] auto get_socket() const -> int;
   [[nodiscard]] auto get_socket_status() const -> socket_status_e;
-  auto is_socket_alive()-> bool;
+  auto is_socket_alive() -> bool;
   void set_socket_status(socket_status_e socket_status);
   [[nodiscard]] auto accept_connections() const
       -> std::expected<std::vector<int>, Error>;
-  auto receive_message() -> std::expected<ReceiveResult, Error>;
+  auto receive_message() -> std::expected<ReceivedMessage, Error>;
+  auto get_message() -> std::optional<ReceivedMessage>;
+  void set_receive_handle();
+  auto co_receive_from_socket() -> receive_co_handle;
   [[nodiscard]] auto send_message(const OutgoingMessage& msg) const
       -> std::optional<Error>;
   auto remove_cloexec() const -> std::optional<Error>;
   void reset_with_new(int new_socket);
   void reset_to_empty();
-
+  static auto process_control_message(const struct msghdr& raw_message)
+      -> std::optional<int>;
+  static auto process_message_header(const char*& data_beggins,
+                                     ssize_t& bytes_received,
+                                     MessageHeader& header) -> bool;
+  static auto process_message_payload(ReceivedMessage& received_message,
+                                      const char*& data_beggins,
+                                      ssize_t& bytes_received,
+                                      uint64_t payload_size) -> bool;
+  void move_leftover_to_beginning(std::vector<char>& receive_buffer,
+                                  const char* data_beggins,
+                                  ssize_t bytes_received,
+                                  uint16_t& free_beggins);
   std::string nick_name{*generate_name()};
 
   SocketHandler(const SocketHandler&) = delete;
@@ -72,9 +88,12 @@ public:
 
 private:
   int socket_{-1};
+  std::optional<receive_co_handle> receive_handle_{std::nullopt};
   std::atomic<socket_status_e> socket_status_{socket_status_e::EMPTY};
 
   void swap(SocketHandler& left_sh, SocketHandler& r_sh);
+  void destroy_co_handle();
+  void reset_co_handle();
   void close_socket();
 };
 
