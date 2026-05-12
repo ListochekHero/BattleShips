@@ -14,7 +14,10 @@ namespace bsm {
 SocketHandler::SocketHandler(int socket_fd)
     : socket_{socket_fd}, socket_status_{socket_status_e::ALIVE} {}
 
-SocketHandler::~SocketHandler() { close_socket(); }
+SocketHandler::~SocketHandler() {
+  destroy_co_handle();
+  close_socket();
+}
 
 SocketHandler::SocketHandler(SocketHandler&& sock_hndl) noexcept
     : socket_{std::exchange(sock_hndl.socket_, -1)},
@@ -25,6 +28,7 @@ SocketHandler::SocketHandler(SocketHandler&& sock_hndl) noexcept
 auto SocketHandler::operator=(SocketHandler&& sock_hndl) noexcept
     -> SocketHandler& {
   if (this != &sock_hndl) {
+    destroy_co_handle();
     close_socket();
     socket_ = std::exchange(sock_hndl.socket_, -1);
     socket_status_.store(sock_hndl.socket_status_.load());
@@ -202,18 +206,27 @@ auto SocketHandler::remove_cloexec() const -> std::optional<Error> {
 }
 
 void SocketHandler::reset_with_new(int new_socket) {
+  destroy_co_handle();
   close_socket();
   socket_ = new_socket;
   socket_status_ = socket_status_e::ALIVE;
 }
 
 void SocketHandler::reset_to_empty() {
+  destroy_co_handle();
   close_socket();
   socket_status_ = socket_status_e::EMPTY;
 }
 
 void SocketHandler::swap(SocketHandler& left_sh, SocketHandler& r_sh) {
   // зробити свап (?)
+}
+
+void SocketHandler::destroy_co_handle() {
+  if (receive_handle_) {
+    receive_handle_->destroy();
+    receive_handle_ = std::nullopt;
+  }
 }
 
 void SocketHandler::close_socket() {
