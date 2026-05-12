@@ -9,7 +9,7 @@
 namespace bsm {
 
 struct MessageHeader {
-  message_type_e type{message_type_e::DEFAULT};
+  message_type_e type{message_type_e::NONE};
   uint64_t payload_size{0};
 };
 

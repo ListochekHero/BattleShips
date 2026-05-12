@@ -5,6 +5,7 @@
 namespace bsm {
 
 enum class message_type_e : uint8_t {
+  NONE,
   DEFAULT,
   PRINTABLE,
   SOCKET,
