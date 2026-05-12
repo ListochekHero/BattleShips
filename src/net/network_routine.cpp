@@ -364,13 +364,19 @@ auto NetworkEngine::process_connection_impl(size_t pool_slot)
   ConnectionEntry& pending_connection = *connection_pool_.get_object(pool_slot);
   while (pending_connection.socket_handler_.is_socket_alive() &&
          process_result.action_status == ActionStatus::CONTINUE) {
-    auto receive_result = pending_connection.socket_handler_.receive_message();
+    // auto receive_result =
+    // pending_connection.socket_handler_.receive_message();
+    auto receive_result = pending_connection.socket_handler_.get_message();
     if (!receive_result) {
       release_connection(pending_connection, pool_slot);
-      return std::move(receive_result)
-          .error()
-          .add_context(
-              "Unable to process connection: failed to receive message");
+      return Error{
+          .backtrace =
+              {"Unable to process connection: failed to receive message"},
+      };
+      // return std::move(receive_result)
+      //     .error()
+      //     .add_context(
+      //         "Unable to process connection: failed to receive message");
     }
     process_result =
         process_message(pending_connection, pool_slot, *receive_result);
@@ -397,7 +403,7 @@ auto NetworkEngine::process_connection_impl(size_t pool_slot)
 
 auto NetworkEngine::process_message(ConnectionEntry& pending_connection,
                                     size_t pool_slot,
-                                    ReceiveResult& received_message)
+                                    ReceivedMessage& received_message)
     -> ActionResult {
   ActionResult process_result{};
   switch (received_message.status) {
