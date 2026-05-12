@@ -115,13 +115,16 @@ auto SocketHandler::accept_connections() const
   return new_clients;
 }
 
-auto SocketHandler::receive_message() -> std::expected<ReceiveResult, Error> {
-  MsgHeader hdr;
-  ReceiveResult received_messaage;
+auto SocketHandler::receive_message() -> std::expected<ReceivedMessage, Error> {
+  MessageHeader hdr;
+  ReceivedMessage received_messaage;
+  received_messaage.payload.resize(1024);
   struct iovec iov[2]{
       {.iov_base = &hdr, .iov_len = sizeof(hdr)},
-      {.iov_base = received_messaage.payload.data(),
-       .iov_len = received_messaage.payload.size()},
+      {
+          .iov_base = received_messaage.payload.data(),
+          .iov_len = received_messaage.payload.size(),
+      },
   };
   struct msghdr msg{};
   msg.msg_iov = iov;
@@ -156,15 +159,15 @@ auto SocketHandler::receive_message() -> std::expected<ReceiveResult, Error> {
 
 auto SocketHandler::send_message(const OutgoingMessage& msg) const
     -> std::optional<Error> {
-  LOG(std::format("Message for user: {}", msg.payloads));
-  MsgHeader hdr{.type = msg.type, .payload_count = msg.payloads.size()};
+  // LOG(std::format("Message for user: {}", msg.payload));
+  MessageHeader hdr{.type = msg.type, .payload_size = msg.payload.size()};
   std::vector<iovec> iov;
-  iov.reserve(msg.payloads.size());
+  iov.reserve(2);
   iov.push_back({.iov_base = &hdr, .iov_len = sizeof(hdr)});
-  for (auto message : msg.payloads) {
-    iov.push_back({.iov_base = const_cast<char*>(message.data()),
-                   .iov_len = message.size()});
-  }
+  iov.push_back({
+      .iov_base = const_cast<char*>(msg.payload.data()),
+      .iov_len = msg.payload.size(),
+  });
   struct msghdr m{};
   m.msg_iov = iov.data();
   m.msg_iovlen = iov.size();
