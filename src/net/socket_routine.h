@@ -23,6 +23,26 @@ namespace bsm {
 
 enum class socket_status_e : uint8_t { EMPTY, ALIVE, CLOSED, TRANSFERED };
 
+struct receive_message_promise;
+using receive_co_handle = std::coroutine_handle<receive_message_promise>;
+
+struct receive_message_promise {
+  std::expected<ReceivedMessage, Error> receive_result;
+  auto get_return_object() -> receive_co_handle {
+    return receive_co_handle::from_promise(*this);
+  }
+  static auto initial_suspend() noexcept -> std::suspend_always { return {}; }
+  static auto final_suspend() noexcept -> std::suspend_always { return {}; }
+  void unhandled_exception() {}
+  auto yield_value(ReceivedMessage&& received_message) -> std::suspend_always {
+    receive_result = std::move(received_message);
+    return {};
+  }
+  void return_value(std::expected<ReceivedMessage, Error>&& co_result) {
+    receive_result = std::move(co_result);
+  }
+};
+
 class SocketHandler {
 public:
   SocketHandler() = default;
@@ -77,5 +97,10 @@ private:
 };
 
 } // namespace bsm
+
+template <>
+struct std::coroutine_traits<bsm::receive_co_handle, bsm::SocketHandler&> {
+  using promise_type = bsm::receive_message_promise;
+};
 
 #endif
