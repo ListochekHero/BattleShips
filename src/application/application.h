@@ -40,7 +40,6 @@ protected:
 private:
   auto init_network(end_point_e socket_type, int socket)
       -> std::expected<ConnectionView, Error>;
-  auto init_scheduler() -> std::optional<Error>;
   auto register_network_task() -> std::optional<Error>;
   auto network_co() -> bsm_co_handle;
   virtual auto handle_action(const ActionContext& context) -> ActionResult = 0;
@@ -54,10 +53,7 @@ private:
   struct AppAwaiter {
     Application& application;
     static auto await_ready() -> bool { return false; }
-    auto await_suspend(std::coroutine_handle<> /*unused*/)
-        -> std::coroutine_handle<> {
-      return application.scheduler_.get_co_handle_by_tag(task_tag_e::SCHEDULER);
-    };
+    void await_suspend(std::coroutine_handle<> /*unused*/){};
     void await_resume() {}
   };
 };

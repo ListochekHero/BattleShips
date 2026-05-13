@@ -30,12 +30,6 @@ auto Application::init_app(end_point_e socket_type, int socket)
     return std::unexpected(init_result.error().add_context(
         "Unable to init Application: failed to init network"));
   }
-  if (auto init_error{init_scheduler()}) {
-    return std::unexpected(
-        std::move(init_error)
-            ->add_context(
-                "Unable to init Application: failed to init scheduler"));
-  }
   if (auto registration_error{register_network_task()}) {
     std::move(registration_error)
         ->add_context(
@@ -58,14 +52,6 @@ auto Application::init_network(end_point_e socket_type, int socket)
             .add_context("Unalbe to init network: failed to init engine"));
   }
   return init_result;
-}
-
-auto Application::init_scheduler() -> std::optional<Error> {
-  if (auto init_error{scheduler_.init()}) {
-    return std::move(init_error)
-        ->add_context("Unalbe to init scheduler: failed to init scheduler");
-  }
-  return std::nullopt;
 }
 
 auto Application::register_network_task() -> std::optional<Error> {
