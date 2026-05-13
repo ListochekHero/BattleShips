@@ -38,7 +38,7 @@ void Client::run() {
       [this]() -> void { network_engine().run_event_loop(); });
   scheduler().add_and_run_producer([this]() { console_handler_.run(); });
   scheduler().run_workers();
-  scheduler().get_co_handle_by_tag(task_tag_e::SCHEDULER).resume();
+  scheduler().coroutine_loop();
 }
 
 auto Client::register_console_task() -> std::optional<Error> {

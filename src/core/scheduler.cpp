@@ -2,23 +2,9 @@
 
 #include "core/atomic_queue.h"
 
-#include <iostream>
 #include <utility>
 
 namespace bsm {
-
-auto Scheduler::init() -> std::optional<Error> {
-  auto [iter, inserted]{
-      co_handles_map_.try_emplace(task_tag_e::SCHEDULER, coroutine_loop()),
-  };
-  if (!inserted) {
-    return Error{
-        .backtrace =
-            {"Unable to init Scheduler: failed to emplace main coroutine"},
-    };
-  }
-  return std::nullopt;
-}
 
 void Scheduler::push_task(task_tag_e tag,
                           std::unique_ptr<TaskContext> context) {
@@ -80,7 +66,9 @@ void Scheduler::worker_loop() {
 auto Scheduler::coroutine_loop() -> bsm_co_handle { // NOLINT
   while (true) {
     available_task_tags_.wait_for_data();
-    co_await yield_to_application(); // NOLINT
+    std::unique_ptr<task_tag_e> task_tag{available_task_tags_.try_pop()};
+    auto handle{get_co_handle_by_tag(*task_tag)};
+    handle.resume();
   }
 }
 

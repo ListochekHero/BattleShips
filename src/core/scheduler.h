@@ -6,11 +6,13 @@
 #include "protocol/task_context_types.h"
 #include "utility/error.h"
 
+// IWYU pragma: no_include <string>
 #include <coroutine>
 #include <cstdint>
 #include <functional>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <semaphore>
 #include <thread>
 #include <unordered_map>
@@ -33,7 +35,6 @@ class Scheduler {
 public:
   Scheduler(AtomicQueue<task_tag_e>& available_q)
       : available_task_tags_(available_q) {}
-  auto init() -> std::optional<Error>;
   void push_task(task_tag_e tag, std::unique_ptr<TaskContext> context);
   using TaskExecutor = std::function<void(std::unique_ptr<TaskContext>)>;
   auto add_task_executor(task_tag_e tag, TaskExecutor executor)
@@ -57,11 +58,12 @@ public:
     return std::nullopt;
   }
 
+  auto coroutine_loop() -> bsm_co_handle;
+
 private:
   auto try_get_task() -> Task*;
   auto get_executor_by_tag(task_tag_e tag) -> auto&;
   void worker_loop();
-  auto coroutine_loop() -> bsm_co_handle;
   auto yield_to_application() { return SchedulerAwaiter(*this); }
 
   std::vector<Producer> producers_;

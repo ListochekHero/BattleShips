@@ -31,7 +31,7 @@ void Lobby::run() {
   scheduler().add_and_run_producer(
       [this]() -> void { network_engine().run_event_loop(); });
   scheduler().run_workers();
-  scheduler().get_co_handle_by_tag(task_tag_e::SCHEDULER).resume();
+  scheduler().coroutine_loop();
 }
 
 auto Lobby::handle_action(const ActionContext& context) -> ActionResult {
