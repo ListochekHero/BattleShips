@@ -1,21 +1,24 @@
-#ifndef VIRTUAL_MMANAGER_H
-#define VIRTUAL_MMANAGER_H
+#ifndef MEMORY_MANAGER_H
+#define MEMORY_MANAGER_H
 
 #include "utility/error.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <unistd.h>
 
+#define NODE_SIZE 1
+
 namespace bsm {
 
-class Virtual_MManager {
+class MemoryManager {
 public:
   void init(std::uint64_t memory_amount);
   auto allocate_raw() -> void*;
   auto operator[](size_t index) -> void*;
 
 private:
-  auto allocate_new_page() -> std::optional<Error>;
+  auto allocate_new_node() -> std::optional<Error>;
 
   void* virtual_pool_{nullptr};
   char* free_beggins_{nullptr};
