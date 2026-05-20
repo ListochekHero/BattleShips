@@ -22,15 +22,29 @@ void MemoryManager::init(std::uint64_t memory_amount,
   virtual_pool_ = static_cast<char*>(mmap(nullptr, memory_amount, PROT_NONE,
                                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   free_beggins_ = virtual_pool_;
-  }
+}
 
 auto MemoryManager::allocate_raw() -> void* {
-  if (space_left_ < object_size_) {
-    success_or_terminate(allocate_new_node());
+  char* object_ptr = get_meta_data<meta_storage_layout::FREE_BEGGINS>().load();
+  while (true) {
+    auto& old_memory_end{
+        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>(),
+    };
+    if (object_ptr + get_meta_data<meta_storage_layout::OBJECT_SIZE>() >
+        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>()) {
+      if (page_allocate_permision.try_acquire()) {
+        allocate_new_node();
+        page_allocate_permision.release();
+      } else {
+        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>().wait(
+            old_memory_end.load());
+      }
+    }
+    if (get_meta_data<meta_storage_layout::FREE_BEGGINS>()
+            .compare_exchange_weak(object_ptr, object_ptr + object_size_)) {
+      break;
+    }
   }
-  void* object_ptr = free_beggins_;
-  free_beggins_ += object_size_;
-  space_left_ -= object_size_;
   return object_ptr;
 }
 
