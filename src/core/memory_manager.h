@@ -9,21 +9,27 @@
 #include <semaphore>
 #include <unistd.h>
 
+namespace bsm {
+
 enum meta_storage_layout : uint8_t {
   FREE_BEGGINS = 0,
   ACTUAL_MEMORY_END = 8,
   OBJECT_SIZE = 16,
   PAGE_SIZE = 24,
   ACTUAL_PAGES_ALLOCATED = 32,
+  PAGE_ALLOCATION_PERMIT = 40,
   NODE_SIZE = 255,
 };
 
-namespace bsm {
+struct AllocationResult {
+  void* memory_ptr;
+  uint64_t index;
+};
 
 class MemoryManager {
 public:
   void init(std::uint64_t memory_amount, size_t object_size);
-  auto allocate_raw() -> void*;
+  auto allocate_raw() -> AllocationResult;
   auto operator[](size_t index) -> void*;
 
 private:
@@ -34,12 +40,17 @@ private:
                   Key == meta_storage_layout::ACTUAL_MEMORY_END) {
       auto* raw_ptr{reinterpret_cast<std::atomic<char*>*>(meta_data_ + Key)};
       return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::OBJECT_SIZE ||
-                         Key == meta_storage_layout::ACTUAL_PAGES_ALLOCATED) {
-      auto* raw_ptr{reinterpret_cast<std::atomic_uint64_t*>(meta_data_ + Key)};
+    } else if constexpr (Key == meta_storage_layout::OBJECT_SIZE) {
+      const auto* raw_ptr{reinterpret_cast<const uint64_t*>(meta_data_ + Key)};
       return *std::launder(raw_ptr);
     } else if constexpr (Key == meta_storage_layout::PAGE_SIZE) {
-      auto* raw_ptr{reinterpret_cast<std::atomic_int64_t*>(meta_data_ + Key)};
+      const auto* raw_ptr{reinterpret_cast<const uint64_t*>(meta_data_ + Key)};
+      return *std::launder(raw_ptr);
+    } else if constexpr (Key == meta_storage_layout::ACTUAL_PAGES_ALLOCATED) {
+      auto* raw_ptr{reinterpret_cast<std::atomic_uint64_t*>(meta_data_ + Key)};
+      return *std::launder(raw_ptr);
+    } else if constexpr (Key == meta_storage_layout::PAGE_ALLOCATION_PERMIT) {
+      auto* raw_ptr{reinterpret_cast<std::binary_semaphore*>(meta_data_ + Key)};
       return *std::launder(raw_ptr);
     } else if constexpr (Key == meta_storage_layout::NODE_SIZE) {
       static_assert(Key != meta_storage_layout::NODE_SIZE,

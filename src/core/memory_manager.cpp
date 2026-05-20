@@ -76,11 +76,13 @@ void MemoryManager::populate_meta_storage(std::uint64_t object_size) {
   new (meta_data_ + meta_storage_layout::ACTUAL_MEMORY_END)
       std::atomic<char*>(virtual_pool_);
   new (meta_data_ + meta_storage_layout::OBJECT_SIZE)
-      const std::atomic_uint64_t(object_size);
+      const uint64_t(object_size);
   new (meta_data_ + meta_storage_layout::PAGE_SIZE)
-      const std::atomic_int64_t(sysconf(_SC_PAGE_SIZE));
+      const uint64_t(sysconf(_SC_PAGE_SIZE));
   new (meta_data_ + meta_storage_layout::ACTUAL_PAGES_ALLOCATED)
       std::atomic_uint64_t(0);
+  new (meta_data_ + meta_storage_layout::PAGE_ALLOCATION_PERMIT)
+      std::binary_semaphore(1);
 }
 
 } // namespace bsm
