@@ -21,31 +21,39 @@ void MemoryManager::init(std::uint64_t memory_amount,
   populate_meta_storage(object_size);
   virtual_pool_ = static_cast<char*>(mmap(nullptr, memory_amount, PROT_NONE,
                                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-  free_beggins_ = virtual_pool_;
+  get_meta_data<meta_storage_layout::FREE_BEGGINS>().store(virtual_pool_);
 }
 
-auto MemoryManager::allocate_raw() -> void* {
-  char* object_ptr = get_meta_data<meta_storage_layout::FREE_BEGGINS>().load();
+auto MemoryManager::allocate_raw() -> AllocationResult {
+  auto& free_beggins_atomic{get_meta_data<meta_storage_layout::FREE_BEGGINS>()};
+  auto& memory_end_atomic{
+      get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>(),
+  };
+  const uint64_t object_size{
+      get_meta_data<meta_storage_layout::OBJECT_SIZE>(),
+  };
+  auto& page_allocation_permit{
+      get_meta_data<meta_storage_layout::PAGE_ALLOCATION_PERMIT>()};
+  char* object_ptr{free_beggins_atomic.load()};
   while (true) {
-    auto& old_memory_end{
-        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>(),
-    };
-    if (object_ptr + get_meta_data<meta_storage_layout::OBJECT_SIZE>() >
-        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>()) {
-      if (page_allocate_permision.try_acquire()) {
+    char* next_object_ptr{object_ptr + object_size};
+    char* current_memory_end{memory_end_atomic.load()};
+    if (next_object_ptr > current_memory_end) {
+      if (page_allocation_permit.try_acquire()) {
         allocate_new_node();
-        page_allocate_permision.release();
+        page_allocation_permit.release();
       } else {
-        get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>().wait(
-            old_memory_end.load());
+        memory_end_atomic.wait(current_memory_end);
       }
     }
-    if (get_meta_data<meta_storage_layout::FREE_BEGGINS>()
-            .compare_exchange_weak(object_ptr, object_ptr + object_size_)) {
+    if (free_beggins_atomic.compare_exchange_weak(object_ptr,
+                                                  next_object_ptr)) {
       break;
     }
   }
-  return object_ptr;
+  uint64_t index{
+      static_cast<uint64_t>((object_ptr - virtual_pool_) / object_size)};
+  return {.memory_ptr = static_cast<void*>(object_ptr), .index = index};
 }
 
 auto MemoryManager::operator[](size_t index) -> void* {
