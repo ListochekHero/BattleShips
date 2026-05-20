@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <new>
+#include <semaphore>
 #include <sys/mman.h>
 #include <unistd.h>
 
@@ -57,24 +58,26 @@ auto MemoryManager::allocate_raw() -> AllocationResult {
 }
 
 auto MemoryManager::operator[](size_t index) -> void* {
-  void* object_ptr = virtual_pool_ + (index * object_size_);
+  void* object_ptr =
+      virtual_pool_ +
+      (index * get_meta_data<meta_storage_layout::OBJECT_SIZE>());
   return object_ptr;
 }
 
 auto MemoryManager::allocate_new_node() -> std::optional<Error> {
-  std::cout << "Allocating new page, pages already allocated: "
-            << pages_allocated_ << '\n'
-            << std::flush;
+  auto& pages_allocated_atomic{
+      get_meta_data<meta_storage_layout::ACTUAL_PAGES_ALLOCATED>()};
+  const auto& page_size{get_meta_data<meta_storage_layout::PAGE_SIZE>()};
+
   if (auto protect_result = mprotect(
-          virtual_pool_ + (pages_allocated_ * page_size_),
-          page_size_ * meta_storage_layout::NODE_SIZE, PROT_READ | PROT_WRITE);
+          virtual_pool_ + (pages_allocated_atomic.load() * page_size),
+          page_size * meta_storage_layout::NODE_SIZE, PROT_READ | PROT_WRITE);
       protect_result == -1) {
     return make_error_c(
         "Unable to allocate new memory page: failed to allocate "
         "physical memory with mprotect");
   }
-  pages_allocated_ += NODE_SIZE;
-  space_left_ += page_size_ * NODE_SIZE;
+  pages_allocated_atomic.fetch_add(NODE_SIZE);
   return std::nullopt;
 }
 
