@@ -3,29 +3,61 @@
 
 #include "utility/error.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <semaphore>
 #include <unistd.h>
 
-#define NODE_SIZE 1
+enum meta_storage_layout : uint8_t {
+  FREE_BEGGINS = 0,
+  ACTUAL_MEMORY_END = 8,
+  OBJECT_SIZE = 16,
+  PAGE_SIZE = 24,
+  ACTUAL_PAGES_ALLOCATED = 32,
+  NODE_SIZE = 255,
+};
 
 namespace bsm {
 
 class MemoryManager {
 public:
-  void init(std::uint64_t memory_amount);
+  void init(std::uint64_t memory_amount, size_t object_size);
   auto allocate_raw() -> void*;
   auto operator[](size_t index) -> void*;
 
 private:
   auto allocate_new_node() -> std::optional<Error>;
-
-  void* virtual_pool_{nullptr};
-  char* free_beggins_{nullptr};
-  std::uint64_t page_size_{static_cast<uint64_t>(sysconf(_SC_PAGE_SIZE))};
-  std::uint32_t object_size_{80};
-  std::uint32_t space_left_{0};
-  std::uint32_t pages_allocated_{0};
+  void populate_meta_storage(std::uint64_t object_size);
+  template <meta_storage_layout Key> auto get_meta_data() -> decltype(auto) {
+    if constexpr (Key == meta_storage_layout::FREE_BEGGINS ||
+                  Key == meta_storage_layout::ACTUAL_MEMORY_END) {
+      auto* raw_ptr{reinterpret_cast<std::atomic<char*>*>(meta_data_ + Key)};
+      return *std::launder(raw_ptr);
+    } else if constexpr (Key == meta_storage_layout::OBJECT_SIZE ||
+                         Key == meta_storage_layout::ACTUAL_PAGES_ALLOCATED) {
+      auto* raw_ptr{reinterpret_cast<std::atomic_uint64_t*>(meta_data_ + Key)};
+      return *std::launder(raw_ptr);
+    } else if constexpr (Key == meta_storage_layout::PAGE_SIZE) {
+      auto* raw_ptr{reinterpret_cast<std::atomic_int64_t*>(meta_data_ + Key)};
+      return *std::launder(raw_ptr);
+    } else if constexpr (Key == meta_storage_layout::NODE_SIZE) {
+      static_assert(Key != meta_storage_layout::NODE_SIZE,
+                    "NODE_SIZE is not stored in meta_data_");
+    } else {
+      static_assert(Key == meta_storage_layout::FREE_BEGGINS,
+                    "Unsupported meta storage key");
+    }
+  }
+  char* virtual_pool_{nullptr};
+  char* meta_data_{nullptr};
+  std::atomic<char*> free_beggins_{nullptr};
+  std::atomic_uint64_t page_size_{
+      static_cast<uint64_t>(sysconf(_SC_PAGE_SIZE))};
+  std::atomic_uint64_t object_size_{0};
+  std::atomic_uint64_t space_left_{0};
+  std::atomic_uint64_t pages_allocated_{0};
+  std::binary_semaphore page_allocate_permision{1};
 };
 
 } // namespace bsm
