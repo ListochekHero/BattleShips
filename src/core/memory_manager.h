@@ -60,15 +60,9 @@ private:
                     "Unsupported meta storage key");
     }
   }
+
   char* virtual_pool_{nullptr};
   char* meta_data_{nullptr};
-  std::atomic<char*> free_beggins_{nullptr};
-  std::atomic_uint64_t page_size_{
-      static_cast<uint64_t>(sysconf(_SC_PAGE_SIZE))};
-  std::atomic_uint64_t object_size_{0};
-  std::atomic_uint64_t space_left_{0};
-  std::atomic_uint64_t pages_allocated_{0};
-  std::binary_semaphore page_allocate_permision{1};
 };
 
 } // namespace bsm
