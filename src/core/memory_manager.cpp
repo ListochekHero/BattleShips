@@ -1,12 +1,10 @@
 #include "memory_manager.h"
+
 #include "utility/error.h"
-#include "utility/utility.h"
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
-#include <iostream>
 #include <new>
 #include <semaphore>
 #include <sys/mman.h>
@@ -31,7 +29,7 @@ void MemoryManager::init(PoolInitParam init_param) {
   }
   virtual_pool_ =
       static_cast<char*>(mmap(nullptr, init_param.memory_amount, prot_flags,
-                                       MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   char* memory_end = virtual_pool_;
   if (init_param.pool_type == PoolType::STATIC) {
     memory_end = virtual_pool_ + init_param.memory_amount - 1;
@@ -40,58 +38,51 @@ void MemoryManager::init(PoolInitParam init_param) {
 }
 
 auto MemoryManager::allocate_raw() -> AllocationResult {
-  auto& free_beggins_atomic{get_meta_data<meta_storage_layout::FREE_BEGGINS>()};
-  auto& memory_end_atomic{
-      get_meta_data<meta_storage_layout::ACTUAL_MEMORY_END>(),
-  };
-  const uint64_t object_size{
-      get_meta_data<meta_storage_layout::OBJECT_SIZE>(),
-  };
-  auto& page_allocation_permit{
-      get_meta_data<meta_storage_layout::PAGE_ALLOCATION_PERMIT>()};
-  char* object_ptr{free_beggins_atomic.load()};
+  auto& meta_struct{get_meta_data()};
+  char* object_ptr{meta_struct.free_begins.load()};
   while (true) {
-    char* next_object_ptr{object_ptr + object_size};
-    char* current_memory_end{memory_end_atomic.load()};
+    char* next_object_ptr{object_ptr + meta_struct.object_size};
+    char* current_memory_end{meta_struct.actual_memory_end.load()};
     if (next_object_ptr > current_memory_end) {
-      if (page_allocation_permit.try_acquire()) {
+      if (meta_struct.page_allocation_permit.try_acquire()) {
         allocate_new_node();
-        page_allocation_permit.release();
+        meta_struct.page_allocation_permit.release();
       } else {
-        memory_end_atomic.wait(current_memory_end);
+        meta_struct.actual_memory_end.wait(current_memory_end);
       }
     }
-    if (free_beggins_atomic.compare_exchange_weak(object_ptr,
-                                                  next_object_ptr)) {
+    if (meta_struct.free_begins.compare_exchange_weak(object_ptr,
+                                                      next_object_ptr)) {
       break;
     }
   }
   uint64_t index{
-      static_cast<uint64_t>((object_ptr - virtual_pool_) / object_size)};
+      static_cast<uint64_t>((object_ptr - virtual_pool_) /
+                            meta_struct.object_size),
+  };
   return {.memory_ptr = static_cast<void*>(object_ptr), .index = index};
 }
 
-auto MemoryManager::operator[](size_t index) -> void* {
-  void* object_ptr =
-      virtual_pool_ +
-      (index * get_meta_data<meta_storage_layout::OBJECT_SIZE>());
+auto MemoryManager::operator[](int64_t index) -> void* {
+  void* object_ptr = virtual_pool_ + (index * get_meta_data().object_size);
   return object_ptr;
 }
 
 auto MemoryManager::allocate_new_node() -> std::optional<Error> {
-  auto& pages_allocated_atomic{
-      get_meta_data<meta_storage_layout::ACTUAL_PAGES_ALLOCATED>()};
-  const auto& page_size{get_meta_data<meta_storage_layout::PAGE_SIZE>()};
-
+  auto& meta_struct{get_meta_data()};
+  int64_t memory_amount{meta_struct.page_size * NODE_SIZE};
   if (auto protect_result = mprotect(
-          virtual_pool_ + (pages_allocated_atomic.load() * page_size),
-          page_size * meta_storage_layout::NODE_SIZE, PROT_READ | PROT_WRITE);
+          virtual_pool_ +
+              (meta_struct.actual_pages_allocated * meta_struct.page_size),
+          static_cast<uint64_t>(memory_amount), PROT_READ | PROT_WRITE);
       protect_result == -1) {
     return make_error_c(
         "Unable to allocate new memory page: failed to allocate "
         "physical memory with mprotect");
   }
-  pages_allocated_atomic.fetch_add(NODE_SIZE);
+  meta_struct.actual_memory_end.fetch_add(memory_amount);
+  meta_struct.actual_memory_end.notify_all();
+  meta_struct.actual_pages_allocated += (NODE_SIZE);
   return std::nullopt;
 }
 

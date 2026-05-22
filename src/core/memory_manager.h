@@ -1,10 +1,10 @@
 #ifndef MEMORY_MANAGER_H
 #define MEMORY_MANAGER_H
 
+#include "protocol/memory_manager/memory_manager_types.h"
 #include "utility/error.h"
 
 #include <atomic>
-#include <cstddef>
 #include <cstdint>
 #include <semaphore>
 #include <unistd.h>
@@ -24,9 +24,11 @@ struct MetaStorageLayout {
 
 class MemoryManager {
 public:
-  void init(std::uint64_t memory_amount, size_t object_size);
+  static auto calculate_memory_amount(int64_t object_size, int64_t object_count)
+      -> int64_t;
+  void init(PoolInitParam init_param);
   auto allocate_raw() -> AllocationResult;
-  auto operator[](size_t index) -> void*;
+  auto operator[](int64_t index) -> void*;
 
 private:
   auto allocate_new_node() -> std::optional<Error>;
