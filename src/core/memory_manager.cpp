@@ -14,15 +14,29 @@
 
 namespace bsm {
 
-void MemoryManager::init(std::uint64_t memory_amount,
-                         std::uint64_t object_size) {
-  meta_data_ = static_cast<char*>(mmap(nullptr, sysconf(_SC_PAGE_SIZE),
-                                       PROT_READ | PROT_WRITE,
+auto calculate_memory_amount(int64_t object_size, int64_t object_count)
+    -> int64_t {
+  const int64_t page_size{sysconf(_SC_PAGE_SIZE)};
+  int64_t memory_required{object_size * object_count};
+  int64_t remainder{memory_required % page_size};
+  return memory_required + (page_size - remainder);
+}
+
+void MemoryManager::init(PoolInitParam init_param) {
+  int prot_flags;
+  if (init_param.pool_type == PoolType::DYNAMIC) {
+    prot_flags = PROT_NONE;
+  } else {
+    prot_flags = PROT_READ | PROT_WRITE;
+  }
+  virtual_pool_ =
+      static_cast<char*>(mmap(nullptr, init_param.memory_amount, prot_flags,
                                        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-  populate_meta_storage(object_size);
-  virtual_pool_ = static_cast<char*>(mmap(nullptr, memory_amount, PROT_NONE,
-                                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-  get_meta_data<meta_storage_layout::FREE_BEGGINS>().store(virtual_pool_);
+  char* memory_end = virtual_pool_;
+  if (init_param.pool_type == PoolType::STATIC) {
+    memory_end = virtual_pool_ + init_param.memory_amount - 1;
+  }
+  populate_meta_storage(init_param.object_size, memory_end);
 }
 
 auto MemoryManager::allocate_raw() -> AllocationResult {
