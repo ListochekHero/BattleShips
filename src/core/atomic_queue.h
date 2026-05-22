@@ -1,6 +1,7 @@
 #ifndef ATOMIC_QUEUE_H
 #define ATOMIC_QUEUE_H
 
+#include "core/memory_manager.h"
 #include <array>
 #include <atomic>
 #include <cstdint>
@@ -8,9 +9,9 @@
 
 namespace bsm {
 
-struct AtomicSlot {
-  bool ready{false};
-  unsigned int slot{std::numeric_limits<int>::max()};
+template <typename T> struct AtomicSlot {
+  std::atomic_bool is_initialized{false};
+  T object;
 };
 
 template <typename T> class AtomicQueue {
@@ -18,7 +19,7 @@ public:
   // AtomicQueue() { queue.fill(nullptr); }
 
   auto try_pop() -> T* {
-    uint8_t last_busy_index = head.load();
+    uint16_t last_busy_index = head.load();
     if (last_busy_index == tail) {
       return nullptr;
     }
@@ -36,7 +37,7 @@ public:
 
   auto push(T* ptr) -> bool {
     while (true) {
-      uint8_t last_free_index = tail.load();
+      uint16_t last_free_index = tail.load();
       if ((last_free_index + 1) == head) {
         return false;
       }
@@ -55,7 +56,7 @@ public:
   }
 
   auto pop() -> T* {
-    uint8_t last_busy_index = head.load();
+    uint16_t last_busy_index = head.load();
     T* data{nullptr};
     while (data == nullptr) {
       queue[last_busy_index].wait(data);
@@ -67,7 +68,7 @@ public:
   }
 
   void wait_for_data() {
-    uint8_t last_busy_index = head.load();
+    uint16_t last_busy_index = head.load();
     T* data{nullptr};
     while (data == nullptr) {
       queue[last_busy_index].wait(data);
@@ -78,9 +79,10 @@ public:
   }
 
 private:
-  std::atomic_uint8_t head{0};
-  std::atomic_uint8_t tail{0};
+  std::atomic_uint16_t head{0};
+  std::atomic_uint16_t tail{0};
   std::array<std::atomic<T*>, std::numeric_limits<uint16_t>::max()> queue{};
+  MemoryManager memory_queue;
 };
 
 } // namespace bsm
