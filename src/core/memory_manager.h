@@ -11,19 +11,15 @@
 
 namespace bsm {
 
-enum meta_storage_layout : uint8_t {
-  FREE_BEGGINS = 0,
-  ACTUAL_MEMORY_END = 8,
-  OBJECT_SIZE = 16,
-  PAGE_SIZE = 24,
-  ACTUAL_PAGES_ALLOCATED = 32,
-  PAGE_ALLOCATION_PERMIT = 40,
-  NODE_SIZE = 255,
-};
+#define NODE_SIZE 256
 
-struct AllocationResult {
-  void* memory_ptr;
-  uint64_t index;
+struct MetaStorageLayout {
+  std::atomic<char*> free_begins;
+  std::atomic<char*> actual_memory_end;
+  const int64_t object_size;
+  const int64_t page_size;
+  int64_t actual_pages_allocated{0};
+  std::binary_semaphore page_allocation_permit{1};
 };
 
 class MemoryManager {
@@ -34,35 +30,11 @@ public:
 
 private:
   auto allocate_new_node() -> std::optional<Error>;
-  void populate_meta_storage(std::uint64_t object_size);
-  template <meta_storage_layout Key> auto get_meta_data() -> decltype(auto) {
-    if constexpr (Key == meta_storage_layout::FREE_BEGGINS ||
-                  Key == meta_storage_layout::ACTUAL_MEMORY_END) {
-      auto* raw_ptr{reinterpret_cast<std::atomic<char*>*>(meta_data_ + Key)};
-      return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::OBJECT_SIZE) {
-      const auto* raw_ptr{reinterpret_cast<const uint64_t*>(meta_data_ + Key)};
-      return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::PAGE_SIZE) {
-      const auto* raw_ptr{reinterpret_cast<const uint64_t*>(meta_data_ + Key)};
-      return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::ACTUAL_PAGES_ALLOCATED) {
-      auto* raw_ptr{reinterpret_cast<std::atomic_uint64_t*>(meta_data_ + Key)};
-      return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::PAGE_ALLOCATION_PERMIT) {
-      auto* raw_ptr{reinterpret_cast<std::binary_semaphore*>(meta_data_ + Key)};
-      return *std::launder(raw_ptr);
-    } else if constexpr (Key == meta_storage_layout::NODE_SIZE) {
-      static_assert(Key != meta_storage_layout::NODE_SIZE,
-                    "NODE_SIZE is not stored in meta_data_");
-    } else {
-      static_assert(Key == meta_storage_layout::FREE_BEGGINS,
-                    "Unsupported meta storage key");
-    }
-  }
+  void populate_meta_storage(std::int64_t object_size, char* actual_memory_end);
+  auto get_meta_data() -> MetaStorageLayout&;
 
   char* virtual_pool_{nullptr};
-  char* meta_data_{nullptr};
+  char* raw_meta_data_{nullptr};
 };
 
 } // namespace bsm

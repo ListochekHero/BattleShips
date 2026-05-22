@@ -81,19 +81,26 @@ auto MemoryManager::allocate_new_node() -> std::optional<Error> {
   return std::nullopt;
 }
 
-void MemoryManager::populate_meta_storage(std::uint64_t object_size) {
-  new (meta_data_ + meta_storage_layout::FREE_BEGGINS)
-      std::atomic<char*>(virtual_pool_);
-  new (meta_data_ + meta_storage_layout::ACTUAL_MEMORY_END)
-      std::atomic<char*>(virtual_pool_);
-  new (meta_data_ + meta_storage_layout::OBJECT_SIZE)
-      const uint64_t(object_size);
-  new (meta_data_ + meta_storage_layout::PAGE_SIZE)
-      const uint64_t(sysconf(_SC_PAGE_SIZE));
-  new (meta_data_ + meta_storage_layout::ACTUAL_PAGES_ALLOCATED)
-      std::atomic_uint64_t(0);
-  new (meta_data_ + meta_storage_layout::PAGE_ALLOCATION_PERMIT)
-      std::binary_semaphore(1);
+void MemoryManager::populate_meta_storage(std::int64_t object_size,
+                                          char* actual_memory_end) {
+  int64_t page_size{sysconf(_SC_PAGE_SIZE)};
+  raw_meta_data_ = static_cast<char*>(
+      mmap(nullptr, static_cast<uint64_t>(page_size), PROT_READ | PROT_WRITE,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  auto* meta{
+      new (raw_meta_data_) MetaStorageLayout{
+          .free_begins = virtual_pool_,
+          .actual_memory_end = actual_memory_end,
+          .object_size = object_size,
+          .page_size = page_size,
+          .actual_pages_allocated = 0,
+      },
+  };
+}
+
+auto MemoryManager::get_meta_data() -> MetaStorageLayout& {
+  auto* raw_ptr{reinterpret_cast<MetaStorageLayout*>(raw_meta_data_)};
+  return *std::launder(raw_ptr);
 }
 
 } // namespace bsm
