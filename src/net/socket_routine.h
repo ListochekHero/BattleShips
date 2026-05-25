@@ -14,7 +14,7 @@
 #include <expected>
 #include <vector>
 
-#include "protocol/message_types.h"
+#include "protocol/message/message_types.h"
 #include "utility/utility.h"
 
 #define BACKLOG 10

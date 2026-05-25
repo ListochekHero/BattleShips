@@ -3,9 +3,9 @@
 #include "client.h"
 
 #include "core/dispatcher.h"
-#include "protocol/message_types.h"
-#include "protocol/network_defs.h"
-#include "protocol/task_context_types.h"
+#include "protocol/message/message_types.h"
+#include "protocol/network/network_defs.h"
+#include "protocol/task/task_context_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
 

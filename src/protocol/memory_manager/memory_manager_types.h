@@ -2,13 +2,12 @@
 #define MEMORY_MANAGER_TYPES_H
 
 #include "protocol/memory_manager/memory_manager_defs.h"
-#include <cstddef>
 #include <cstdint>
 
 namespace bsm {
 
 struct PoolInitParam {
-  size_t memory_amount;
+  int64_t memory_amount;
   int64_t object_size;
   PoolType pool_type;
 };

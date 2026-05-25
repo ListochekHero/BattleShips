@@ -3,9 +3,9 @@
 #include "core/atomic_queue.h"
 #include "core/scheduler.h"
 #include "net/network_routine.h"
-#include "protocol/coroutine_promise.h"
-#include "protocol/network_types.h"
-#include "protocol/task_context_types.h"
+#include "protocol/coroutine/coroutine_promise.h"
+#include "protocol/network/network_types.h"
+#include "protocol/task/task_context_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
 

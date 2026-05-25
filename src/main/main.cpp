@@ -2,16 +2,18 @@
 
 #include "application/lobby.h"
 #include "application/server.h"
-#include "protocol/network_defs.h"
+#include "protocol/network/network_defs.h"
 #include "utility/config.h"
 #include "utility/logger.h"
 #include <cstring>
 #include <string>
+#include <unistd.h>
 #include <utility>
 
 #include <cstdlib>
 #include <iostream>
 #include <memory>
+#include <optional>
 
 auto main(int argc, char* argv[]) -> int {
   char* program_name = strrchr(argv[0], '/');

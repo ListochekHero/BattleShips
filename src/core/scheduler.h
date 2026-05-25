@@ -2,8 +2,8 @@
 #define SCHEDULER_H
 
 #include "atomic_queue.h"
-#include "protocol/coroutine_promise.h"
-#include "protocol/task_context_types.h"
+#include "protocol/coroutine/coroutine_promise.h"
+#include "protocol/task/task_context_types.h"
 #include "utility/error.h"
 
 // IWYU pragma: no_include <string>

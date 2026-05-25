@@ -3,8 +3,8 @@
 
 #include "application/client.h"
 #include "net/socket_routine.h"
-#include "protocol/message_defs.h"
-#include "protocol/message_types.h"
+#include "protocol/message/message_defs.h"
+#include "protocol/message/message_types.h"
 #include "utility/logger.h"
 
 #include <arpa/inet.h>

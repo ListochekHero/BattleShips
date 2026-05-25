@@ -3,7 +3,7 @@
 
 // IWYU pragma: begin_exports
 #include "application/application.h"
-#include "protocol/lobby_types.h"
+#include "protocol/lobby/lobby_types.h"
 #include "services/lobby_manager.h"
 #include "utility/utility.h"
 // IWYU pragma: end_export

@@ -1,8 +1,8 @@
 #ifndef LOBBY_MANAGER_H
 #define LOBBY_MANAGER_H
 
-#include "protocol/lobby_types.h"
-#include "protocol/network_types.h"
+#include "protocol/lobby/lobby_types.h"
+#include "protocol/network/network_types.h"
 #include "utility/error.h"
 
 #include <cstdint>

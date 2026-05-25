@@ -1,7 +1,7 @@
 #ifndef LOBBY_TYPES_H
 #define LOBBY_TYPES_H
 
-#include "network_types.h"
+#include "protocol/network/network_types.h"
 #include <cstdint>
 
 namespace bsm {

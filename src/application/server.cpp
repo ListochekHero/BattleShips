@@ -1,7 +1,7 @@
 #include "server.h"
 
 #include "core/dispatcher.h"
-#include "protocol/lobby_types.h"
+#include "protocol/lobby/lobby_types.h"
 #include "utility/data_storage.h"
 #include "utility/error.h"
 #include "utility/utility.h"

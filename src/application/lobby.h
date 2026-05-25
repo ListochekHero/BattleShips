@@ -4,7 +4,7 @@
 // IWYU pragma: begin_exports
 #include "application/application.h"
 #include "core/dispatcher.h"
-#include "protocol/network_types.h"
+#include "protocol/network/network_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
 

@@ -12,8 +12,8 @@
 #include "core/dispatcher.h"
 #include "core/scheduler.h"
 #include "net/network_routine.h"
-#include "protocol/coroutine_promise.h"
-#include "protocol/network_types.h"
+#include "protocol/coroutine/coroutine_promise.h"
+#include "protocol/network/network_types.h"
 #include "utility/error.h"
 #include "utility/utility.h"
 // IWYU pragma: end_exports
