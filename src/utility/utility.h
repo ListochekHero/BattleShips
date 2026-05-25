@@ -2,6 +2,7 @@
 #define UTILITY_H
 // IWYU pragma: no_include <vector>
 
+#include "protocol/message/message_types.h"
 #include "utility/error.h"
 #include "utility/logger.h"
 
@@ -18,7 +19,7 @@
 namespace bsm {
 
 class ConnectionView;
-struct ReceiveResult;
+struct ReceivedMessage;
 
 enum class ActionStatus : uint8_t { CONTINUE, TERMINATE };
 enum class ConnectionStatus : uint8_t { KEEP, RELEASE };
@@ -32,7 +33,7 @@ struct ActionResult {
 
 struct ActionContext {
   const ConnectionView& pending_view;
-  const ReceiveResult& received_message;
+  const ReceivedMessage& received_message;
 };
 
 auto is_file_exist(const std::string& filename) -> bool;
