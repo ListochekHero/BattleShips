@@ -1,19 +1,23 @@
 #include "memory_manager.h"
 
+#include "protocol/memory_manager/memory_manager_types.h"
 #include "utility/error.h"
 
 #include <atomic>
+#include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
 #include <new>
 #include <semaphore>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <utility>
 
 namespace bsm {
 
-auto calculate_memory_amount(int64_t object_size, int64_t object_count)
-    -> int64_t {
+auto MemoryManager::calculate_memory_amount(int64_t object_size,
+                                            int64_t object_count) -> int64_t {
   const int64_t page_size{sysconf(_SC_PAGE_SIZE)};
   int64_t memory_required{object_size * object_count};
   int64_t remainder{memory_required % page_size};
@@ -27,9 +31,9 @@ void MemoryManager::init(PoolInitParam init_param) {
   } else {
     prot_flags = PROT_READ | PROT_WRITE;
   }
-  virtual_pool_ =
-      static_cast<char*>(mmap(nullptr, init_param.memory_amount, prot_flags,
-                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  virtual_pool_ = static_cast<char*>(
+      mmap(nullptr, static_cast<size_t>(init_param.memory_amount), prot_flags,
+           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   char* memory_end = virtual_pool_;
   if (init_param.pool_type == PoolType::STATIC) {
     memory_end = virtual_pool_ + init_param.memory_amount - 1;
@@ -156,7 +160,7 @@ auto MemoryManager::mark_free(size_t chunks_to_free, int occupied_start_pos,
 
 auto MemoryManager::allocate_new_node() -> std::optional<Error> {
   auto& meta_struct{get_meta_data()};
-  int64_t memory_amount{meta_struct.page_size * NODE_SIZE};
+  int64_t memory_amount{meta_struct.page_size * PAGES_PER_NODE};
   if (auto protect_result = mprotect(
           virtual_pool_ +
               (meta_struct.actual_pages_allocated * meta_struct.page_size),
@@ -168,7 +172,7 @@ auto MemoryManager::allocate_new_node() -> std::optional<Error> {
   }
   meta_struct.actual_memory_end.fetch_add(memory_amount);
   meta_struct.actual_memory_end.notify_all();
-  meta_struct.actual_pages_allocated += (NODE_SIZE);
+  meta_struct.actual_pages_allocated += (PAGES_PER_NODE);
   return std::nullopt;
 }
 

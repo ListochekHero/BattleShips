@@ -11,7 +11,9 @@
 
 namespace bsm {
 
-#define NODE_SIZE 256
+#define PAGES_PER_NODE 256
+#define BYTES_IN_CHUNK 8
+#define BITS_IN_WORD 64
 
 struct MetaStorageLayout {
   std::atomic<char*> free_begins;
