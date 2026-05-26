@@ -83,6 +83,15 @@ auto MemoryManager::allocate_sized_raw(size_t size_to_allocate)
   };
 }
 
+auto MemoryManager::deallocate_raw(size_t object_index) {
+  uint64_t meta_start_pos{object_index - 1};
+  char* meta_start_ptr{virtual_pool_ + (meta_start_pos * BYTES_IN_CHUNK)};
+  uint64_t occupied_chunks{
+      *std::launder(reinterpret_cast<uint64_t*>(meta_start_ptr)),
+  };
+  mark_free(occupied_chunks, meta_start_pos % BYTES_IN_CHUNK,
+            meta_start_pos / BYTES_IN_CHUNK);
+}
 
 auto MemoryManager::calc_bytes_chunk(size_t object_size) -> size_t {
   return (object_size + BYTES_IN_CHUNK - 1) / BYTES_IN_CHUNK;
@@ -115,6 +124,34 @@ auto MemoryManager::find_allocation_place(size_t chunks_needed) -> int64_t {
     carry_over_index =
         BITS_IN_WORD - carry_over_free_chunks + (word_count * BITS_IN_WORD);
   }
+}
+
+auto MemoryManager::take_place(size_t chunks_needed, int free_start_pos,
+                               int word_count) -> bool {
+  uint64_t bit_mask{(1ULL << chunks_needed) - 1};
+  bit_mask <<= free_start_pos;
+  auto& meta_struct{get_meta_data()};
+  uint64_t current_word{meta_struct.bit_map[word_count]};
+  if ((~current_word & bit_mask) != bit_mask) {
+    return false;
+  }
+  uint64_t desired_word{current_word | bit_mask};
+  return meta_struct.bit_map[word_count].compare_exchange_strong(current_word,
+                                                                 desired_word);
+}
+
+auto MemoryManager::mark_free(size_t chunks_to_free, int occupied_start_pos,
+                              int word_count) -> bool {
+  uint64_t bit_mask{(1ULL << chunks_to_free) - 1};
+  bit_mask <<= occupied_start_pos;
+  auto& meta_struct{get_meta_data()};
+  uint64_t current_word{meta_struct.bit_map[word_count]};
+  if ((current_word & bit_mask) != bit_mask) {
+    return false;
+  }
+  uint64_t desired_word{current_word ^ bit_mask};
+  return meta_struct.bit_map[word_count].compare_exchange_strong(current_word,
+                                                                 desired_word);
 }
 
 auto MemoryManager::allocate_new_node() -> std::optional<Error> {

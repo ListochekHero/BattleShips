@@ -30,10 +30,15 @@ public:
   void init(PoolInitParam init_param);
   auto allocate_raw() -> AllocationResult;
   auto allocate_sized_raw(size_t size_to_allocate) -> AllocationResult;
+  auto deallocate_raw(size_t object_index);
   auto operator[](int64_t index) -> void*;
 
 private:
+  auto mark_free(size_t chunks_to_free, int occupied_start_pos, int word_count)
+      -> bool;
   auto find_allocation_place(size_t chunks_needed) -> int64_t;
+  auto take_place(size_t chunks_needed, int free_start_pos, int word_count)
+      -> bool;
   auto allocate_new_node() -> std::optional<Error>;
   void populate_meta_storage(std::int64_t object_size, char* actual_memory_end);
   static auto calc_bytes_chunk(size_t object_size) -> size_t;
