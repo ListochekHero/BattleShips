@@ -20,6 +20,7 @@ struct MetaStorageLayout {
   const int64_t page_size;
   int64_t actual_pages_allocated{0};
   std::binary_semaphore page_allocation_permit{1};
+  std::atomic_uint64_t bit_map[]; // NOLINT
 };
 
 class MemoryManager {
@@ -28,11 +29,14 @@ public:
       -> int64_t;
   void init(PoolInitParam init_param);
   auto allocate_raw() -> AllocationResult;
+  auto allocate_sized_raw(size_t size_to_allocate) -> AllocationResult;
   auto operator[](int64_t index) -> void*;
 
 private:
+  auto find_allocation_place(size_t chunks_needed) -> int64_t;
   auto allocate_new_node() -> std::optional<Error>;
   void populate_meta_storage(std::int64_t object_size, char* actual_memory_end);
+  static auto calc_bytes_chunk(size_t object_size) -> size_t;
   auto get_meta_data() -> MetaStorageLayout&;
 
   char* virtual_pool_{nullptr};

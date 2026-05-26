@@ -68,6 +68,55 @@ auto MemoryManager::operator[](int64_t index) -> void* {
   return object_ptr;
 }
 
+auto MemoryManager::allocate_sized_raw(size_t size_to_allocate)
+    -> AllocationResult {
+  size_t byte_chunks_required{calc_bytes_chunk(size_to_allocate)};
+  int64_t meta_start_pos{
+      find_allocation_place(byte_chunks_required + 1),
+  }; // +1 is for meta data about size of object
+  char* object_meta_ptr{virtual_pool_ + (meta_start_pos * BYTES_IN_CHUNK)};
+  new (object_meta_ptr) uint64_t{byte_chunks_required};
+  int64_t object_start_pos{meta_start_pos + 1};
+  return {
+      .memory_ptr = virtual_pool_ + (object_start_pos * BYTES_IN_CHUNK),
+      .index = static_cast<uint64_t>(object_start_pos),
+  };
+}
+
+
+auto MemoryManager::calc_bytes_chunk(size_t object_size) -> size_t {
+  return (object_size + BYTES_IN_CHUNK - 1) / BYTES_IN_CHUNK;
+}
+
+auto MemoryManager::find_allocation_place(size_t chunks_needed) -> int64_t {
+  auto& meta_struct{get_meta_data()};
+  int word_count{0};
+  int carry_over_free_chunks{0};
+  int carry_over_index{0};
+  while (true) {
+    uint64_t inverted_bit_map{~meta_struct.bit_map[word_count]};
+    carry_over_free_chunks += std::countr_one(inverted_bit_map);
+    if (std::cmp_greater_equal(carry_over_free_chunks, chunks_needed)) {
+      if (take_place(chunks_needed, carry_over_index, word_count)) {
+        return static_cast<int64_t>(carry_over_index);
+      }
+    }
+    uint64_t candidates{};
+    for (size_t i = 0; i < chunks_needed; i++) {
+      candidates &= inverted_bit_map >> i;
+    }
+    if (candidates != 0) {
+      int free_chunks_start{std::countr_zero(candidates)};
+      if (take_place(chunks_needed, free_chunks_start, word_count)) {
+        return (word_count * BITS_IN_WORD) + free_chunks_start;
+      }
+    }
+    carry_over_free_chunks = std::countl_one(inverted_bit_map);
+    carry_over_index =
+        BITS_IN_WORD - carry_over_free_chunks + (word_count * BITS_IN_WORD);
+  }
+}
+
 auto MemoryManager::allocate_new_node() -> std::optional<Error> {
   auto& meta_struct{get_meta_data()};
   int64_t memory_amount{meta_struct.page_size * NODE_SIZE};
