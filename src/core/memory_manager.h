@@ -14,15 +14,46 @@ namespace bsm {
 #define PAGES_PER_NODE 256
 #define BYTES_IN_CHUNK 8
 #define BITS_IN_WORD 64
+#define RING_BUFFER_SIZE 4096
 
-struct MetaStorageLayout {
-  std::atomic<char*> free_begins;
-  std::atomic<char*> actual_memory_end;
-  const int64_t object_size;
-  const int64_t page_size;
-  int64_t actual_pages_allocated{0};
+enum class BitMapAction : uint8_t {
+  MARK_AS_FREE,
+  MARK_AS_BUSY,
+};
+
+struct RingBuffer {
+public:
+  void init(char* buffer_start_ptr);
+  void populate_meta_storage(int64_t chunk_size);
+
+private:
+  std::atomic_uint64_t head{0};
+  std::atomic_uint64_t tail{0};
+  char* ring_buffer_ptr{nullptr};
+};
+
+struct AllocatorPoolMetaLayout {
+  int64_t chunk_size{0};
+  int64_t page_size{0};
+  std::atomic<char*> actual_memory_end{nullptr};
   std::binary_semaphore page_allocation_permit{1};
-  std::atomic_uint64_t bit_map[]; // NOLINT
+  std::atomic_uint8_t last_free_index{0};
+  RingBuffer free_indexes_queue{};
+};
+
+struct AllocatorPool {
+public:
+  void init(char* meta_data_ptr, int64_t chunk_size);
+
+private:
+  void init_meta_storage(int64_t chunk_size);
+
+  char* raw_meta_data_prt_{nullptr};
+  char* virtual_pool_ptr_{nullptr};
+};
+
+struct ManagerMetaLayout {
+  AllocatorPool memory_pool_512_{};
 };
 
 class MemoryManager {
