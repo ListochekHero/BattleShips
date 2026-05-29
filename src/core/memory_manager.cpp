@@ -16,6 +16,57 @@
 
 namespace bsm {
 
+auto RingBuffer::try_pop() -> std::optional<uint64_t> {
+  uint64_t last_busy_slot{tail.load()};
+  while (true) {
+    if (last_busy_slot == head.load()) {
+      return std::nullopt;
+    }
+    if (tail.compare_exchange_weak(last_busy_slot, last_busy_slot + 1)) {
+      uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_slot)};
+      std::atomic_uint64_t& ring_slot{*(ring_start_ptr + normalized_ring_slot)};
+      uint64_t max_value{std::numeric_limits<uint64_t>::max()};
+      while (true) {
+        ring_slot.wait(max_value);
+        if (ring_slot.load() != max_value) {
+          uint64_t free_index{ring_slot.exchange(max_value)};
+          ring_slot.notify_one();
+          return free_index;
+        }
+      }
+    }
+  }
+}
+
+auto RingBuffer::try_push(uint64_t new_free_index) -> bool {
+  uint64_t last_free_slot{head.load()};
+  while (true) {
+    if (last_free_slot + 1 == tail) {
+      return false;
+    }
+    if (try_place_into_queue(last_free_slot, new_free_index)) {
+      return true;
+    }
+  }
+}
+
+auto RingBuffer::push(uint64_t new_free_index) -> void {
+  while (true) {
+    uint64_t last_free_slot{0};
+    while (true) {
+      last_free_slot = head.load();
+      if (last_free_slot + 1 == tail) {
+        head.wait(last_free_slot);
+      } else {
+        break;
+      }
+    }
+    if (try_place_into_queue(last_free_slot, new_free_index)) {
+      return;
+    }
+  }
+}
+
 auto MemoryManager::calculate_memory_amount(int64_t object_size,
                                             int64_t object_count) -> int64_t {
   const int64_t page_size{sysconf(_SC_PAGE_SIZE)};

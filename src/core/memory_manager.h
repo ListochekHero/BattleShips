@@ -14,7 +14,6 @@ namespace bsm {
 #define PAGES_PER_NODE 256
 #define BYTES_IN_CHUNK 8
 #define BITS_IN_WORD 64
-#define RING_BUFFER_SIZE 4096
 
 enum class BitMapAction : uint8_t {
   MARK_AS_FREE,
@@ -24,7 +23,9 @@ enum class BitMapAction : uint8_t {
 struct RingBuffer {
 public:
   void init(char* buffer_start_ptr);
-  void populate_meta_storage(int64_t chunk_size);
+  auto try_pop() -> std::optional<uint64_t>;
+  auto try_push(uint64_t new_free_index) -> bool;
+  auto push(uint64_t new_free_index) -> void;
 
 private:
   std::atomic_uint64_t head{0};
