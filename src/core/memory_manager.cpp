@@ -100,6 +100,26 @@ auto RingBuffer::normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
   return ring_slot & RING_MASK;
 }
 
+void AllocatorPool::init(char* meta_data_ptr, int64_t chunk_size) {
+  raw_meta_data_prt_ = meta_data_ptr;
+  virtual_pool_ptr_ =
+      static_cast<char*>(mmap(nullptr, 1024 * 1024 * 1024 * 10, PROT_NONE,
+                              MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
+  init_meta_storage(chunk_size);
+}
+
+
+void AllocatorPool::init_meta_storage(int64_t chunk_size) {
+  auto* meta{
+      new (raw_meta_data_prt_) AllocatorPoolMetaLayout{
+          .chunk_size = chunk_size,
+          .page_size = sysconf(_SC_PAGE_SIZE),
+          .actual_memory_end = virtual_pool_ptr_,
+      },
+  };
+  meta->free_indexes_queue.init(reinterpret_cast<char*>(meta + 1));
+}
+
 auto MemoryManager::calculate_memory_amount(int64_t object_size,
                                             int64_t object_count) -> int64_t {
   const int64_t page_size{sysconf(_SC_PAGE_SIZE)};
