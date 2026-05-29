@@ -44,13 +44,15 @@ struct AllocatorPoolMetaLayout {
   int64_t page_size{0};
   std::atomic<char*> actual_memory_end{nullptr};
   std::binary_semaphore page_allocation_permit{1};
-  std::atomic_uint8_t last_free_index{0};
+  std::atomic_uint32_t last_free_index{0};
   RingBuffer free_indexes_queue{};
 };
 
 struct AllocatorPool {
 public:
   void init(char* meta_data_ptr, int64_t chunk_size);
+  auto allocate() -> std::optional<AllocationResult>;
+  void deallocate(uint64_t index_to_free);
 
 private:
   void init_meta_storage(int64_t chunk_size);

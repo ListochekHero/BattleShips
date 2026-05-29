@@ -108,6 +108,33 @@ void AllocatorPool::init(char* meta_data_ptr, int64_t chunk_size) {
   init_meta_storage(chunk_size);
 }
 
+auto AllocatorPool::allocate() -> std::optional<AllocationResult> {
+  auto& meta_data{get_meta_data<AllocatorPoolMetaLayout>(raw_meta_data_prt_)};
+  auto free_index{meta_data.free_indexes_queue.try_pop()};
+  if (free_index) {
+    void* object_ptr{virtual_pool_ptr_ +
+                     ((*free_index) * meta_data.chunk_size)};
+    return AllocationResult{.memory_ptr = object_ptr, .index = *free_index};
+  }
+  uint32_t actual_last_index{meta_data.last_free_index.load()};
+  while (true) {
+    if (actual_last_index >= 4095) {
+      return std::nullopt;
+    }
+    if (meta_data.last_free_index.compare_exchange_weak(
+            actual_last_index, actual_last_index + 1)) {
+      void* object_ptr{virtual_pool_ptr_ +
+                       (actual_last_index * meta_data.chunk_size)};
+      return AllocationResult{.memory_ptr = object_ptr,
+                              .index = actual_last_index};
+    }
+  }
+}
+
+void AllocatorPool::deallocate(uint64_t index_to_free) {
+  auto& meta_data{get_meta_data<AllocatorPoolMetaLayout>(raw_meta_data_prt_)};
+  meta_data.free_indexes_queue.try_push(index_to_free);
+}
 
 void AllocatorPool::init_meta_storage(int64_t chunk_size) {
   auto* meta{
