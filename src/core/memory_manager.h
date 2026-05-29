@@ -70,7 +70,10 @@ public:
   static auto calculate_memory_amount(int64_t object_size, int64_t object_count)
       -> int64_t;
   void init(PoolInitParam init_param);
-  auto allocate_raw() -> AllocationResult;
+  auto allocate() -> std::optional<AllocationResult>;
+  void deallocate(size_t index_to_free);
+
+  auto allocate_old() -> AllocationResult;
   auto allocate_sized_raw(size_t size_to_allocate) -> AllocationResult;
   auto deallocate_raw(size_t object_index);
   auto operator[](int64_t index) -> void*;
@@ -89,6 +92,11 @@ private:
   char* virtual_pool_{nullptr};
   char* raw_meta_data_{nullptr};
 };
+
+template <typename T> auto get_meta_data(const char* raw_meta_ptr) -> T& {
+  auto* object_ptr{reinterpret_cast<T*>(raw_meta_ptr)};
+  return *std::launder(object_ptr);
+}
 
 } // namespace bsm
 

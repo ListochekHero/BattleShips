@@ -156,24 +156,41 @@ auto MemoryManager::calculate_memory_amount(int64_t object_size,
 }
 
 void MemoryManager::init(PoolInitParam init_param) {
-  int prot_flags;
-  if (init_param.pool_type == PoolType::DYNAMIC) {
-    prot_flags = PROT_NONE;
-  } else {
-    prot_flags = PROT_READ | PROT_WRITE;
+  constexpr uint64_t RING_BUFFER_SIZE = 4096;
+  size_t meta_storage_size{sizeof(ManagerMetaLayout) +
+                           sizeof(AllocatorPoolMetaLayout) +
+                           RING_BUFFER_SIZE * sizeof(int32_t)};
+  int64_t page_size{sysconf(_SC_PAGE_SIZE)};
+  size_t remainder{meta_storage_size % page_size};
+  if (remainder != 0) {
+    meta_storage_size += page_size - remainder;
   }
-  virtual_pool_ = static_cast<char*>(
-      mmap(nullptr, static_cast<size_t>(init_param.memory_amount), prot_flags,
+  init_meta_storage(meta_storage_size);
+  }
+
+void MemoryManager::init_meta_storage(size_t meta_storage_size) {
+  raw_meta_data_ptr_ = static_cast<char*>(
+      mmap(nullptr, meta_storage_size, PROT_READ | PROT_WRITE,
            MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
-  char* memory_end = virtual_pool_;
-  if (init_param.pool_type == PoolType::STATIC) {
-    memory_end = virtual_pool_ + init_param.memory_amount - 1;
-  }
-  populate_meta_storage(init_param.object_size, memory_end);
+  auto* meta{new (raw_meta_data_ptr_) ManagerMetaLayout()};
+  meta->memory_pool_512_.init(reinterpret_cast<char*>(meta + 1), 512);
 }
 
-auto MemoryManager::allocate_raw() -> AllocationResult {
-  auto& meta_struct{get_meta_data()};
+auto MemoryManager::allocate() -> std::optional<AllocationResult> {
+  return get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
+      .memory_pool_512_.allocate();
+}
+
+void MemoryManager::deallocate(size_t index_to_free) {
+  return get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
+      .memory_pool_512_.deallocate(index_to_free);
+}
+
+auto MemoryManager::allocate_old() -> AllocationResult {
+
+  auto& meta_struct{get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)};
+  meta_struct.memory_pool_512_.allocate();
+
   char* object_ptr{meta_struct.free_begins.load()};
   while (true) {
     char* next_object_ptr{object_ptr + meta_struct.object_size};
