@@ -16,6 +16,15 @@
 
 namespace bsm {
 
+void RingBuffer::init(char* buffer_start_ptr) {
+  std::atomic_uint64_t* ring_buffer{
+      reinterpret_cast<std::atomic_uint64_t*>(buffer_start_ptr)};
+  for (int i = 0; i < 4096; ++i) {
+    new (ring_buffer + i) std::atomic_uint64_t{0};
+  }
+  ring_start_ptr = ring_buffer;
+}
+
 auto RingBuffer::try_pop() -> std::optional<uint64_t> {
   uint64_t last_busy_slot{tail.load()};
   while (true) {
@@ -65,6 +74,30 @@ auto RingBuffer::push(uint64_t new_free_index) -> void {
       return;
     }
   }
+}
+
+auto RingBuffer::try_place_into_queue(uint64_t last_free_slot,
+                                      uint64_t new_free_index) -> bool {
+  if (head.compare_exchange_weak(last_free_slot, last_free_slot + 1)) {
+    uint64_t normalized_ring_slot{normilize_ring_slot(last_free_slot)};
+    std::atomic_uint64_t& ring_slot{*(ring_start_ptr + normalized_ring_slot)};
+    while (true) {
+      uint64_t previous_data{ring_slot.load()};
+      if (previous_data == std::numeric_limits<uint64_t>::max()) {
+        ring_slot.store(new_free_index);
+        ring_slot.notify_one();
+        return true;
+      }
+      ring_slot.wait(previous_data);
+    }
+  }
+  return false;
+}
+
+auto RingBuffer::normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
+  constexpr uint64_t RING_BUFFER_SIZE = 4096;
+  constexpr uint64_t RING_MASK = RING_BUFFER_SIZE - 1;
+  return ring_slot & RING_MASK;
 }
 
 auto MemoryManager::calculate_memory_amount(int64_t object_size,

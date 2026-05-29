@@ -28,9 +28,15 @@ public:
   auto push(uint64_t new_free_index) -> void;
 
 private:
+  auto normilize_ring_slot(uint64_t ring_slot) -> uint64_t;
+  auto try_place_into_queue(uint64_t last_free_slot, uint64_t new_free_index)
+      -> bool;
+
   std::atomic_uint64_t head{0};
   std::atomic_uint64_t tail{0};
-  char* ring_buffer_ptr{nullptr};
+  std::atomic_uint64_t* ring_start_ptr{nullptr};
+
+  static constexpr uint64_t RING_BUFFER_SIZE = 4096;
 };
 
 struct AllocatorPoolMetaLayout {
