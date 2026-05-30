@@ -81,18 +81,18 @@ public:
       -> DeliveryReport {
     DeliveryReport delivery_report;
     size_t current_slot{0};
-    auto snapshot{connection_pool_.get_vector()};
-    for (auto* entry : snapshot) {
-      if (entry->connection_type_ != end_point_e::NONE) {
+    for (int i = 0; i < connection_pool_.counter; i++) {
+      ConnectionEntry& entry = connection_pool_[i];
+      if (entry.connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
             .slot = current_slot,
-            .type = entry->connection_type_,
+            .type = entry.connection_type_,
         };
         if (std::invoke(filter, meta)) {
-          auto send_error{send_message_impl(*entry, message)};
+          auto send_error{send_message_impl(entry, message)};
           if (send_error) {
             LOG(send_error->full_report());
-            entry->reset();
+            entry.reset();
             connection_pool_.release(current_slot);
             delivery_report.failed++;
           } else {

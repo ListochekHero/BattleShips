@@ -66,9 +66,11 @@ void Scheduler::worker_loop() {
 auto Scheduler::coroutine_loop() -> bsm_co_handle { // NOLINT
   while (true) {
     available_task_tags_.wait_for_data();
-    std::unique_ptr<task_tag_e> task_tag{available_task_tags_.try_pop()};
-    auto handle{get_co_handle_by_tag(*task_tag)};
-    handle.resume();
+    auto* task_tag{available_task_tags_.try_pop()};
+    if (task_tag != nullptr) {
+      auto handle{get_co_handle_by_tag(*task_tag)};
+      handle.resume();
+    }
   }
 }
 

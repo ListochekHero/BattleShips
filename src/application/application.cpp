@@ -79,12 +79,14 @@ auto Application::register_network_task() -> std::optional<Error> {
 
 auto Application::network_co() -> bsm_co_handle { // NOLINT
   while (true) {
-    size_t* pending_slot{network_raw_tasks_.try_pop()};
-    std::unique_ptr<NetworkTaskContext> task_context{
-        std::make_unique<NetworkTaskContext>(*pending_slot),
-    };
-    delete pending_slot;
-    scheduler().push_task(task_tag_e::NETWORK, std::move(task_context));
+    auto* pending_slot{network_raw_tasks_.try_pop()};
+    if (pending_slot != nullptr) {
+      std::unique_ptr<NetworkTaskContext> task_context{
+          std::make_unique<NetworkTaskContext>(*pending_slot),
+      };
+      scheduler().push_task(task_tag_e::NETWORK, std::move(task_context));
+      delete pending_slot;
+    }
     co_await yield_to_scheduler(); // NOLINT
   }
 }
