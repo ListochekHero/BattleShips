@@ -1,7 +1,7 @@
 #include "dispatcher.h"
 
-#include "protocol/message_defs.h"
-#include "protocol/message_types.h"
+#include "protocol/message/message_defs.h"
+#include "protocol/message/message_types.h"
 #include <algorithm>
 
 namespace bsm {
