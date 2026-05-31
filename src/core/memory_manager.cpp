@@ -144,7 +144,17 @@ auto AllocatorPool::allocate() -> std::optional<AllocationResult> {
 
 void AllocatorPool::deallocate(uint64_t index_to_free) {
   auto& meta_data{get_meta_data<AllocatorPoolMetaLayout>(raw_meta_data_prt_)};
-  meta_data.free_indexes_queue.try_push(index_to_free);
+  if (!meta_data.free_indexes_queue.try_push(index_to_free)) {
+    meta_data.free_indexes_queue.push(index_to_free);
+  }
+}
+
+auto AllocatorPool::operator[](int64_t index) -> void* {
+  void* object_ptr =
+      virtual_pool_ptr_ +
+      (index *
+       get_meta_data<AllocatorPoolMetaLayout>(raw_meta_data_prt_).chunk_size);
+  return object_ptr;
 }
 
 void AllocatorPool::init_meta_storage(int64_t chunk_size) {
@@ -156,6 +166,22 @@ void AllocatorPool::init_meta_storage(int64_t chunk_size) {
       },
   };
   meta->free_indexes_queue.init(reinterpret_cast<char*>(meta + 1));
+}
+
+auto AllocatorPool::allocate_new_node() -> std::optional<Error> {
+  auto& meta_struct{get_meta_data<AllocatorPoolMetaLayout>(raw_meta_data_prt_)};
+  int64_t memory_amount{meta_struct.page_size * PAGES_PER_NODE};
+  if (auto protect_result = mprotect(meta_struct.actual_memory_end,
+                                     static_cast<uint64_t>(memory_amount),
+                                     PROT_READ | PROT_WRITE);
+      protect_result == -1) {
+    return make_error_c(
+        "Unable to allocate new memory page: failed to allocate "
+        "physical memory with mprotect");
+  }
+  meta_struct.actual_memory_end.fetch_add(memory_amount);
+  meta_struct.actual_memory_end.notify_all();
+  return std::nullopt;
 }
 
 auto MemoryManager::calculate_memory_amount(int64_t object_size,
