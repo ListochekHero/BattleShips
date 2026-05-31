@@ -2,17 +2,17 @@
 
 #include "protocol/memory_manager/memory_manager_types.h"
 #include "utility/error.h"
+#include "utility/utility.h"
 
 #include <atomic>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <fcntl.h>
+#include <limits>
 #include <new>
 #include <semaphore>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <utility>
 
 namespace bsm {
 
@@ -20,7 +20,8 @@ void RingBuffer::init(char* buffer_start_ptr) {
   std::atomic_uint64_t* ring_buffer{
       reinterpret_cast<std::atomic_uint64_t*>(buffer_start_ptr)};
   for (int i = 0; i < 4096; ++i) {
-    new (ring_buffer + i) std::atomic_uint64_t{0};
+    new (ring_buffer + i)
+        std::atomic_uint64_t{std::numeric_limits<uint64_t>::max()};
   }
   ring_start_ptr = ring_buffer;
 }
@@ -36,20 +37,20 @@ auto RingBuffer::try_pop() -> std::optional<uint64_t> {
       std::atomic_uint64_t& ring_slot{*(ring_start_ptr + normalized_ring_slot)};
       uint64_t max_value{std::numeric_limits<uint64_t>::max()};
       while (true) {
-        ring_slot.wait(max_value);
         if (ring_slot.load() != max_value) {
           uint64_t free_index{ring_slot.exchange(max_value)};
           ring_slot.notify_one();
           return free_index;
         }
+        ring_slot.wait(max_value);
       }
     }
   }
 }
 
 auto RingBuffer::try_push(uint64_t new_free_index) -> bool {
-  uint64_t last_free_slot{head.load()};
   while (true) {
+    uint64_t last_free_slot{head.load()};
     if (last_free_slot + 1 == tail) {
       return false;
     }
@@ -76,6 +77,12 @@ auto RingBuffer::push(uint64_t new_free_index) -> void {
   }
 }
 
+auto RingBuffer::normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
+  constexpr uint64_t RING_BUFFER_SIZE = 4096;
+  constexpr uint64_t RING_MASK = RING_BUFFER_SIZE - 1;
+  return ring_slot & RING_MASK;
+}
+
 auto RingBuffer::try_place_into_queue(uint64_t last_free_slot,
                                       uint64_t new_free_index) -> bool {
   if (head.compare_exchange_weak(last_free_slot, last_free_slot + 1)) {
@@ -92,12 +99,6 @@ auto RingBuffer::try_place_into_queue(uint64_t last_free_slot,
     }
   }
   return false;
-}
-
-auto RingBuffer::normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
-  constexpr uint64_t RING_BUFFER_SIZE = 4096;
-  constexpr uint64_t RING_MASK = RING_BUFFER_SIZE - 1;
-  return ring_slot & RING_MASK;
 }
 
 void AllocatorPool::init(char* meta_data_ptr, int64_t chunk_size) {
