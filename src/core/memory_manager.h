@@ -5,6 +5,7 @@
 #include "utility/error.h"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <semaphore>
 #include <unistd.h>
@@ -44,7 +45,7 @@ struct AllocatorPoolMetaLayout {
   int64_t page_size{0};
   std::atomic<char*> actual_memory_end{nullptr};
   std::binary_semaphore page_allocation_permit{1};
-  std::atomic_uint32_t last_free_index{0};
+  std::atomic_uint32_t last_not_issued_index{0};
   RingBuffer free_indexes_queue{};
 };
 
@@ -53,9 +54,11 @@ public:
   void init(char* meta_data_ptr, int64_t chunk_size);
   auto allocate() -> std::optional<AllocationResult>;
   void deallocate(uint64_t index_to_free);
+  auto operator[](int64_t index) -> void*;
 
 private:
   void init_meta_storage(int64_t chunk_size);
+  auto allocate_new_node() -> std::optional<Error>;
 
   char* raw_meta_data_prt_{nullptr};
   char* virtual_pool_ptr_{nullptr};

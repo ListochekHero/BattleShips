@@ -104,7 +104,7 @@ auto RingBuffer::try_place_into_queue(uint64_t last_free_slot,
 void AllocatorPool::init(char* meta_data_ptr, int64_t chunk_size) {
   raw_meta_data_prt_ = meta_data_ptr;
   virtual_pool_ptr_ =
-      static_cast<char*>(mmap(nullptr, 1024 * 1024 * 1024 * 10, PROT_NONE,
+      static_cast<char*>(mmap(nullptr, 1024 * 1024 * 1024 * 10L, PROT_NONE,
                               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0));
   init_meta_storage(chunk_size);
 }
@@ -194,9 +194,10 @@ auto MemoryManager::calculate_memory_amount(int64_t object_size,
 
 void MemoryManager::init(PoolInitParam init_param) {
   constexpr uint64_t RING_BUFFER_SIZE = 4096;
-  size_t meta_storage_size{sizeof(ManagerMetaLayout) +
-                           sizeof(AllocatorPoolMetaLayout) +
-                           RING_BUFFER_SIZE * sizeof(int32_t)};
+  size_t meta_storage_size{
+      sizeof(ManagerMetaLayout) + sizeof(AllocatorPoolMetaLayout) +
+          (RING_BUFFER_SIZE * sizeof(std::atomic_uint64_t)),
+  };
   int64_t page_size{sysconf(_SC_PAGE_SIZE)};
   size_t remainder{meta_storage_size % page_size};
   if (remainder != 0) {
@@ -211,14 +212,14 @@ auto MemoryManager::allocate() -> std::optional<AllocationResult> {
 }
 
 void MemoryManager::deallocate(size_t index_to_free) {
-  return get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
+  get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
       .memory_pool_512_.deallocate(index_to_free);
 }
 
 auto MemoryManager::operator[](int64_t index) -> void* {
   return get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
       .memory_pool_512_[index];
-  }
+}
 
 void MemoryManager::init_meta_storage(size_t meta_storage_size) {
   raw_meta_data_ptr_ = static_cast<char*>(
