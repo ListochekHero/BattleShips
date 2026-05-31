@@ -117,17 +117,27 @@ auto AllocatorPool::allocate() -> std::optional<AllocationResult> {
                      ((*free_index) * meta_data.chunk_size)};
     return AllocationResult{.memory_ptr = object_ptr, .index = *free_index};
   }
-  uint32_t actual_last_index{meta_data.last_free_index.load()};
+  uint32_t new_index{meta_data.last_not_issued_index.load()};
   while (true) {
-    if (actual_last_index >= 4095) {
+    if (new_index >= 4095) {
       return std::nullopt;
     }
-    if (meta_data.last_free_index.compare_exchange_weak(
-            actual_last_index, actual_last_index + 1)) {
-      void* object_ptr{virtual_pool_ptr_ +
-                       (actual_last_index * meta_data.chunk_size)};
-      return AllocationResult{.memory_ptr = object_ptr,
-                              .index = actual_last_index};
+    char* next_object_ptr{
+        virtual_pool_ptr_ + ((new_index + 1) * meta_data.chunk_size),
+    };
+    char* current_memory_end{meta_data.actual_memory_end.load()};
+    if (next_object_ptr >= current_memory_end) {
+      if (meta_data.page_allocation_permit.try_acquire()) {
+        success_or_terminate(allocate_new_node());
+        meta_data.page_allocation_permit.release();
+      } else {
+        meta_data.actual_memory_end.wait(current_memory_end);
+      }
+    }
+    if (meta_data.last_not_issued_index.compare_exchange_weak(new_index,
+                                                              new_index + 1)) {
+      void* object_ptr{virtual_pool_ptr_ + (new_index * meta_data.chunk_size)};
+      return AllocationResult{.memory_ptr = object_ptr, .index = new_index};
     }
   }
 }
