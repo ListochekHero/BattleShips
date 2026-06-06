@@ -184,15 +184,7 @@ auto AllocatorPool::allocate_new_node() -> std::optional<Error> {
   return std::nullopt;
 }
 
-auto MemoryManager::calculate_memory_amount(int64_t object_size,
-                                            int64_t object_count) -> int64_t {
-  const int64_t page_size{sysconf(_SC_PAGE_SIZE)};
-  int64_t memory_required{object_size * object_count};
-  int64_t remainder{memory_required % page_size};
-  return memory_required + (page_size - remainder);
-}
-
-void MemoryManager::init(PoolInitParam init_param) {
+void MemoryManager::init() {
   constexpr uint64_t RING_BUFFER_SIZE = 4096;
   size_t meta_storage_size{
       sizeof(ManagerMetaLayout) + sizeof(AllocatorPoolMetaLayout) +

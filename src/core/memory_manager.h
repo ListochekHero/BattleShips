@@ -70,9 +70,7 @@ struct ManagerMetaLayout {
 
 class MemoryManager {
 public:
-  static auto calculate_memory_amount(int64_t object_size, int64_t object_count)
-      -> int64_t;
-  void init(PoolInitParam init_param);
+  void init();
   auto allocate() -> std::optional<AllocationResult>;
   void deallocate(size_t index_to_free);
   auto operator[](int64_t index) -> void*;
