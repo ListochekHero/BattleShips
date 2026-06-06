@@ -70,7 +70,7 @@ private:
   std::unordered_map<task_tag_e, std::coroutine_handle<>> co_handles_map_;
   AtomicQueue<task_tag_e>& available_task_tags_;
   AtomicQueue<Task> tasks_queue_;
-  std::counting_semaphore<std::numeric_limits<uint16_t>::max()>
+  std::counting_semaphore<std::numeric_limits<uint16_t>::max()-1>
       pop_task_semaphore_{0};
   std::counting_semaphore<std::numeric_limits<
       uint16_t>::max()> // make define for this number to use in AtomicQueue as
