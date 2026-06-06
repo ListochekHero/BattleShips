@@ -114,7 +114,7 @@ auto AllocatorPool::allocate() -> std::optional<AllocationResult> {
   auto free_index{meta_data.free_indexes_queue.try_pop()};
   if (free_index) {
     void* object_ptr{virtual_pool_ptr_ +
-                     ((*free_index) * meta_data.chunk_size)};
+                     (*free_index * meta_data.chunk_size)};
     return AllocationResult{.memory_ptr = object_ptr, .index = *free_index};
   }
   uint32_t new_index{meta_data.last_not_issued_index.load()};
@@ -149,7 +149,7 @@ void AllocatorPool::deallocate(uint64_t index_to_free) {
   }
 }
 
-auto AllocatorPool::operator[](int64_t index) -> void* {
+auto AllocatorPool::operator[](size_t index) -> void* {
   void* object_ptr =
       virtual_pool_ptr_ +
       (index *
@@ -208,7 +208,7 @@ void MemoryManager::deallocate(size_t index_to_free) {
       .memory_pool_512_.deallocate(index_to_free);
 }
 
-auto MemoryManager::operator[](int64_t index) -> void* {
+auto MemoryManager::operator[](size_t index) -> void* {
   return get_meta_data<ManagerMetaLayout>(raw_meta_data_ptr_)
       .memory_pool_512_[index];
 }

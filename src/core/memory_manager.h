@@ -13,13 +13,6 @@
 namespace bsm {
 
 #define PAGES_PER_NODE 256
-#define BYTES_IN_CHUNK 8
-#define BITS_IN_WORD 64
-
-enum class BitMapAction : uint8_t {
-  MARK_AS_FREE,
-  MARK_AS_BUSY,
-};
 
 struct RingBuffer {
 public:
@@ -54,7 +47,7 @@ public:
   void init(char* meta_data_ptr, int64_t chunk_size);
   auto allocate() -> std::optional<AllocationResult>;
   void deallocate(uint64_t index_to_free);
-  auto operator[](int64_t index) -> void*;
+  auto operator[](size_t index) -> void*;
 
 private:
   void init_meta_storage(int64_t chunk_size);
@@ -73,7 +66,7 @@ public:
   void init();
   auto allocate() -> std::optional<AllocationResult>;
   void deallocate(size_t index_to_free);
-  auto operator[](int64_t index) -> void*;
+  auto operator[](size_t index) -> void*;
 
 private:
   void init_meta_storage(size_t meta_storage_size);
@@ -81,7 +74,7 @@ private:
   char* raw_meta_data_ptr_{nullptr};
 };
 
-template <typename T> auto get_meta_data(const char* raw_meta_ptr) -> T& {
+template <typename T> auto get_meta_data(char* raw_meta_ptr) -> T& {
   auto* object_ptr{reinterpret_cast<T*>(raw_meta_ptr)};
   return *std::launder(object_ptr);
 }
