@@ -3,6 +3,7 @@
 
 // IWYU pragma: no_include <string>
 #include "core/atomic_queue.h"
+#include "core/memory_manager.h"
 #include "utility/error.h"
 #include "utility/logger.h"
 #include "utility/utility.h"
@@ -36,6 +37,7 @@ public:
       return *empty_slot;
     }
     object_ptr = new (std::nothrow) T(std::move(object));
+    counter++;
     return validate_new(object_ptr);
   }
 
@@ -63,9 +65,10 @@ public:
     }
     available_slots_.push(available_slot);
   }
-  auto get_vector(){return object_pool_;}
-  auto begin() { return object_pool_.begin(); }
-  auto end() { return object_pool_.end(); }
+  // auto get_vector() { return object_pool_; }
+  // auto begin() { return object_pool_.begin(); }
+  // auto end() { return object_pool_.end(); }
+  size_t counter{0};
 
 private:
   auto validate_new(T* object_ptr) -> std::expected<size_t, Error> {
