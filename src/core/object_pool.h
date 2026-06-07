@@ -18,7 +18,16 @@ namespace bsm {
 
 template <typename T> class ObjectPool {
 public:
+  ObjectPool() { mmanager_.init(); };
   auto get_object(size_t slot_index) -> T* { return object_pool_[slot_index]; }
+  auto get_object_from_manager(size_t slot_index) -> T& {
+    return *static_cast<T*>(mmanager_[slot_index]);
+  }
+  auto operator[](size_t slot_index) -> T& {
+    return *static_cast<T*>(mmanager_[slot_index]);
+    // auto* object_ptr = static_cast<T*>(object_pool_[index]);
+    // return *object_ptr;
+  }
   auto push_to_pool(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
     std::unique_ptr<size_t> empty_slot(available_slots_.try_pop());
@@ -29,6 +38,24 @@ public:
     object_ptr = new (std::nothrow) T(std::move(object));
     return validate_new(object_ptr);
   }
+
+  auto push_to_pool_with_manager(T&& object) -> std::expected<size_t, Error> {
+    T* object_ptr;
+    std::unique_ptr<size_t> empty_slot(available_slots_.try_pop());
+    if (empty_slot != nullptr) {
+      void* raw_ptr{mmanager_[*empty_slot]};
+      auto* old_object{static_cast<T*>(raw_ptr)};
+      *old_object = std::move(object);
+      return *empty_slot;
+    }
+    auto allocation_result{mmanager_.allocate()};
+    if (allocation_result) {
+      object_ptr = new (allocation_result->memory_ptr) T(std::move(object));
+    }
+    counter++;
+    return allocation_result->index;
+  }
+
   void release(size_t slot) {
     auto* available_slot{new (std::nothrow) size_t(slot)};
     if (available_slot == nullptr) {
@@ -59,6 +86,7 @@ private:
           Error{.backtrace = {"Unable to push new entry into pool"}});
     }
   }
+  MemoryManager mmanager_;
   std::vector<T*> object_pool_;
   AtomicQueue<size_t> available_slots_;
 };
