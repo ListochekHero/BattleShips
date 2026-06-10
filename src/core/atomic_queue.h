@@ -79,11 +79,18 @@ public:
   }
 
 private:
-  std::atomic_uint16_t head{0};
-  std::atomic_uint16_t tail{0};
-  std::array<std::atomic<T*>, std::numeric_limits<uint16_t>::max()> queue{};
+  auto normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
+    constexpr uint64_t RING_MASK = RING_BUFFER_SIZE - 1;
+    return ring_slot & RING_MASK;
+  }
+  static constexpr uint64_t RING_BUFFER_SIZE = 4096;
+
+  std::atomic_uint64_t head{0};
+  std::atomic_uint64_t tail{0};
+  std::array<std::atomic<T*>, std::numeric_limits<uint16_t>::max() + 1> queue{};
   MemoryManager memory_queue;
 };
 
 } // namespace bsm
+
 #endif
