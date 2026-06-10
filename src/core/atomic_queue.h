@@ -77,6 +77,19 @@ public:
       }
     }
   }
+  void mmanager_wait_for_data() {
+    uint16_t last_busy_index = head.load();
+    auto* raw_atomic_slot{memory_queue[last_busy_index]};
+    auto& atomic_slot{
+        *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
+    };
+    while (true) {
+      atomic_slot.is_initialized.wait(false);
+      if (atomic_slot.is_initialized.load()) {
+        break;
+      }
+    }
+  }
 
 private:
   auto normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
