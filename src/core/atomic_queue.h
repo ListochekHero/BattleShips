@@ -10,8 +10,19 @@
 namespace bsm {
 
 template <typename T> struct AtomicSlot {
-  std::atomic_bool is_initialized{false};
-  T object;
+  auto take() -> T {
+    T object_to_return{std::move(object_)};
+    object_.~T();
+    is_initialized_.store(false);
+    return object_to_return;
+  }
+  auto emplace(T&& object) -> bool {
+    new (&object_) T{object};
+    return true;
+  }
+
+  std::atomic_bool is_initialized_{false};
+  T object_;
 };
 
 template <typename T> class AtomicQueue {
