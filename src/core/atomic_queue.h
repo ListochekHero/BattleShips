@@ -16,8 +16,13 @@ template <typename T> struct AtomicSlot {
 
 template <typename T> class AtomicQueue {
 public:
-  // AtomicQueue() { queue.fill(nullptr); }
-
+  AtomicQueue() {
+    memory_queue.init();
+    for (uint64_t i{0}; i < RING_BUFFER_SIZE; i++) {
+      auto allocation_result{memory_queue.allocate()};
+      new (allocation_result->memory_ptr) AtomicSlot<T>{};
+    }
+  }
   auto try_pop() -> T* {
     uint16_t last_busy_index = head.load();
     if (last_busy_index == tail) {
