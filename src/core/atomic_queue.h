@@ -35,7 +35,7 @@ public:
     }
   }
   auto try_pop() -> T* {
-    uint16_t last_busy_index = head.load();
+    uint64_t last_busy_index = head.load();
     if (last_busy_index == tail) {
       return nullptr;
     }
@@ -55,8 +55,9 @@ public:
     if (last_busy_index == tail) {
       return nullptr;
     }
-    if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
-      uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
+    uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
+    if (head.compare_exchange_strong(normalized_ring_slot,
+                                     normalized_ring_slot + 1)) {
       auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
       auto& atomic_slot{
           *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
@@ -75,19 +76,22 @@ public:
   }
   auto push(T* ptr) -> bool {
     while (true) {
-      uint16_t last_free_index = tail.load();
+      uint64_t last_free_index = tail.load();
       if ((last_free_index + 1) == head) {
         return false;
       }
-      if (tail.compare_exchange_strong(last_free_index, last_free_index + 1)) {
+      uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
+
+      if (tail.compare_exchange_strong(normalized_ring_slot,
+                                       normalized_ring_slot + 1)) {
         while (true) {
-          T* data{queue[last_free_index].load()};
+          T* data{queue[normalized_ring_slot].load()};
           if (data == nullptr) {
-            queue[last_free_index].store(ptr);
-            queue[last_free_index].notify_one();
+            queue[normalized_ring_slot].store(ptr);
+            queue[normalized_ring_slot].notify_one();
             return true;
           }
-          queue[last_free_index].wait(data);
+          queue[normalized_ring_slot].wait(data);
         }
       }
     }
@@ -98,8 +102,10 @@ public:
       if ((last_free_index + 1U) == head) {
         return false;
       }
-      if (tail.compare_exchange_strong(last_free_index, last_free_index + 1U)) {
-        auto* raw_atomic_slot{memory_queue[last_free_index]};
+      uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
+      if (tail.compare_exchange_strong(normalized_ring_slot,
+                                       normalized_ring_slot + 1U)) {
+        auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
         auto& atomic_slot{
             *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
         };
@@ -116,7 +122,7 @@ public:
     }
   }
   auto pop() -> T* {
-    uint16_t last_busy_index = head.load();
+    uint64_t last_busy_index = head.load();
     T* data{nullptr};
     while (data == nullptr) {
       queue[last_busy_index].wait(data);
@@ -139,7 +145,8 @@ public:
   }
   void mmanager_wait_for_data() {
     uint16_t last_busy_index = head.load();
-    auto* raw_atomic_slot{memory_queue[last_busy_index]};
+    uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
+    auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
     auto& atomic_slot{
         *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
     };
