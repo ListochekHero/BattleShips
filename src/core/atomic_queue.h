@@ -54,7 +54,29 @@ public:
       }
     }
   }
-
+  auto mmanager_push(T&& object) -> bool {
+    while (true) {
+      uint64_t last_free_index = tail.load();
+      if ((last_free_index + 1U) == head) {
+        return false;
+      }
+      if (tail.compare_exchange_strong(last_free_index, last_free_index + 1U)) {
+        auto* raw_atomic_slot{memory_queue[last_free_index]};
+        auto& atomic_slot{
+            *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
+        };
+        while (true) {
+          atomic_slot.is_initialized.wait(true);
+          if (!atomic_slot.is_initialized.load()) {
+            atomic_slot.emplace(object);
+            atomic_slot.is_initialized.store(true);
+            atomic_slot.is_initialized.notify_one();
+            return true;
+          }
+        }
+      }
+    }
+  }
   auto pop() -> T* {
     uint16_t last_busy_index = head.load();
     T* data{nullptr};
