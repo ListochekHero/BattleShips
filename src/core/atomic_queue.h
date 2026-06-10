@@ -34,7 +34,29 @@ public:
     }
     return nullptr;
   }
-
+  auto mmanager_try_pop() -> T {
+    uint64_t last_busy_index = head.load();
+    if (last_busy_index == tail) {
+      return nullptr;
+    }
+    if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
+      uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
+      auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
+      auto& atomic_slot{
+          *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
+      };
+      while (true) {
+        atomic_slot.is_initialized.wait(false);
+        if (atomic_slot.is_initialized.load()) {
+          T data = atomic_slot.take();
+          atomic_slot.is_initialized.store(false);
+          atomic_slot.is_initialized.notify_one();
+          return data;
+        }
+      }
+    }
+    return nullptr;
+  }
   auto push(T* ptr) -> bool {
     while (true) {
       uint16_t last_free_index = tail.load();
