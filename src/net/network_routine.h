@@ -56,8 +56,7 @@ struct ConnectionMeta {
 class NetworkEngine : public Module {
 public:
   NetworkEngine(AtomicQueue<size_t>& network_q,
-                AtomicQueue<task_tag_e>& available_q)
-      : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
+                AtomicQueue<task_tag_e>& available_q);
   auto init_engine(end_point_e socket_type, int root_socket)
       -> std::expected<ConnectionView, Error>;
   using MessageHandler = std::function<ActionResult(const ActionContext&)>;

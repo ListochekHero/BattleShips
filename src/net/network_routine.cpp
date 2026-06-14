@@ -46,6 +46,10 @@ auto ConnectionEntry::operator=(ConnectionEntry&& other) noexcept
   return *this;
 }
 
+NetworkEngine::NetworkEngine(AtomicQueue<size_t>& network_q,
+                             AtomicQueue<task_tag_e>& available_q)
+    : network_raw_tasks_(network_q), available_task_tags_(available_q) {}
+
 auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
     -> std::expected<ConnectionView, Error> {
   std::expected<size_t, Error> root_socket_slot{};
