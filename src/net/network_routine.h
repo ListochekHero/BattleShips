@@ -79,12 +79,11 @@ public:
   auto send_message(const OutgoingMessage& message, Filter&& filter)
       -> DeliveryReport {
     DeliveryReport delivery_report;
-    size_t current_slot{0};
-    for (int i = 0; i < connection_pool_.counter; i++) {
-      ConnectionEntry& entry = connection_pool_[i];
+    for (size_t index = 0; index < connection_pool_.counter; index++) {
+      ConnectionEntry& entry = connection_pool_[index];
       if (entry.connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
-            .slot = current_slot,
+            .slot = index,
             .type = entry.connection_type_,
         };
         if (std::invoke(filter, meta)) {
@@ -92,14 +91,13 @@ public:
           if (send_error) {
             LOG(send_error->full_report());
             entry.reset();
-            connection_pool_.release(current_slot);
+            connection_pool_.release(index);
             delivery_report.failed++;
           } else {
             delivery_report.delivered++;
           }
         }
       }
-      current_slot++;
     }
     return delivery_report;
   }
@@ -108,18 +106,17 @@ public:
     requires std::predicate<Filter, const ConnectionMeta&>
   auto get_view_by_type(Filter&& filter)
       -> std::expected<ConnectionView, Error> {
-    for (auto* entry : connection_pool_) {
-      size_t current_slot{0};
-      if (entry->connection_type_ != end_point_e::NONE) {
+    for (size_t index = 0; index < connection_pool_.counter; index++) {
+      ConnectionEntry& entry{connection_pool_[index]};
+      if (entry.connection_type_ != end_point_e::NONE) {
         ConnectionMeta meta{
-            .slot = current_slot,
-            .type = entry->connection_type_,
+            .slot = index,
+            .type = entry.connection_type_,
         };
         if (std::invoke(filter, meta)) {
-          return ConnectionView{current_slot};
+          return ConnectionView{index};
         }
       }
-      current_slot++;
     }
     return std::unexpected(Error{.backtrace = {"No such View could be found"}});
   }
