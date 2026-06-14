@@ -54,10 +54,11 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
     -> std::expected<ConnectionView, Error> {
   std::expected<size_t, Error> root_socket_slot{};
   if (root_socket != 0) {
-    root_socket_slot = connection_pool_.push_to_pool(
+    root_socket_slot = connection_pool_.push_to_pool_with_manager(
         ConnectionEntry{socket_type, root_socket});
   } else {
-    root_socket_slot = connection_pool_.push_to_pool(ConnectionEntry{});
+    root_socket_slot =
+        connection_pool_.push_to_pool_with_manager(ConnectionEntry{});
   }
   if (!root_socket_slot) {
     return std::unexpected(
@@ -67,7 +68,7 @@ auto NetworkEngine::init_engine(end_point_e socket_type, int root_socket)
                          "to connection pool"));
   }
   ConnectionEntry& root_connection{
-      *connection_pool_.get_object(*root_socket_slot),
+      connection_pool_.get_object_from_manager(*root_socket_slot),
   };
   if (auto init_error = init_connection_type(socket_type, root_connection)) {
     return std::unexpected(
@@ -105,7 +106,8 @@ auto NetworkEngine::send_message_to(const ConnectionView& recipient_view,
                                     const OutgoingMessage& outgoing_message)
     -> std::optional<Error> {
   auto recipient_slot{recipient_view.get_slot()};
-  auto& recipient_connection{*connection_pool_.get_object(recipient_slot)};
+  auto& recipient_connection{
+      connection_pool_.get_object_from_manager(recipient_slot)};
   auto send_error{send_message_impl(recipient_connection, outgoing_message)};
   return send_error ? send_error : std::nullopt;
 }
@@ -125,10 +127,10 @@ auto NetworkEngine::transfer(const ConnectionView& destination_view,
     -> TransferResult {
   TransferResult transfer_result{};
   auto& destination_conn{
-      *connection_pool_.get_object(destination_view.get_slot()),
+      connection_pool_.get_object_from_manager(destination_view.get_slot()),
   };
   size_t source_slot{source_view.get_slot()};
-  auto& source_conn{*connection_pool_.get_object(source_slot)};
+  auto& source_conn{connection_pool_.get_object_from_manager(source_slot)};
   auto source_conn_guard{
       scope_guard([&source_conn, this, source_slot]() -> auto {
         source_conn.reset();
@@ -178,7 +180,7 @@ auto NetworkEngine::process_connection(const ConnectionView& pending_view)
 
 auto NetworkEngine::reset_base_connection(end_point_e socket_type)
     -> std::optional<Error> {
-  auto& root_connection{*connection_pool_.get_object(0)};
+  auto& root_connection{connection_pool_.get_object_from_manager(0)};
   if (auto init_error = init_connection_type(socket_type, root_connection)) {
     return init_error->add_context("Unable to reset base connection: failed to "
                                    "init connection according to a type");
@@ -188,10 +190,11 @@ auto NetworkEngine::reset_base_connection(end_point_e socket_type)
 
 void NetworkEngine::release_connection_by_view(ConnectionView view_to_release) {
   size_t slot_to_release{view_to_release.get_slot()};
-  auto& connection{*connection_pool_.get_object(slot_to_release)};
+  auto& connection{connection_pool_.get_object_from_manager(slot_to_release)};
   if (connection.socket_handler_.is_socket_alive()) {
-    release_connection(*connection_pool_.get_object(slot_to_release),
-                       slot_to_release);
+    release_connection(
+        connection_pool_.get_object_from_manager(slot_to_release),
+        slot_to_release);
   }
 }
 
@@ -202,7 +205,7 @@ auto NetworkEngine::init_epoll() -> std::optional<Error> {
         "Unable to init epoll for Engine: failed to init");
   }
   size_t root_slot{0};
-  auto& root_connection{*connection_pool_.get_object(root_slot)};
+  auto& root_connection{connection_pool_.get_object_from_manager(root_slot)};
   if (auto adding_error{
           subscribe_to_events(root_connection, root_slot),
       };
@@ -285,7 +288,8 @@ void NetworkEngine::release_connection(ConnectionEntry& connection,
 auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
     -> std::expected<size_t, Error> {
   auto push_result{
-      connection_pool_.push_to_pool(ConnectionEntry{socket_type, socket}),
+      connection_pool_.push_to_pool_with_manager(
+          ConnectionEntry{socket_type, socket}),
   };
   if (!push_result) {
     return std::unexpected(
@@ -295,7 +299,7 @@ auto NetworkEngine::register_connection(end_point_e socket_type, int socket)
                          "connection pool"));
   }
   size_t connection_slot{*push_result};
-  auto& connection{*connection_pool_.get_object(connection_slot)};
+  auto& connection{connection_pool_.get_object_from_manager(connection_slot)};
   if (auto subscribe_error{subscribe_to_events(connection, connection_slot)};
       subscribe_error) {
     subscribe_error->add_context(
@@ -331,7 +335,7 @@ auto NetworkEngine::register_connections(std::vector<int>& new_sockets)
 
 void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
   for (size_t slot : event_slots) {
-    auto& pending_connection{*connection_pool_.get_object(slot)};
+    auto& pending_connection{connection_pool_.get_object_from_manager(slot)};
     if (pending_connection.connection_type_ == end_point_e::LISTENER) {
       process_server_socket(pending_connection, slot);
     } else {
@@ -365,7 +369,8 @@ void NetworkEngine::process_server_socket(
 auto NetworkEngine::process_connection_impl(size_t pool_slot)
     -> std::optional<Error> {
   ActionResult process_result{};
-  ConnectionEntry& pending_connection = *connection_pool_.get_object(pool_slot);
+  ConnectionEntry& pending_connection{
+      connection_pool_.get_object_from_manager(pool_slot)};
   while (pending_connection.socket_handler_.is_socket_alive() &&
          process_result.action_status == ActionStatus::CONTINUE) {
     // auto receive_result =
