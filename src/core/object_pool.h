@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <exception>
 #include <expected>
+#include <iostream>
 #include <memory>
 #include <new>
 #include <utility>
@@ -26,13 +27,12 @@ public:
   }
   auto operator[](size_t slot_index) -> T& {
     return *static_cast<T*>(mmanager_[slot_index]);
-    // auto* object_ptr = static_cast<T*>(object_pool_[index]);
-    // return *object_ptr;
   }
+
   auto push_to_pool(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
-    std::unique_ptr<size_t> empty_slot(available_slots_.try_pop());
-    if (empty_slot != nullptr) {
+    auto empty_slot(available_slots_.mmanager_try_pop());
+    if (empty_slot.has_value()) {
       *object_pool_[*empty_slot] = std::move(object);
       return *empty_slot;
     }
@@ -43,8 +43,8 @@ public:
 
   auto push_to_pool_with_manager(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
-    std::unique_ptr<size_t> empty_slot(available_slots_.try_pop());
-    if (empty_slot != nullptr) {
+    auto empty_slot(available_slots_.mmanager_try_pop());
+    if (empty_slot.has_value()) {
       void* raw_ptr{mmanager_[*empty_slot]};
       auto* old_object{static_cast<T*>(raw_ptr)};
       *old_object = std::move(object);
@@ -63,7 +63,7 @@ public:
     if (available_slot == nullptr) {
       plain_terminate();
     }
-    available_slots_.push(available_slot);
+    available_slots_.mmanager_push(slot);
   }
   size_t counter{0};
 
