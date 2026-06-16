@@ -78,7 +78,6 @@ auto RingBuffer::push(uint64_t new_free_index) -> void {
 }
 
 auto RingBuffer::normilize_ring_slot(uint64_t ring_slot) -> uint64_t {
-  constexpr uint64_t RING_BUFFER_SIZE = 4096;
   constexpr uint64_t RING_MASK = RING_BUFFER_SIZE - 1;
   return ring_slot & RING_MASK;
 }
@@ -119,7 +118,7 @@ auto AllocatorPool::allocate() -> std::optional<AllocationResult> {
   }
   uint32_t new_index{meta_data.last_not_issued_index.load()};
   while (true) {
-    if (new_index >= 4095) {
+    if (new_index > RING_BUFFER_SIZE) {
       return std::nullopt;
     }
     char* next_object_ptr{
