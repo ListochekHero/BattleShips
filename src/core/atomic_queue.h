@@ -4,6 +4,7 @@
 #include "core/memory_manager.h"
 #include <array>
 #include <atomic>
+#include <concepts>
 #include <cstdint>
 #include <limits>
 
@@ -16,8 +17,10 @@ template <typename T> struct AtomicSlot {
     is_initialized_.store(false);
     return object_to_return;
   }
-  auto emplace(T&& object) -> bool {
-    new (&object_) T{object};
+  template <typename U>
+    requires std::convertible_to<U, T>
+  auto emplace(U&& object) -> bool {
+    new (&object_) T{std::forward<U>(object)};
     return true;
   }
 
@@ -50,10 +53,11 @@ public:
     }
     return nullptr;
   }
-  auto mmanager_try_pop() -> T {
+
+  auto mmanager_try_pop() -> std::optional<T> {
     uint64_t last_busy_index = head.load();
     if (last_busy_index == tail) {
-      return nullptr;
+      return std::nullopt;
     }
     uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
     if (head.compare_exchange_strong(normalized_ring_slot,
@@ -72,8 +76,9 @@ public:
         }
       }
     }
-    return nullptr;
+    return std::nullopt;
   }
+
   auto push(T* ptr) -> bool {
     while (true) {
       uint64_t last_free_index = tail.load();
@@ -96,7 +101,10 @@ public:
       }
     }
   }
-  auto mmanager_push(T&& object) -> bool {
+
+  template <typename U>
+    requires std::convertible_to<U, T>
+  auto mmanager_push(U&& object) -> bool {
     while (true) {
       uint64_t last_free_index = tail.load();
       if ((last_free_index + 1U) == head) {
