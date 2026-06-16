@@ -9,9 +9,10 @@ namespace bsm {
 void Scheduler::push_task(task_tag_e tag,
                           std::unique_ptr<TaskContext> context) {
   push_task_semaphore_.acquire();
-  Task* task = new Task(tag, std::move(context));
-  tasks_queue_.push(task); // We ignore returned bool because this is invariant
-                           // and and should never happen
+  Task task{.tag = tag, .context = std::move(context)};
+  tasks_queue_.mmanager_push(
+      std::move(task)); // We ignore returned bool because this is invariant
+  // and and should never happen
   pop_task_semaphore_.release();
 }
 
@@ -38,10 +39,10 @@ auto Scheduler::get_co_handle_by_tag(task_tag_e tag)
   return co_handles_map_[tag];
 }
 
-auto Scheduler::try_get_task() -> Task* {
+auto Scheduler::try_get_task() -> std::optional<Task> {
   pop_task_semaphore_.acquire();
-  Task* task = tasks_queue_.try_pop();
-  if (task != nullptr) {
+  auto task{tasks_queue_.mmanager_try_pop()};
+  if (task) {
     push_task_semaphore_.release();
   } else {
     pop_task_semaphore_.release();
@@ -55,7 +56,7 @@ auto Scheduler::get_executor_by_tag(task_tag_e tag) -> auto& {
 
 void Scheduler::worker_loop() {
   while (true) {
-    std::unique_ptr<Task> ready_task{try_get_task()};
+    auto ready_task{try_get_task()};
     if (ready_task) {
       auto& task_executor{get_executor_by_tag(ready_task->tag)};
       task_executor(std::move(ready_task->context));

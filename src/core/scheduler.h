@@ -61,7 +61,7 @@ public:
   auto coroutine_loop() -> bsm_co_handle;
 
 private:
-  auto try_get_task() -> Task*;
+  auto try_get_task() -> std::optional<Task>;
   auto get_executor_by_tag(task_tag_e tag) -> auto&;
   void worker_loop();
   auto yield_to_application() { return SchedulerAwaiter(*this); }
