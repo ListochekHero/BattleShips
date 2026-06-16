@@ -37,6 +37,7 @@ public:
       new (allocation_result->memory_ptr) AtomicSlot<T>{};
     }
   }
+
   auto try_pop() -> T* {
     uint64_t last_busy_index = head.load();
     if (last_busy_index == tail) {
@@ -67,11 +68,11 @@ public:
           *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
       };
       while (true) {
-        atomic_slot.is_initialized.wait(false);
-        if (atomic_slot.is_initialized.load()) {
+        atomic_slot.is_initialized_.wait(false);
+        if (atomic_slot.is_initialized_.load()) {
           T data = atomic_slot.take();
-          atomic_slot.is_initialized.store(false);
-          atomic_slot.is_initialized.notify_one();
+          atomic_slot.is_initialized_.store(false);
+          atomic_slot.is_initialized_.notify_one();
           return data;
         }
       }
@@ -118,17 +119,18 @@ public:
             *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
         };
         while (true) {
-          atomic_slot.is_initialized.wait(true);
-          if (!atomic_slot.is_initialized.load()) {
-            atomic_slot.emplace(object);
-            atomic_slot.is_initialized.store(true);
-            atomic_slot.is_initialized.notify_one();
+          atomic_slot.is_initialized_.wait(true);
+          if (!atomic_slot.is_initialized_.load()) {
+            atomic_slot.emplace(std::forward<U>(object));
+            atomic_slot.is_initialized_.store(true);
+            atomic_slot.is_initialized_.notify_one();
             return true;
           }
         }
       }
     }
   }
+
   auto pop() -> T* {
     uint64_t last_busy_index = head.load();
     T* data{nullptr};
@@ -151,6 +153,7 @@ public:
       }
     }
   }
+
   void mmanager_wait_for_data() {
     uint16_t last_busy_index = head.load();
     uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
@@ -159,8 +162,8 @@ public:
         *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
     };
     while (true) {
-      atomic_slot.is_initialized.wait(false);
-      if (atomic_slot.is_initialized.load()) {
+      atomic_slot.is_initialized_.wait(false);
+      if (atomic_slot.is_initialized_.load()) {
         break;
       }
     }
