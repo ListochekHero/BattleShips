@@ -13,6 +13,7 @@
 namespace bsm {
 
 #define PAGES_PER_NODE 256
+static constexpr uint64_t RING_BUFFER_SIZE = 4096;
 
 struct RingBuffer {
 public:
@@ -29,8 +30,6 @@ private:
   std::atomic_uint64_t head{0};
   std::atomic_uint64_t tail{0};
   std::atomic_uint64_t* ring_start_ptr{nullptr};
-
-  static constexpr uint64_t RING_BUFFER_SIZE = 4096;
 };
 
 struct AllocatorPoolMetaLayout {
