@@ -8,6 +8,7 @@
 
 // IWYU pragma: no_include <string>
 #include <coroutine>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -16,6 +17,7 @@
 #include <semaphore>
 #include <thread>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace bsm {
@@ -28,7 +30,8 @@ struct Producer {
 
 struct Task {
   task_tag_e tag{};
-  std::unique_ptr<TaskContext> context;
+  using ContextVariant = std::variant<size_t, std::string>;
+  ContextVariant context;
 };
 
 class Scheduler {
@@ -70,7 +73,7 @@ private:
   std::unordered_map<task_tag_e, std::coroutine_handle<>> co_handles_map_;
   AtomicQueue<task_tag_e>& available_task_tags_;
   AtomicQueue<Task> tasks_queue_;
-  std::counting_semaphore<std::numeric_limits<uint16_t>::max()-1>
+  std::counting_semaphore<std::numeric_limits<uint16_t>::max() - 1>
       pop_task_semaphore_{0};
   std::counting_semaphore<std::numeric_limits<
       uint16_t>::max()> // make define for this number to use in AtomicQueue as
