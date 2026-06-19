@@ -56,11 +56,9 @@ auto Application::init_network(end_point_e socket_type, int socket)
 
 auto Application::register_network_task() -> std::optional<Error> {
   auto add_error = scheduler().add_task_executor(
-      task_tag_e::NETWORK,
-      [this](std::unique_ptr<TaskContext> context) -> void {
-        auto& network_context = static_cast<NetworkTaskContext&>(*context);
-        network_engine_.process_connection(
-            ConnectionView{network_context.slot_});
+      task_tag_e::NETWORK, [this](Task::ContextVariant context) -> void {
+        auto* pending_slot_ptr = std::get_if<size_t>(&context);
+        network_engine_.process_connection(ConnectionView{*pending_slot_ptr});
       });
   if (add_error) {
     return std::move(add_error)->add_context(
@@ -79,13 +77,9 @@ auto Application::register_network_task() -> std::optional<Error> {
 
 auto Application::network_co() -> bsm_co_handle { // NOLINT
   while (true) {
-    auto* pending_slot{network_raw_tasks_.try_pop()};
-    if (pending_slot != nullptr) {
-      std::unique_ptr<NetworkTaskContext> task_context{
-          std::make_unique<NetworkTaskContext>(*pending_slot),
-      };
-      scheduler().push_task(task_tag_e::NETWORK, std::move(task_context));
-      delete pending_slot;
+    auto pending_slot{network_raw_tasks_.mmanager_try_pop()};
+    if (pending_slot.has_value()) {
+      scheduler().push_task(task_tag_e::NETWORK, *pending_slot);
     }
     co_await yield_to_scheduler(); // NOLINT
   }
