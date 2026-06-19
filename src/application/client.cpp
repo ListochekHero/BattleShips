@@ -12,6 +12,7 @@
 #include <iostream>
 #include <memory>
 #include <utility>
+#include <variant>
 
 namespace bsm {
 
@@ -43,12 +44,11 @@ void Client::run() {
 
 auto Client::register_console_task() -> std::optional<Error> {
   auto add_error = scheduler().add_task_executor(
-      task_tag_e::CONSOLE,
-      [this](std::unique_ptr<TaskContext> context) -> void {
-        auto* console_context = static_cast<ConsoleTaskContext*>(context.get());
+      task_tag_e::CONSOLE, [this](Task::ContextVariant context) -> void {
+        auto* input_string_ptr = std::get_if<std::string>(&context);
         handle_action({
             .pending_view = ConnectionView{},
-            .received_message = {.payload = console_context->input_},
+            .received_message = {.payload = std::move(*input_string_ptr)},
         });
       });
   if (add_error) {
@@ -68,11 +68,10 @@ auto Client::register_console_task() -> std::optional<Error> {
 
 auto Client::console_co() -> bsm_co_handle { // NOLINT
   while (true) {
-    std::string* user_input{console_raw_tasks_.try_pop()};
-    std::unique_ptr<ConsoleTaskContext> task_context =
-        std::make_unique<ConsoleTaskContext>(std::move(*user_input));
-    delete user_input;
-    scheduler().push_task(task_tag_e::CONSOLE, std::move(task_context));
+    auto user_input{console_raw_tasks_.mmanager_try_pop()};
+    if (user_input.has_value()) {
+      scheduler().push_task(task_tag_e::CONSOLE, std::move(*user_input));
+    }
     co_await yield_to_scheduler(); // NOLINT
   }
 }
