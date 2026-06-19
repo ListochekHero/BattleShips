@@ -61,8 +61,8 @@ public:
       return std::nullopt;
     }
     uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
-    if (head.compare_exchange_strong(normalized_ring_slot,
-                                     normalized_ring_slot + 1)) {
+    if (head.compare_exchange_strong(last_busy_index,
+                                     last_busy_index + 1)) {
       auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
       auto& atomic_slot{
           *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
@@ -87,7 +87,6 @@ public:
         return false;
       }
       uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
-
       if (tail.compare_exchange_strong(normalized_ring_slot,
                                        normalized_ring_slot + 1)) {
         while (true) {
@@ -108,12 +107,14 @@ public:
   auto mmanager_push(U&& object) -> bool {
     while (true) {
       uint64_t last_free_index = tail.load();
-      if ((last_free_index + 1U) == head) {
+      uint64_t last_busy_index = tail.load();
+      uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
+      uint64_t normalized_busy{normilize_ring_slot(last_busy_index)};
+      if ((normalized_ring_slot + 1) == normalized_busy) {
         return false;
       }
-      uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
-      if (tail.compare_exchange_strong(normalized_ring_slot,
-                                       normalized_ring_slot + 1U)) {
+      if (tail.compare_exchange_strong(last_free_index,
+                                       last_free_index + 1U)) {
         auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
         auto& atomic_slot{
             *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
