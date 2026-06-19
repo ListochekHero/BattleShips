@@ -38,8 +38,7 @@ class Scheduler {
 public:
   Scheduler(AtomicQueue<task_tag_e>& available_q)
       : available_task_tags_(available_q) {}
-  void push_task(task_tag_e tag, std::unique_ptr<TaskContext> context);
-  using TaskExecutor = std::function<void(std::unique_ptr<TaskContext>)>;
+  using TaskExecutor = std::function<void(Task::ContextVariant)>;
   auto add_task_executor(task_tag_e tag, TaskExecutor executor)
       -> std::optional<Error>;
   template <typename Pf> void add_and_run_producer(Pf&& producer_func) {
