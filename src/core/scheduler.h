@@ -17,6 +17,7 @@
 #include <semaphore>
 #include <thread>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -46,6 +47,16 @@ public:
   }
   void run_workers();
   auto get_co_handle_by_tag(task_tag_e task_tag) -> std::coroutine_handle<>;
+
+  template <typename... Args> void push_task(task_tag_e tag, Args... args) {
+    push_task_semaphore_.acquire();
+    Task task{tag, std::forward<Args>(args)...};
+    tasks_queue_.mmanager_push(
+        std::move(task)); // We ignore returned bool because this is invariant
+    // and and should never happen
+    pop_task_semaphore_.release();
+  }
+
   template <typename Cf>
   auto add_co_handle(Cf&& coroutine_func, task_tag_e tag)
       -> std::optional<Error> {
@@ -74,10 +85,9 @@ private:
   AtomicQueue<Task> tasks_queue_;
   std::counting_semaphore<std::numeric_limits<uint16_t>::max() - 1>
       pop_task_semaphore_{0};
-  std::counting_semaphore<std::numeric_limits<
-      uint16_t>::max()> // make define for this number to use in AtomicQueue as
+  std::counting_semaphore<4095> // make define for this number to use in AtomicQueue as
                         // well for consistency
-      push_task_semaphore_{std::numeric_limits<uint16_t>::max() - 1};
+      push_task_semaphore_{4095};
   std::unordered_map<task_tag_e, TaskExecutor> task_executors_;
 
   // std::vector<std::thread> thread_pool_{std::thread::hardware_concurrency() /

@@ -6,16 +6,6 @@
 
 namespace bsm {
 
-void Scheduler::push_task(task_tag_e tag,
-                          std::unique_ptr<TaskContext> context) {
-  push_task_semaphore_.acquire();
-  Task task{.tag = tag, .context = std::move(context)};
-  tasks_queue_.mmanager_push(
-      std::move(task)); // We ignore returned bool because this is invariant
-  // and and should never happen
-  pop_task_semaphore_.release();
-}
-
 auto Scheduler::add_task_executor(task_tag_e tag, TaskExecutor executor)
     -> std::optional<Error> {
   auto [iter, inserted] = task_executors_.try_emplace(tag, executor);
