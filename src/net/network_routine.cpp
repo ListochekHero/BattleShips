@@ -339,13 +339,8 @@ void NetworkEngine::process_events(const std::vector<size_t>& event_slots) {
     if (pending_connection.connection_type_ == end_point_e::LISTENER) {
       process_server_socket(pending_connection, slot);
     } else {
-      auto* task_slot{new (std::nothrow) size_t(slot)};
-      auto* task_tag{new (std::nothrow) task_tag_e(task_tag_e::NETWORK)};
-      if (task_slot == nullptr || task_tag == nullptr) {
-        plain_terminate();
-      }
-      network_raw_tasks_.push(task_slot);
-      available_task_tags_.push(task_tag);
+      network_raw_tasks_.mmanager_push(slot);
+      available_task_tags_.mmanager_push(task_tag_e::NETWORK);
     }
   }
 }
