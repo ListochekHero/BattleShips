@@ -62,48 +62,25 @@ public:
     return std::nullopt;
   }
 
-  auto push(T* ptr) -> bool {
-    while (true) {
-      uint64_t last_free_index = tail.load();
-      if ((last_free_index + 1) == head) {
-        return false;
-      }
-      uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
-      if (tail.compare_exchange_strong(normalized_ring_slot,
-                                       normalized_ring_slot + 1)) {
-        while (true) {
-          T* data{queue[normalized_ring_slot].load()};
-          if (data == nullptr) {
-            queue[normalized_ring_slot].store(ptr);
-            queue[normalized_ring_slot].notify_one();
-            return true;
-          }
-          queue[normalized_ring_slot].wait(data);
-        }
-      }
-    }
-  }
-
   template <typename U>
     requires std::convertible_to<U, T>
-  auto mmanager_push(U&& object) -> bool {
+  auto try_push(U&& object) -> bool {
     while (true) {
       uint64_t last_free_index = tail.load();
-      uint64_t last_busy_index = tail.load();
+      uint64_t last_busy_index = head.load();
       uint64_t normalized_ring_slot{normilize_ring_slot(last_free_index)};
       uint64_t normalized_busy{normilize_ring_slot(last_busy_index)};
       if ((normalized_ring_slot + 1) == normalized_busy) {
         return false;
       }
-      if (tail.compare_exchange_strong(last_free_index,
-                                       last_free_index + 1U)) {
+      if (tail.compare_exchange_strong(last_free_index, last_free_index + 1U)) {
         auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
         auto& atomic_slot{
             *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
         };
-        while (true) {
+        do {
           atomic_slot.is_initialized_.wait(true);
-          if (!atomic_slot.is_initialized_.load()) {
+        } while (atomic_slot.is_initialized_.load());
             atomic_slot.emplace(std::forward<U>(object));
             atomic_slot.is_initialized_.store(true);
             atomic_slot.is_initialized_.notify_one();
