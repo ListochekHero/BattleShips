@@ -38,31 +38,13 @@ public:
     }
   }
 
-  auto try_pop() -> T* {
-    uint64_t last_busy_index = head.load();
-    if (last_busy_index == tail) {
-      return nullptr;
-    }
-    if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
-      T* data{nullptr};
-      while (data == nullptr) {
-        queue[last_busy_index].wait(data);
-        data = queue[last_busy_index].exchange(nullptr);
-      }
-      queue[last_busy_index].notify_one();
-      return data;
-    }
-    return nullptr;
-  }
-
-  auto mmanager_try_pop() -> std::optional<T> {
+  auto try_pop() -> std::optional<T> {
     uint64_t last_busy_index = head.load();
     if (last_busy_index == tail) {
       return std::nullopt;
     }
     uint64_t normalized_ring_slot{normilize_ring_slot(last_busy_index)};
-    if (head.compare_exchange_strong(last_busy_index,
-                                     last_busy_index + 1)) {
+    if (head.compare_exchange_strong(last_busy_index, last_busy_index + 1)) {
       auto* raw_atomic_slot{memory_queue[normalized_ring_slot]};
       auto& atomic_slot{
           *std::launder(static_cast<AtomicSlot<T>*>(raw_atomic_slot)),
