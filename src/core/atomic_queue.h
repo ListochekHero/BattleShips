@@ -101,6 +101,15 @@ public:
     } while (!atomic_slot.is_initialized_.load());
   }
 
+  void wait_for_space() {
+    uint16_t last_free_index = tail.load();
+    uint64_t last_busy_index = head.load();
+    uint64_t normalized_tail{normilize_ring_slot(last_free_index)};
+    uint64_t normalized_head{normilize_ring_slot(last_busy_index)};
+    if ((normalized_tail + 1) == normalized_head) {
+      do {
+        head.wait(last_busy_index);
+      } while (head != last_busy_index);
     }
   }
 
@@ -113,7 +122,6 @@ private:
 
   std::atomic_uint64_t head{0};
   std::atomic_uint64_t tail{0};
-  std::array<std::atomic<T*>, std::numeric_limits<uint16_t>::max() + 1> queue{};
   MemoryManager memory_queue;
 };
 
