@@ -21,8 +21,7 @@ namespace bsm {
 template <typename T> class ObjectPool {
 public:
   ObjectPool() { mmanager_.init(); };
-  auto get_object(size_t slot_index) -> T* { return object_pool_[slot_index]; }
-  auto get_object_from_manager(size_t slot_index) -> T& {
+  auto get_object(size_t slot_index) -> T& {
     return *static_cast<T*>(mmanager_[slot_index]);
   }
   auto operator[](size_t slot_index) -> T& {
@@ -30,18 +29,6 @@ public:
   }
 
   auto push_to_pool(T&& object) -> std::expected<size_t, Error> {
-    T* object_ptr;
-    auto empty_slot(available_slots_.try_pop());
-    if (empty_slot.has_value()) {
-      *object_pool_[*empty_slot] = std::move(object);
-      return *empty_slot;
-    }
-    object_ptr = new (std::nothrow) T(std::move(object));
-    counter++;
-    return validate_new(object_ptr);
-  }
-
-  auto push_to_pool_with_manager(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
     auto empty_slot(available_slots_.try_pop());
     if (empty_slot.has_value()) {
@@ -68,26 +55,7 @@ public:
   size_t counter{0};
 
 private:
-  auto validate_new(T* object_ptr) -> std::expected<size_t, Error> {
-    if (object_ptr != nullptr) {
-      return push_back_impl(object_ptr);
-    }
-    return std::unexpected(Error{
-        .backtrace = {"No more memory available, can't add object to pool"},
-    });
-  }
-  auto push_back_impl(T* object_ptr) -> std::expected<size_t, Error> {
-    try {
-      object_pool_.push_back(object_ptr);
-      return object_pool_.size() - 1;
-    } catch (const std::exception& e) {
-      LOG(e.what());
-      return std::unexpected(
-          Error{.backtrace = {"Unable to push new entry into pool"}});
-    }
-  }
   MemoryManager mmanager_;
-  std::vector<T*> object_pool_;
   AtomicQueue<size_t> available_slots_;
 };
 
