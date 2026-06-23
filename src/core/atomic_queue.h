@@ -81,13 +81,13 @@ public:
         do {
           atomic_slot.is_initialized_.wait(true);
         } while (atomic_slot.is_initialized_.load());
-            atomic_slot.emplace(std::forward<U>(object));
-            atomic_slot.is_initialized_.store(true);
-            atomic_slot.is_initialized_.notify_one();
-            return true;
-          }
-        }
+        atomic_slot.emplace(std::forward<U>(object));
+        atomic_slot.is_initialized_.store(true);
+        atomic_slot.is_initialized_.notify_one();
+        return true;
       }
+    }
+  }
 
   void wait_for_data() {
     uint16_t last_busy_index = head.load();
