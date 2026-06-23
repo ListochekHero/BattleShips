@@ -68,7 +68,7 @@ auto Client::register_console_task() -> std::optional<Error> {
 
 auto Client::console_co() -> bsm_co_handle { // NOLINT
   while (true) {
-    auto user_input{console_raw_tasks_.mmanager_try_pop()};
+    auto user_input{console_raw_tasks_.try_pop()};
     if (user_input.has_value()) {
       scheduler().push_task(task_tag_e::CONSOLE, std::move(*user_input));
     }
