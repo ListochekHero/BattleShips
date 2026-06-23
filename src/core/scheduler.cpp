@@ -31,7 +31,7 @@ auto Scheduler::get_co_handle_by_tag(task_tag_e tag)
 
 auto Scheduler::try_get_task() -> std::optional<Task> {
   pop_task_semaphore_.acquire();
-  auto task{tasks_queue_.mmanager_try_pop()};
+  auto task{tasks_queue_.try_pop()};
   if (task) {
     push_task_semaphore_.release();
   } else {
@@ -56,8 +56,8 @@ void Scheduler::worker_loop() {
 
 auto Scheduler::coroutine_loop() -> bsm_co_handle { // NOLINT
   while (true) {
-    available_task_tags_.mmanager_wait_for_data();
-    auto task_tag{available_task_tags_.mmanager_try_pop()};
+    available_task_tags_.wait_for_data();
+    auto task_tag{available_task_tags_.try_pop()};
     if (task_tag.has_value()) {
       auto handle{get_co_handle_by_tag(*task_tag)};
       handle.resume();

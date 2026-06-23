@@ -31,7 +31,7 @@ public:
 
   auto push_to_pool(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
-    auto empty_slot(available_slots_.mmanager_try_pop());
+    auto empty_slot(available_slots_.try_pop());
     if (empty_slot.has_value()) {
       *object_pool_[*empty_slot] = std::move(object);
       return *empty_slot;
@@ -43,7 +43,7 @@ public:
 
   auto push_to_pool_with_manager(T&& object) -> std::expected<size_t, Error> {
     T* object_ptr;
-    auto empty_slot(available_slots_.mmanager_try_pop());
+    auto empty_slot(available_slots_.try_pop());
     if (empty_slot.has_value()) {
       void* raw_ptr{mmanager_[*empty_slot]};
       auto* old_object{static_cast<T*>(raw_ptr)};
@@ -63,7 +63,7 @@ public:
     if (available_slot == nullptr) {
       plain_terminate();
     }
-    available_slots_.mmanager_push(slot);
+    available_slots_.try_push(slot);
   }
   size_t counter{0};
 

@@ -77,7 +77,7 @@ auto Application::register_network_task() -> std::optional<Error> {
 
 auto Application::network_co() -> bsm_co_handle { // NOLINT
   while (true) {
-    auto pending_slot{network_raw_tasks_.mmanager_try_pop()};
+    auto pending_slot{network_raw_tasks_.try_pop()};
     if (pending_slot.has_value()) {
       scheduler().push_task(task_tag_e::NETWORK, *pending_slot);
     }
